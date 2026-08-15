@@ -75,3 +75,21 @@ class AttachmentOut(BaseModel):
 class LastValueOut(BaseModel):
     value: float | None
     period: date | None
+
+
+class LastValueEntry(BaseModel):
+    data_point_id: uuid.UUID
+    value: float | None
+    period: date | None
+
+
+class CsvUploadRow(BaseModel):
+    data_point_name: str
+    status: str
+    detail: str | None = None
+
+
+class CsvUploadResult(BaseModel):
+    created: int
+    updated: int
+    rows: list[CsvUploadRow]

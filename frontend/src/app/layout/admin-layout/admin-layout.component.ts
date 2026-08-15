@@ -26,6 +26,10 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
     const r = this.roles();
     return r.includes('Manager') || r.includes('Approver') || r.includes('Admin');
   });
+  canAccessSettings = computed(() => {
+    const r = this.roles();
+    return r.includes('Approver') || r.includes('Admin');
+  });
 
   settingsOpen = signal(this.isSettingsRoute());
 

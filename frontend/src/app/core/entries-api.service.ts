@@ -41,6 +41,24 @@ export interface LastValue {
   period: string | null;
 }
 
+export interface LastValueEntry {
+  data_point_id: string;
+  value: number | null;
+  period: string | null;
+}
+
+export interface CsvUploadRow {
+  data_point_name: string;
+  status: 'created' | 'updated' | 'skipped' | 'error';
+  detail: string | null;
+}
+
+export interface CsvUploadResult {
+  created: number;
+  updated: number;
+  rows: CsvUploadRow[];
+}
+
 export interface EntryUpsert {
   data_point_id: string;
   location_id: string;
@@ -88,6 +106,16 @@ export class EntriesApiService {
       this.http.get<LastValue>(`${environment.apiBaseUrl}/entries/last-value`, {
         headers,
         params: { data_point_id: dataPointId, location_id: locationId, before_period: beforePeriod }
+      })
+    );
+  }
+
+  async getLastValuesBatch(category: string, locationId: string, beforePeriod: string): Promise<LastValueEntry[]> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(
+      this.http.get<LastValueEntry[]>(`${environment.apiBaseUrl}/entries/last-values`, {
+        headers,
+        params: { category, location_id: locationId, before_period: beforePeriod }
       })
     );
   }
@@ -150,6 +178,35 @@ export class EntriesApiService {
     const headers = await this.authHeaders();
     return firstValueFrom(
       this.http.get<AttachmentRecord[]>(`${environment.apiBaseUrl}/entries/${entryId}/attachments`, { headers })
+    );
+  }
+
+  async downloadCsvTemplate(category: string): Promise<void> {
+    const { data } = await this.supabase.client.auth.getSession();
+    const response = await fetch(
+      `${environment.apiBaseUrl}/entries/csv-template?${new URLSearchParams({ category })}`,
+      { headers: { Authorization: `Bearer ${data.session?.access_token ?? ''}` } }
+    );
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${category.replace(/\s+/g, '_')}_template.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async uploadCsv(category: string, locationId: string, period: string, file: File): Promise<CsvUploadResult> {
+    const { data } = await this.supabase.client.auth.getSession();
+    const form = new FormData();
+    form.append('category', category);
+    form.append('location_id', locationId);
+    form.append('period', period);
+    form.append('file', file);
+    return firstValueFrom(
+      this.http.post<CsvUploadResult>(`${environment.apiBaseUrl}/entries/bulk-csv`, form, {
+        headers: { Authorization: `Bearer ${data.session?.access_token ?? ''}` }
+      })
     );
   }
 

@@ -1,7 +1,10 @@
+import csv
+import io
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.auth import CurrentUser, require_roles
@@ -12,9 +15,12 @@ from app.schemas.entries import (
     AttachmentOut,
     AuditLogOut,
     CategoryOut,
+    CsvUploadResult,
+    CsvUploadRow,
     DataPointOut,
     EntryOut,
     EntryUpsertRequest,
+    LastValueEntry,
     LastValueOut,
     RejectRequest,
     SubmitRequest,
@@ -111,6 +117,47 @@ def last_value(
     return LastValueOut(value=float(entry.value) if entry.value is not None else None, period=entry.period)
 
 
+@router.get("/last-values", response_model=list[LastValueEntry])
+def last_values_batch(
+    category: str,
+    location_id: uuid.UUID,
+    before_period: date,
+    current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
+    db: Session = Depends(get_db),
+):
+    """Same as /last-value but for every data point in a category at once --
+    one query instead of one round trip per field, which is what was making
+    the entry form slow to open on categories with many fields."""
+    data_point_ids = [
+        dp.id
+        for dp in (
+            db.query(DataPoint)
+            .join(Category, Category.id == DataPoint.category_id)
+            .filter(Category.tenant_id == current.tenant_id, Category.name == category)
+            .all()
+        )
+    ]
+    if not data_point_ids:
+        return []
+
+    rows = (
+        db.query(Entry.data_point_id, Entry.value, Entry.period)
+        .filter(
+            Entry.data_point_id.in_(data_point_ids),
+            Entry.location_id == location_id,
+            Entry.status == "Approved",
+            Entry.period < before_period,
+        )
+        .order_by(Entry.data_point_id, Entry.period.desc())
+        .distinct(Entry.data_point_id)
+        .all()
+    )
+    return [
+        LastValueEntry(data_point_id=dp_id, value=float(value) if value is not None else None, period=period)
+        for dp_id, value, period in rows
+    ]
+
+
 @router.get("/current", response_model=list[EntryOut])
 def current_entries(
     category: str,
@@ -134,6 +181,56 @@ def current_entries(
     return [_entry_out(db, e) for e in rows]
 
 
+def _upsert_one(
+    db: Session,
+    current: CurrentUser,
+    data_point_id: uuid.UUID,
+    location_id: uuid.UUID,
+    period: date,
+    value: float | None,
+    note: str | None,
+    meter_id: str | None = None,
+    method_of_entry: str = "Manual",
+) -> Entry:
+    entry = (
+        db.query(Entry)
+        .filter(Entry.data_point_id == data_point_id, Entry.location_id == location_id, Entry.period == period)
+        .first()
+    )
+    if entry is not None and entry.status not in ("Draft", "Rejected"):
+        raise HTTPException(status_code=409, detail=f"Entry for this field is already {entry.status.lower()}")
+
+    if entry is None:
+        entry = Entry(
+            data_point_id=data_point_id,
+            location_id=location_id,
+            period=period,
+            value=value,
+            note=note,
+            meter_id=meter_id,
+            method_of_entry=method_of_entry,
+            status="Draft",
+            submitted_by=current.id,
+        )
+        db.add(entry)
+        db.commit()
+        db.refresh(entry)
+        write_audit(db, entry.id, current.email, "created", None, str(value))
+    else:
+        old_value = str(entry.value) if entry.value is not None else None
+        entry.value = value
+        entry.note = note
+        entry.meter_id = meter_id
+        entry.method_of_entry = method_of_entry
+        entry.status = "Draft"
+        entry.submitted_by = current.id
+        db.commit()
+        db.refresh(entry)
+        write_audit(db, entry.id, current.email, "edited", old_value, str(value))
+
+    return entry
+
+
 @router.post("", response_model=list[EntryOut])
 def upsert_entries(
     payload: list[EntryUpsertRequest],
@@ -142,47 +239,106 @@ def upsert_entries(
 ):
     results = []
     for item in payload:
-        entry = (
-            db.query(Entry)
-            .filter(
-                Entry.data_point_id == item.data_point_id,
-                Entry.location_id == item.location_id,
-                Entry.period == item.period,
-            )
-            .first()
-        )
-        if entry is not None and entry.status not in ("Draft", "Rejected"):
-            raise HTTPException(status_code=409, detail=f"Entry for this field is already {entry.status.lower()}")
-
-        if entry is None:
-            entry = Entry(
-                data_point_id=item.data_point_id,
-                location_id=item.location_id,
-                period=item.period,
-                value=item.value,
-                note=item.note,
-                meter_id=item.meter_id,
-                method_of_entry="Manual",
-                status="Draft",
-                submitted_by=current.id,
-            )
-            db.add(entry)
-            db.commit()
-            db.refresh(entry)
-            write_audit(db, entry.id, current.email, "created", None, str(item.value))
-        else:
-            old_value = str(entry.value) if entry.value is not None else None
-            entry.value = item.value
-            entry.note = item.note
-            entry.meter_id = item.meter_id
-            entry.status = "Draft"
-            entry.submitted_by = current.id
-            db.commit()
-            db.refresh(entry)
-            write_audit(db, entry.id, current.email, "edited", old_value, str(item.value))
-
+        entry = _upsert_one(db, current, item.data_point_id, item.location_id, item.period, item.value, item.note, item.meter_id)
         results.append(_entry_out(db, entry))
     return results
+
+
+@router.get("/csv-template")
+def csv_template(
+    category: str,
+    current: CurrentUser = Depends(require_roles("Admin", "Manager")),
+    db: Session = Depends(get_db),
+):
+    data_points = (
+        db.query(DataPoint)
+        .join(Category, Category.id == DataPoint.category_id)
+        .filter(Category.tenant_id == current.tenant_id, Category.name == category)
+        .order_by(DataPoint.name)
+        .all()
+    )
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["data_point_name", "value", "note"])
+    for dp in data_points:
+        writer.writerow([dp.name, "", ""])
+
+    filename = f"{category.replace(' ', '_')}_template.csv"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/bulk-csv", response_model=CsvUploadResult)
+async def bulk_csv_upload(
+    category: str = Form(...),
+    location_id: uuid.UUID = Form(...),
+    period: date = Form(...),
+    file: UploadFile = File(...),
+    current: CurrentUser = Depends(require_roles("Admin", "Manager")),
+    db: Session = Depends(get_db),
+):
+    data_points = (
+        db.query(DataPoint)
+        .join(Category, Category.id == DataPoint.category_id)
+        .filter(Category.tenant_id == current.tenant_id, Category.name == category)
+        .all()
+    )
+    by_name = {dp.name.strip().lower(): dp for dp in data_points}
+
+    content = (await file.read()).decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(content))
+
+    created = 0
+    updated = 0
+    rows: list[CsvUploadRow] = []
+
+    for raw_row in reader:
+        name = (raw_row.get("data_point_name") or "").strip()
+        value_raw = (raw_row.get("value") or "").strip()
+        note = (raw_row.get("note") or "").strip() or None
+
+        if not name:
+            continue
+
+        dp = by_name.get(name.lower())
+        if dp is None:
+            rows.append(CsvUploadRow(data_point_name=name, status="skipped", detail="No matching field in this category"))
+            continue
+
+        if not value_raw:
+            rows.append(CsvUploadRow(data_point_name=name, status="skipped", detail="No value provided"))
+            continue
+
+        try:
+            value = float(value_raw)
+        except ValueError:
+            rows.append(CsvUploadRow(data_point_name=name, status="error", detail=f"'{value_raw}' is not a number"))
+            continue
+
+        existing = (
+            db.query(Entry)
+            .filter(Entry.data_point_id == dp.id, Entry.location_id == location_id, Entry.period == period)
+            .first()
+        )
+        was_new = existing is None
+
+        try:
+            _upsert_one(db, current, dp.id, location_id, period, value, note, method_of_entry="CSV")
+        except HTTPException as exc:
+            rows.append(CsvUploadRow(data_point_name=name, status="error", detail=str(exc.detail)))
+            continue
+
+        if was_new:
+            created += 1
+            rows.append(CsvUploadRow(data_point_name=name, status="created"))
+        else:
+            updated += 1
+            rows.append(CsvUploadRow(data_point_name=name, status="updated"))
+
+    return CsvUploadResult(created=created, updated=updated, rows=rows)
 
 
 @router.post("/submit", response_model=list[EntryOut])

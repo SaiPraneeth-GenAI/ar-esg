@@ -2,11 +2,12 @@ import { Component, EventEmitter, Input, OnChanges, Output, inject, signal } fro
 import { FormsModule } from '@angular/forms';
 import {
   AttachmentRecord,
+  CsvUploadResult,
   DataPoint,
   EntriesApiService,
   EntryCategory,
   EntryRecord,
-  LastValue
+  LastValueEntry
 } from '../../../core/entries-api.service';
 import { EntryHistoryComponent } from '../entry-history/entry-history.component';
 
@@ -15,7 +16,7 @@ interface FieldState {
   value: number | null;
   note: string;
   entry: EntryRecord | null;
-  lastValue: LastValue | null;
+  lastValue: LastValueEntry | null;
   attachments: AttachmentRecord[];
   historyOpen: boolean;
   saving: boolean;
@@ -46,10 +47,14 @@ export class EntryFormComponent implements OnChanges {
   errorMessage = signal('');
 
   monthValue = signal(currentMonthValue());
-  mode = signal<'guided' | 'classic'>('guided');
+  mode = signal<'guided' | 'classic' | 'bulk'>('guided');
   fields = signal<FieldState[]>([]);
   stepIndex = signal(0);
   reviewing = signal(false);
+
+  csvFileName = signal('');
+  csvUploading = signal(false);
+  csvResult = signal<CsvUploadResult | null>(null);
 
   get periodIso(): string {
     return `${this.monthValue()}-01`;
@@ -59,6 +64,7 @@ export class EntryFormComponent implements OnChanges {
     this.mode.set(this.category.data_points[0]?.default_mode ?? 'guided');
     this.stepIndex.set(0);
     this.reviewing.set(false);
+    this.csvResult.set(null);
     await this.load();
   }
 
@@ -72,25 +78,28 @@ export class EntryFormComponent implements OnChanges {
     this.loading.set(true);
     this.errorMessage.set('');
     try {
-      const current = await this.api.getCurrentEntries(this.category.name, this.periodIso, this.locationId);
+      const [current, lastValues] = await Promise.all([
+        this.api.getCurrentEntries(this.category.name, this.periodIso, this.locationId),
+        this.api.getLastValuesBatch(this.category.name, this.locationId, this.periodIso)
+      ]);
       const byDataPoint = new Map(current.map((e) => [e.data_point_id, e]));
+      const lastValueByDataPoint = new Map(lastValues.map((v) => [v.data_point_id, v]));
 
-      const fields: FieldState[] = [];
-      for (const dp of this.category.data_points) {
-        const entry = byDataPoint.get(dp.id) ?? null;
-        const lastValue = await this.api.getLastValue(dp.id, this.locationId, this.periodIso);
-        fields.push({
-          dataPoint: dp,
-          value: entry?.value ?? null,
-          note: entry?.note ?? '',
-          entry,
-          lastValue,
-          attachments: [],
-          historyOpen: false,
-          saving: false
-        });
-      }
-      this.fields.set(fields);
+      this.fields.set(
+        this.category.data_points.map((dp) => {
+          const entry = byDataPoint.get(dp.id) ?? null;
+          return {
+            dataPoint: dp,
+            value: entry?.value ?? null,
+            note: entry?.note ?? '',
+            entry,
+            lastValue: lastValueByDataPoint.get(dp.id) ?? null,
+            attachments: [],
+            historyOpen: false,
+            saving: false
+          };
+        })
+      );
     } catch {
       this.errorMessage.set('Could not load this category.');
     } finally {
@@ -209,13 +218,9 @@ export class EntryFormComponent implements OnChanges {
 
   async onFileSelected(index: number, event: Event): Promise<void> {
     const field = this.fields()[index];
-    if (!field.entry) {
-      this.errorMessage.set('Save this field before attaching a file.');
-      return;
-    }
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
-    if (!file) {
+    if (!file || !field.entry) {
       return;
     }
     try {
@@ -230,5 +235,35 @@ export class EntryFormComponent implements OnChanges {
 
   statusLabel(field: FieldState): string {
     return field.entry?.status ?? 'Not started';
+  }
+
+  async downloadTemplate(): Promise<void> {
+    try {
+      await this.api.downloadCsvTemplate(this.category.name);
+    } catch {
+      this.errorMessage.set('Could not download the template.');
+    }
+  }
+
+  async onCsvSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+    this.csvFileName.set(file.name);
+    this.csvResult.set(null);
+    this.csvUploading.set(true);
+    this.errorMessage.set('');
+    try {
+      const result = await this.api.uploadCsv(this.category.name, this.locationId, this.periodIso, file);
+      this.csvResult.set(result);
+      await this.load();
+    } catch {
+      this.errorMessage.set('Could not process this file.');
+    } finally {
+      this.csvUploading.set(false);
+      input.value = '';
+    }
   }
 }

@@ -1,31 +1,57 @@
 .picker-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
 }
 
 .picker-card {
   background: #fff;
   border: 1px solid #eaecf0;
   border-radius: 12px;
-  padding: 1.1rem 1.2rem;
+  padding: 1.25rem 1.35rem;
   text-align: left;
   cursor: pointer;
   font-family: inherit;
   display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 1rem;
 }
 
 .picker-card:hover {
   border-color: #0e2c21;
+  background: #fafbfc;
+}
+
+.picker-icon {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: #eafaf0;
+  color: #0e2c21;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.picker-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.picker-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
 }
 
 .picker-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .picker-name {
@@ -48,4 +74,11 @@
 .picker-count {
   color: #667085;
   font-size: 0.82rem;
+}
+
+.picker-chevron {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: #d0d5dd;
 }

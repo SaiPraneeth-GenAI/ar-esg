@@ -1,12 +1,13 @@
 .form-page {
-  max-width: 720px;
+  max-width: 1100px;
+  margin: 0 auto;
 }
 
 .form-header {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
   flex-wrap: wrap;
 }
 
@@ -113,7 +114,9 @@
   background: #fff;
   border: 1px solid #eaecf0;
   border-radius: 12px;
-  padding: 1.5rem;
+  padding: 2rem 2.25rem;
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 .progress-bar {
@@ -267,7 +270,9 @@ input[type='number']:focus {
   background: #fff;
   border: 1px solid #eaecf0;
   border-radius: 12px;
-  padding: 1.5rem;
+  padding: 1.75rem 2rem;
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 .review-panel h3 {
@@ -293,33 +298,47 @@ input[type='number']:focus {
   background: #fff;
   border: 1px solid #eaecf0;
   border-radius: 12px;
-  padding: 1.5rem;
+  padding: 0.5rem 1.75rem 1.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
 }
 
 .classic-row {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 1fr auto auto;
-  gap: 0.6rem;
+  grid-template-columns: 1.6fr 1fr 1.1fr auto auto;
+  gap: 0.9rem;
   align-items: center;
-  padding-bottom: 0.6rem;
+  padding: 0.9rem 0;
   border-bottom: 1px solid #f2f4f7;
+}
+
+.classic-row:hover {
+  background: #fafbfc;
+  margin: 0 -0.75rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  border-radius: 8px;
 }
 
 .classic-label {
   display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  font-size: 0.85rem;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.88rem;
   font-weight: 600;
   color: #344054;
 }
 
 .classic-row input[type='number'] {
-  font-size: 0.9rem;
-  padding: 0.45rem 0.6rem;
+  font-size: 0.92rem;
+  padding: 0.5rem 0.7rem;
+}
+
+.note-input-inline {
+  padding: 0.5rem 0.7rem;
+  font-size: 0.85rem;
 }
 
 .link-btn {
@@ -330,4 +349,156 @@ input[type='number']:focus {
   cursor: pointer;
   font-family: inherit;
   text-decoration: underline;
+}
+
+.attach-placeholder {
+  width: 1.3rem;
+  display: inline-block;
+}
+
+/* Loading skeleton */
+
+.skeleton-panel {
+  background: #fff;
+  border: 1px solid #eaecf0;
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.skeleton-bar {
+  height: 14px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #f2f4f7 25%, #e9ebef 37%, #f2f4f7 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+.skeleton-bar.wide {
+  width: 60%;
+  height: 20px;
+}
+
+.skeleton-bar.narrow {
+  width: 35%;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+/* Bulk upload */
+
+.bulk-panel {
+  background: #fff;
+  border: 1px solid #eaecf0;
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.bulk-intro {
+  margin: 0;
+  color: #667085;
+  font-size: 0.88rem;
+}
+
+.bulk-step {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
+}
+
+.bulk-step-num {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #0e2c21;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bulk-step-title {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+  color: #344054;
+  font-size: 0.9rem;
+}
+
+.upload-btn {
+  display: inline-block;
+  cursor: pointer;
+}
+
+.csv-filename {
+  margin-left: 0.75rem;
+  font-size: 0.8rem;
+  color: #667085;
+}
+
+.csv-result {
+  border-top: 1px solid #eaecf0;
+  padding-top: 1rem;
+}
+
+.csv-summary {
+  margin: 0 0 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #027a48;
+}
+
+.csv-result-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.csv-result-table td {
+  padding: 0.35rem 0.5rem;
+  border-top: 1px solid #f2f4f7;
+  color: #344054;
+}
+
+.csv-detail {
+  color: #98a2b3;
+}
+
+.csv-row-status {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.csv-row-status.status-created,
+.csv-row-status.status-updated {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.csv-row-status.status-skipped {
+  background: #f2f4f7;
+  color: #667085;
+}
+
+.csv-row-status.status-error {
+  background: #fef3f2;
+  color: #b42318;
 }

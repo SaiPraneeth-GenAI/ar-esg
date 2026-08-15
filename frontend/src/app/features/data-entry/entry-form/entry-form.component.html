@@ -16,6 +16,7 @@
     <div class="mode-toggle">
       <button type="button" [class.active]="mode() === 'guided'" (click)="mode.set('guided')">Guided</button>
       <button type="button" [class.active]="mode() === 'classic'" (click)="mode.set('classic')">Classic</button>
+      <button type="button" [class.active]="mode() === 'bulk'" (click)="mode.set('bulk')">Bulk upload</button>
     </div>
   </div>
 
@@ -27,7 +28,64 @@
   }
 
   @if (loading()) {
-    <p class="muted">Loading…</p>
+    <div class="skeleton-panel">
+      <div class="skeleton-bar wide"></div>
+      <div class="skeleton-bar"></div>
+      <div class="skeleton-bar narrow"></div>
+    </div>
+  } @else if (mode() === 'bulk') {
+    <div class="bulk-panel">
+      <p class="bulk-intro">
+        Upload a spreadsheet of readings for {{ category.name }} at once, instead of entering each field by hand.
+      </p>
+
+      <div class="bulk-step">
+        <span class="bulk-step-num">1</span>
+        <div>
+          <p class="bulk-step-title">Download the template for this category</p>
+          <button type="button" class="secondary-btn" (click)="downloadTemplate()">Download CSV template</button>
+        </div>
+      </div>
+
+      <div class="bulk-step">
+        <span class="bulk-step-num">2</span>
+        <div>
+          <p class="bulk-step-title">Fill in values, then upload it back</p>
+          <label class="secondary-btn upload-btn">
+            {{ csvUploading() ? 'Uploading…' : 'Choose file' }}
+            <input type="file" accept=".csv" hidden [disabled]="csvUploading()" (change)="onCsvSelected($event)" />
+          </label>
+          @if (csvFileName()) {
+            <span class="csv-filename">{{ csvFileName() }}</span>
+          }
+        </div>
+      </div>
+
+      @if (csvResult()) {
+        <div class="csv-result">
+          <p class="csv-summary">{{ csvResult()!.created }} created, {{ csvResult()!.updated }} updated as drafts.</p>
+          <table class="csv-result-table">
+            <tbody>
+              @for (row of csvResult()!.rows; track row.data_point_name) {
+                <tr>
+                  <td>{{ row.data_point_name }}</td>
+                  <td><span class="csv-row-status" [class]="'status-' + row.status">{{ row.status }}</span></td>
+                  <td class="csv-detail">{{ row.detail }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+
+      @if (hasAnyDraft()) {
+        <div class="step-nav">
+          <button type="button" class="primary-btn" [disabled]="submitting()" (click)="submitForApproval()">
+            {{ submitting() ? 'Submitting…' : 'Submit for approval' }}
+          </button>
+        </div>
+      }
+    </div>
   } @else if (mode() === 'guided' && !reviewing()) {
     <div class="guided-panel">
       <div class="progress-bar">
@@ -62,10 +120,12 @@
               [ngModel]="field.note"
               (ngModelChange)="updateField(stepIndex(), { note: $event })"
             ></textarea>
-            <label class="attach-btn">
-              📎 Attach file
-              <input type="file" hidden (change)="onFileSelected(stepIndex(), $event)" />
-            </label>
+            @if (field.entry) {
+              <label class="attach-btn">
+                📎 Attach file
+                <input type="file" hidden (change)="onFileSelected(stepIndex(), $event)" />
+              </label>
+            }
           }
 
           @if (field.attachments.length) {
@@ -128,10 +188,14 @@
               [ngModel]="field.note"
               (ngModelChange)="updateField(i, { note: $event })"
             />
-            <label class="attach-btn small">
-              📎
-              <input type="file" hidden (change)="onFileSelected(i, $event)" />
-            </label>
+            @if (field.entry) {
+              <label class="attach-btn small" title="Attach file">
+                📎
+                <input type="file" hidden (change)="onFileSelected(i, $event)" />
+              </label>
+            } @else {
+              <span class="attach-placeholder"></span>
+            }
           }
 
           <button type="button" class="link-btn" (click)="toggleHistory(i)">History</button>
