@@ -2,13 +2,13 @@ import { Component, EventEmitter, Input, OnChanges, Output, inject, signal } fro
 import { FormsModule } from '@angular/forms';
 import {
   AttachmentRecord,
-  CsvUploadResult,
   DataPoint,
   EntriesApiService,
   EntryCategory,
   EntryRecord,
   LastValueEntry
 } from '../../../core/entries-api.service';
+import { BulkUploadWizardComponent } from '../bulk-upload-wizard/bulk-upload-wizard.component';
 import { EntryHistoryComponent } from '../entry-history/entry-history.component';
 
 interface FieldState {
@@ -30,7 +30,7 @@ function currentMonthValue(): string {
 @Component({
   selector: 'app-entry-form',
   standalone: true,
-  imports: [FormsModule, EntryHistoryComponent],
+  imports: [FormsModule, EntryHistoryComponent, BulkUploadWizardComponent],
   templateUrl: './entry-form.component.html',
   styleUrl: './entry-form.component.css'
 })
@@ -47,30 +47,19 @@ export class EntryFormComponent implements OnChanges {
   errorMessage = signal('');
 
   monthValue = signal(currentMonthValue());
-  mode = signal<'guided' | 'classic' | 'bulk'>('guided');
+  mode = signal<'entry' | 'bulk'>('entry');
   fields = signal<FieldState[]>([]);
-  stepIndex = signal(0);
-  reviewing = signal(false);
-
-  csvFileName = signal('');
-  csvUploading = signal(false);
-  csvResult = signal<CsvUploadResult | null>(null);
 
   get periodIso(): string {
     return `${this.monthValue()}-01`;
   }
 
   async ngOnChanges(): Promise<void> {
-    this.mode.set(this.category.data_points[0]?.default_mode ?? 'guided');
-    this.stepIndex.set(0);
-    this.reviewing.set(false);
-    this.csvResult.set(null);
+    this.mode.set('entry');
     await this.load();
   }
 
   async onMonthChange(): Promise<void> {
-    this.stepIndex.set(0);
-    this.reviewing.set(false);
     await this.load();
   }
 
@@ -115,46 +104,6 @@ export class EntryFormComponent implements OnChanges {
     const list = [...this.fields()];
     list[index] = { ...list[index], ...patch };
     this.fields.set(list);
-  }
-
-  async saveField(index: number): Promise<void> {
-    const field = this.fields()[index];
-    if (this.isLocked(field)) {
-      return;
-    }
-    this.updateField(index, { saving: true });
-    try {
-      const [record] = await this.api.saveDrafts([
-        {
-          data_point_id: field.dataPoint.id,
-          location_id: this.locationId,
-          period: this.periodIso,
-          value: field.value,
-          note: field.note || null
-        }
-      ]);
-      this.updateField(index, { entry: record, saving: false });
-    } catch {
-      this.updateField(index, { saving: false });
-      this.errorMessage.set(`Could not save ${field.dataPoint.name}.`);
-    }
-  }
-
-  async next(): Promise<void> {
-    await this.saveField(this.stepIndex());
-    if (this.stepIndex() < this.fields().length - 1) {
-      this.stepIndex.update((i) => i + 1);
-    } else {
-      this.reviewing.set(true);
-    }
-  }
-
-  prev(): void {
-    if (this.reviewing()) {
-      this.reviewing.set(false);
-      return;
-    }
-    this.stepIndex.update((i) => Math.max(0, i - 1));
   }
 
   async saveAllClassic(): Promise<void> {
@@ -202,8 +151,6 @@ export class EntryFormComponent implements OnChanges {
       await this.api.submit(this.category.name, this.periodIso, this.locationId);
       this.message.set('Submitted for approval.');
       await this.load();
-      this.reviewing.set(false);
-      this.stepIndex.set(0);
     } catch {
       this.errorMessage.set('Could not submit for approval.');
     } finally {
@@ -237,33 +184,8 @@ export class EntryFormComponent implements OnChanges {
     return field.entry?.status ?? 'Not started';
   }
 
-  async downloadTemplate(): Promise<void> {
-    try {
-      await this.api.downloadCsvTemplate(this.category.name);
-    } catch {
-      this.errorMessage.set('Could not download the template.');
-    }
-  }
-
-  async onCsvSelected(event: Event): Promise<void> {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) {
-      return;
-    }
-    this.csvFileName.set(file.name);
-    this.csvResult.set(null);
-    this.csvUploading.set(true);
-    this.errorMessage.set('');
-    try {
-      const result = await this.api.uploadCsv(this.category.name, this.locationId, this.periodIso, file);
-      this.csvResult.set(result);
-      await this.load();
-    } catch {
-      this.errorMessage.set('Could not process this file.');
-    } finally {
-      this.csvUploading.set(false);
-      input.value = '';
-    }
+  onBulkUploadDone(): void {
+    this.mode.set('entry');
+    void this.load();
   }
 }

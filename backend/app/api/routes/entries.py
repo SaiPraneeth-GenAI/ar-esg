@@ -3,7 +3,7 @@ import io
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -14,9 +14,10 @@ from app.db.session import get_db
 from app.schemas.entries import (
     AttachmentOut,
     AuditLogOut,
+    BulkImportRequest,
+    BulkImportResponse,
+    BulkImportRowResult,
     CategoryOut,
-    CsvUploadResult,
-    CsvUploadRow,
     DataPointOut,
     EntryOut,
     EntryUpsertRequest,
@@ -29,8 +30,6 @@ from app.services.audit import write_audit
 from app.services.rollups import recompute_rollup_for_entry
 
 router = APIRouter(prefix="/entries", tags=["entries"])
-
-CLASSIC_MODE_CATEGORIES = {"ETP-Water", "STP-Water", "Air Emissions"}
 
 
 def _is_provisional(validation_rules: dict | None) -> bool:
@@ -66,20 +65,29 @@ def list_categories(current: CurrentUser = Depends(require_roles("Admin", "Manag
     categories = (
         db.query(Category).filter(Category.tenant_id == current.tenant_id).order_by(Category.display_order).all()
     )
+    # One query for every data point across all categories, instead of one query per category.
+    all_data_points = (
+        db.query(DataPoint)
+        .join(Category, Category.id == DataPoint.category_id)
+        .filter(Category.tenant_id == current.tenant_id)
+        .order_by(DataPoint.name)
+        .all()
+    )
+    points_by_category: dict[uuid.UUID, list[DataPoint]] = {}
+    for dp in all_data_points:
+        points_by_category.setdefault(dp.category_id, []).append(dp)
+
     out = []
     for category in categories:
-        data_points = db.query(DataPoint).filter(DataPoint.category_id == category.id).order_by(DataPoint.name).all()
-        default_mode = "classic" if category.name in CLASSIC_MODE_CATEGORIES else "guided"
         dp_out = [
             DataPointOut(
                 id=dp.id,
                 name=dp.name,
                 unit=dp.unit,
                 input_type=dp.input_type,
-                default_mode=default_mode,
                 is_provisional=_is_provisional(dp.validation_rules),
             )
-            for dp in data_points
+            for dp in points_by_category.get(category.id, [])
         ]
         out.append(
             CategoryOut(
@@ -191,6 +199,8 @@ def _upsert_one(
     note: str | None,
     meter_id: str | None = None,
     method_of_entry: str = "Manual",
+    target_status: str = "Draft",
+    audit_action: str | None = None,
 ) -> Entry:
     entry = (
         db.query(Entry)
@@ -209,24 +219,24 @@ def _upsert_one(
             note=note,
             meter_id=meter_id,
             method_of_entry=method_of_entry,
-            status="Draft",
+            status=target_status,
             submitted_by=current.id,
         )
         db.add(entry)
         db.commit()
         db.refresh(entry)
-        write_audit(db, entry.id, current.email, "created", None, str(value))
+        write_audit(db, entry.id, current.email, audit_action or "created", None, str(value))
     else:
         old_value = str(entry.value) if entry.value is not None else None
         entry.value = value
         entry.note = note
         entry.meter_id = meter_id
         entry.method_of_entry = method_of_entry
-        entry.status = "Draft"
+        entry.status = target_status
         entry.submitted_by = current.id
         db.commit()
         db.refresh(entry)
-        write_audit(db, entry.id, current.email, "edited", old_value, str(value))
+        write_audit(db, entry.id, current.email, audit_action or "edited", old_value, str(value))
 
     return entry
 
@@ -259,9 +269,9 @@ def csv_template(
     )
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["data_point_name", "value", "note"])
+    writer.writerow(["data_point_name", "period", "value", "unit", "note"])
     for dp in data_points:
-        writer.writerow([dp.name, "", ""])
+        writer.writerow([dp.name, "", "", dp.unit or "", ""])
 
     filename = f"{category.replace(' ', '_')}_template.csv"
     return Response(
@@ -271,74 +281,157 @@ def csv_template(
     )
 
 
-@router.post("/bulk-csv", response_model=CsvUploadResult)
-async def bulk_csv_upload(
-    category: str = Form(...),
-    location_id: uuid.UUID = Form(...),
-    period: date = Form(...),
-    file: UploadFile = File(...),
+@router.post("/bulk-import", response_model=BulkImportResponse)
+def bulk_import(
+    payload: BulkImportRequest,
     current: CurrentUser = Depends(require_roles("Admin", "Manager")),
     db: Session = Depends(get_db),
 ):
+    """Validates (commit=False) or creates (commit=True) a batch of rows the
+    frontend has already parsed and column-mapped from an uploaded file.
+    Every row is re-validated here regardless -- duplicate-within-file and
+    duplicate-against-existing-entries checks need DB truth the client
+    doesn't have."""
     data_points = (
         db.query(DataPoint)
         .join(Category, Category.id == DataPoint.category_id)
-        .filter(Category.tenant_id == current.tenant_id, Category.name == category)
+        .filter(Category.tenant_id == current.tenant_id, Category.name == payload.category)
         .all()
     )
     by_name = {dp.name.strip().lower(): dp for dp in data_points}
 
-    content = (await file.read()).decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(content))
+    results: list[BulkImportRowResult] = []
+    seen_in_file: set[tuple[uuid.UUID, date]] = set()
 
-    created = 0
-    updated = 0
-    rows: list[CsvUploadRow] = []
-
-    for raw_row in reader:
-        name = (raw_row.get("data_point_name") or "").strip()
-        value_raw = (raw_row.get("value") or "").strip()
-        note = (raw_row.get("note") or "").strip() or None
-
-        if not name:
-            continue
-
-        dp = by_name.get(name.lower())
+    for row in payload.rows:
+        dp = by_name.get(row.data_point_name.strip().lower())
         if dp is None:
-            rows.append(CsvUploadRow(data_point_name=name, status="skipped", detail="No matching field in this category"))
-            continue
-
-        if not value_raw:
-            rows.append(CsvUploadRow(data_point_name=name, status="skipped", detail="No value provided"))
+            results.append(
+                BulkImportRowResult(
+                    row_index=row.row_index,
+                    status="error",
+                    data_point_name=row.data_point_name,
+                    period=None,
+                    value=None,
+                    message=f"'{row.data_point_name}' is not a field in {payload.category}",
+                )
+            )
             continue
 
         try:
-            value = float(value_raw)
+            period = date.fromisoformat(row.period_iso)
         except ValueError:
-            rows.append(CsvUploadRow(data_point_name=name, status="error", detail=f"'{value_raw}' is not a number"))
+            results.append(
+                BulkImportRowResult(
+                    row_index=row.row_index,
+                    status="error",
+                    data_point_name=row.data_point_name,
+                    period=None,
+                    value=None,
+                    message=f"Could not parse period '{row.period_iso}'",
+                )
+            )
+            continue
+
+        try:
+            value = float(row.value_raw)
+        except ValueError:
+            results.append(
+                BulkImportRowResult(
+                    row_index=row.row_index,
+                    status="error",
+                    data_point_name=row.data_point_name,
+                    period=period,
+                    value=None,
+                    message=f"'{row.value_raw}' is not a number",
+                )
+            )
+            continue
+
+        if row.unit_raw and dp.unit and row.unit_raw.strip().lower() != dp.unit.strip().lower():
+            results.append(
+                BulkImportRowResult(
+                    row_index=row.row_index,
+                    status="error",
+                    data_point_name=row.data_point_name,
+                    period=period,
+                    value=value,
+                    message=f"Unit '{row.unit_raw}' does not match expected unit '{dp.unit}'",
+                )
+            )
+            continue
+
+        key = (dp.id, period)
+        if key in seen_in_file:
+            results.append(
+                BulkImportRowResult(
+                    row_index=row.row_index,
+                    status="error",
+                    data_point_name=row.data_point_name,
+                    period=period,
+                    value=value,
+                    message="Duplicate field + period elsewhere in this file",
+                )
+            )
             continue
 
         existing = (
             db.query(Entry)
-            .filter(Entry.data_point_id == dp.id, Entry.location_id == location_id, Entry.period == period)
+            .filter(Entry.data_point_id == dp.id, Entry.location_id == payload.location_id, Entry.period == period)
             .first()
         )
-        was_new = existing is None
-
-        try:
-            _upsert_one(db, current, dp.id, location_id, period, value, note, method_of_entry="CSV")
-        except HTTPException as exc:
-            rows.append(CsvUploadRow(data_point_name=name, status="error", detail=str(exc.detail)))
+        if existing is not None and existing.status not in ("Draft", "Rejected"):
+            results.append(
+                BulkImportRowResult(
+                    row_index=row.row_index,
+                    status="error",
+                    data_point_name=row.data_point_name,
+                    period=period,
+                    value=value,
+                    message=f"An entry for this field and period is already {existing.status.lower()}",
+                )
+            )
             continue
 
-        if was_new:
-            created += 1
-            rows.append(CsvUploadRow(data_point_name=name, status="created"))
-        else:
-            updated += 1
-            rows.append(CsvUploadRow(data_point_name=name, status="updated"))
+        seen_in_file.add(key)
 
-    return CsvUploadResult(created=created, updated=updated, rows=rows)
+        if not payload.commit:
+            results.append(
+                BulkImportRowResult(
+                    row_index=row.row_index, status="valid", data_point_name=row.data_point_name, period=period, value=value
+                )
+            )
+            continue
+
+        entry = _upsert_one(
+            db,
+            current,
+            dp.id,
+            payload.location_id,
+            period,
+            value,
+            row.note,
+            method_of_entry="Bulk Upload",
+            target_status="Submitted",
+            audit_action="bulk_uploaded",
+        )
+        results.append(
+            BulkImportRowResult(
+                row_index=row.row_index,
+                status="created",
+                data_point_name=row.data_point_name,
+                period=period,
+                value=value,
+                entry_id=entry.id,
+            )
+        )
+
+    return BulkImportResponse(
+        rows=results,
+        valid_count=sum(1 for r in results if r.status == "valid"),
+        error_count=sum(1 for r in results if r.status == "error"),
+        created_count=sum(1 for r in results if r.status == "created"),
+    )
 
 
 @router.post("/submit", response_model=list[EntryOut])

@@ -1,0 +1,316 @@
+.wizard-card {
+  background: #fff;
+  border: 1px solid #eaecf0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.wizard-steps {
+  display: flex;
+  border-bottom: 1px solid #eaecf0;
+  padding: 0 1.75rem;
+  overflow-x: auto;
+}
+
+.wizard-step {
+  padding: 1rem 0;
+  margin-right: 1.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #98a2b3;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+}
+
+.wizard-step.done {
+  color: #667085;
+}
+
+.wizard-step.active {
+  color: #0e2c21;
+  border-bottom-color: #0e2c21;
+}
+
+.wizard-body {
+  padding: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.wizard-intro {
+  margin: 0;
+  color: #475467;
+  font-size: 0.88rem;
+}
+
+.summary-headline {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #101828;
+}
+
+.banner {
+  border-radius: 8px;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.85rem;
+}
+
+.banner.error {
+  background: #fef3f2;
+  color: #b42318;
+  border: 1px solid #fecdca;
+}
+
+/* Step 1: upload */
+
+.dropzone {
+  border: 2px dashed #d0d5dd;
+  border-radius: 12px;
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: #667085;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dropzone.active {
+  border-color: #0e2c21;
+  background: #f5faf7;
+}
+
+.dropzone svg {
+  width: 34px;
+  height: 34px;
+  color: #98a2b3;
+  margin-bottom: 0.25rem;
+}
+
+.dropzone-title {
+  margin: 0;
+  font-weight: 600;
+  color: #344054;
+  font-size: 0.95rem;
+}
+
+.dropzone-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  color: #98a2b3;
+}
+
+.optional-template {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #98a2b3;
+  line-height: 1.5;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: #0e2c21;
+  font-weight: 600;
+  font-size: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  font-family: inherit;
+}
+
+/* Tables shared */
+
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid #eaecf0;
+  border-radius: 10px;
+}
+
+.preview-table,
+.mapping-table,
+.validation-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.83rem;
+}
+
+.preview-table th,
+.mapping-table th,
+.validation-table th {
+  text-align: left;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #667085;
+  background: #f9fafb;
+  padding: 0.55rem 0.75rem;
+  white-space: nowrap;
+}
+
+.preview-table td,
+.validation-table td {
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid #eaecf0;
+  color: #344054;
+  white-space: nowrap;
+}
+
+/* Step 3: mapping */
+
+.mapping-table {
+  border: 1px solid #eaecf0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.mapping-table td {
+  padding: 0.6rem 0.75rem;
+  border-top: 1px solid #eaecf0;
+}
+
+.mapping-header {
+  font-weight: 600;
+  color: #344054;
+}
+
+.mapping-table select {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  font-size: 0.83rem;
+  font-family: inherit;
+}
+
+.unmatched-flag {
+  margin-left: 0.6rem;
+  background: #fffaeb;
+  color: #b54708;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+/* Step 4: validate */
+
+.row-error {
+  background: #fef8f7;
+}
+
+.row-status {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.08rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.row-status.status-valid {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.row-status.status-error {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.row-status.status-created {
+  background: #eff8ff;
+  color: #175cd3;
+}
+
+.row-message {
+  color: #98a2b3;
+  white-space: normal;
+  min-width: 220px;
+}
+
+/* Step 5: confirm */
+
+.confirm-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+  padding: 1.5rem 0;
+}
+
+.confirm-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.confirm-icon.success {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.confirm-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.confirm-headline {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #101828;
+  margin: 0.25rem 0 0;
+}
+
+.confirm-subline {
+  color: #b54708;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* Nav */
+
+.wizard-nav {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 0.5rem;
+}
+
+.wizard-nav.centered {
+  justify-content: center;
+}
+
+.primary-btn {
+  background: #0e2c21;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1.3rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-block;
+}
+
+.primary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.secondary-btn {
+  background: #fff;
+  color: #344054;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 0.6rem 1.3rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}

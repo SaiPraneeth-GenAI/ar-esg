@@ -1,86 +1,53 @@
 <div class="shell">
-  <aside class="icon-rail">
-    <div class="rail-logo" title="Amara Raja">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
       <img src="/logo-icon.png" alt="Amara Raja" />
+      <span>Amara Raja</span>
     </div>
 
-    <button
-      type="button"
-      class="rail-item"
-      [class.active]="isDashboardRoute()"
-      title="Dashboard"
-      (click)="goToDashboard()"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 9.5 12 3l9 6.5" />
-        <path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" />
-      </svg>
-    </button>
-
-    @if (canAccessDataEntry()) {
-      <button
-        type="button"
-        class="rail-item"
-        [class.active]="isDataEntryRoute()"
-        title="Data Entry"
-        (click)="goToDataEntry()"
-      >
+    <nav class="sidebar-nav">
+      <button type="button" class="nav-item" [class.active]="isDashboardRoute()" (click)="goToDashboard()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 20h9" />
-          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          <path d="M3 9.5 12 3l9 6.5" />
+          <path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" />
         </svg>
+        <span>Home</span>
       </button>
-    }
 
-    @if (canAccessSettings()) {
-      <button
-        type="button"
-        class="rail-item"
-        [class.active]="isSettingsRoute()"
-        title="Settings"
-        (click)="openSettings()"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3" />
-          <path
-            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
-          />
-        </svg>
-      </button>
-    }
+      @if (canAccessDataEntry()) {
+        <button type="button" class="nav-item" [class.active]="isDataEntryRoute()" (click)="goToDataEntry()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+          <span>Data Entry</span>
+        </button>
+      }
+
+      @if (canAccessSettings()) {
+        <button type="button" class="nav-item" [class.active]="isSettingsRoute()" (click)="openSettings()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+            />
+          </svg>
+          <span>Settings</span>
+          <svg class="chevron" [class.open]="settingsOpen()" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+
+        @if (settingsOpen()) {
+          <div class="nav-subitems">
+            <a routerLink="/admin/settings/users" routerLinkActive="active" class="nav-subitem">User Management</a>
+            <a routerLink="/admin/settings/roles" routerLinkActive="active" class="nav-subitem">User Roles</a>
+            <a routerLink="/admin/settings/plants" routerLinkActive="active" class="nav-subitem">Assigned Plants</a>
+          </div>
+        }
+      }
+    </nav>
   </aside>
-
-  @if (settingsOpen()) {
-    <aside class="sub-nav">
-      <h2>Settings</h2>
-      <nav>
-        <a routerLink="/admin/settings/users" routerLinkActive="active">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-          </svg>
-          User Management
-        </a>
-        <a routerLink="/admin/settings/roles" routerLinkActive="active">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
-          </svg>
-          User Roles
-        </a>
-        <a routerLink="/admin/settings/plants" routerLinkActive="active">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 21h18" />
-            <path d="M5 21V7l7-4 7 4v14" />
-            <path d="M9 21v-6h6v6" />
-            <path d="M9 11h.01M15 11h.01M9 15h.01M15 15h.01" />
-          </svg>
-          Assigned Plants
-        </a>
-      </nav>
-    </aside>
-  }
 
   <div class="main">
     <header class="topbar">

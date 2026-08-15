@@ -1,0 +1,209 @@
+<div class="wizard-card">
+  <div class="wizard-steps">
+    <span class="wizard-step" [class.active]="step() === 'upload'" [class.done]="step() !== 'upload'">1. Upload</span>
+    <span class="wizard-step" [class.active]="step() === 'preview'" [class.done]="step() === 'mapping' || step() === 'validate' || step() === 'confirm'">2. Preview</span>
+    <span class="wizard-step" [class.active]="step() === 'mapping'" [class.done]="step() === 'validate' || step() === 'confirm'">3. Mapping</span>
+    <span class="wizard-step" [class.active]="step() === 'validate'" [class.done]="step() === 'confirm'">4. Validate</span>
+    <span class="wizard-step" [class.active]="step() === 'confirm'">5. Confirm</span>
+  </div>
+
+  @if (step() === 'upload') {
+    <div class="wizard-body">
+      <div
+        class="dropzone"
+        [class.active]="dragActive()"
+        (dragover)="onDragOver($event)"
+        (dragleave)="onDragLeave()"
+        (drop)="onDrop($event)"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3v12" />
+          <path d="m7 8 5-5 5 5" />
+          <path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
+        </svg>
+        <p class="dropzone-title">Drag a file here or click to browse</p>
+        <p class="dropzone-hint">.csv, .xlsx, or .xls</p>
+        <label class="primary-btn">
+          Browse files
+          <input type="file" hidden accept=".csv,.xlsx,.xls" (change)="onFileInputChange($event)" />
+        </label>
+      </div>
+
+      @if (parseError()) {
+        <div class="banner error">{{ parseError() }}</div>
+      }
+
+      <p class="optional-template">
+        Don't have a file yet? Track this in a spreadsheet already? Either works -- upload whatever you have and
+        we'll help map its columns in step 3, or
+        <button type="button" class="link-btn" (click)="downloadTemplate()">download a blank template</button>
+        to start from. Include a Period column to backfill several months in one upload.
+      </p>
+    </div>
+  }
+
+  @if (step() === 'preview') {
+    <div class="wizard-body">
+      <p class="wizard-intro"><strong>{{ fileName() }}</strong> -- first {{ previewRows().length }} of {{ rawRows().length }} rows</p>
+      <div class="table-scroll">
+        <table class="preview-table">
+          <thead>
+            <tr>
+              @for (h of headers(); track h) {
+                <th>{{ h || '(blank)' }}</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of previewRows(); track $index) {
+              <tr>
+                @for (cell of row; track $index) {
+                  <td>{{ cellDisplay(cell) }}</td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wizard-nav">
+        <button type="button" class="secondary-btn" (click)="backToUpload()">Choose a different file</button>
+        <button type="button" class="primary-btn" (click)="confirmPreview()">This is the right file, continue</button>
+      </div>
+    </div>
+  }
+
+  @if (step() === 'mapping') {
+    <div class="wizard-body">
+      <p class="wizard-intro">Match each column in your file to a field. We've guessed based on the header names.</p>
+
+      <table class="mapping-table">
+        <thead>
+          <tr>
+            <th>Your column</th>
+            <th>Maps to</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (m of mapping(); track m.headerIndex) {
+            <tr>
+              <td class="mapping-header">{{ m.header || '(blank)' }}</td>
+              <td>
+                <select [ngModel]="m.target ?? ''" (ngModelChange)="setMapping(m.headerIndex, $event)">
+                  <option value="">Unmatched -- ignore this column</option>
+                  @for (field of targetFields; track field.key) {
+                    <option [value]="field.key">{{ field.label }}{{ field.required ? ' *' : '' }}</option>
+                  }
+                </select>
+                @if (!m.target) {
+                  <span class="unmatched-flag">Unmatched</span>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+
+      @if (!mappingComplete()) {
+        <div class="banner error">Map a column to Data point, Period / Month, and Value (marked *) before continuing.</div>
+      }
+
+      <div class="wizard-nav">
+        <button type="button" class="secondary-btn" (click)="step.set('preview')">Back</button>
+        <button type="button" class="primary-btn" [disabled]="!mappingComplete()" (click)="runValidation()">
+          Continue to validation
+        </button>
+      </div>
+    </div>
+  }
+
+  @if (step() === 'validate') {
+    <div class="wizard-body">
+      @if (validating()) {
+        <p class="wizard-intro">Checking every row against your existing data…</p>
+      } @else {
+        <p class="wizard-intro">
+          {{ includedValidRows().length }} valid, {{ errorRows().length }} flagged out of {{ validationRows().length }} rows.
+        </p>
+
+        <div class="table-scroll">
+          <table class="validation-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Row</th>
+                <th>Data point</th>
+                <th>Period</th>
+                <th>Value</th>
+                <th>Status</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of validationRows(); track row.row_index) {
+                <tr [class.row-error]="row.status === 'error'">
+                  <td>
+                    @if (row.status !== 'error') {
+                      <input type="checkbox" [checked]="row.included" (change)="toggleIncluded(row.row_index)" />
+                    }
+                  </td>
+                  <td>{{ row.row_index }}</td>
+                  <td>{{ row.data_point_name }}</td>
+                  <td>{{ row.period }}</td>
+                  <td>{{ row.value }}</td>
+                  <td><span class="row-status" [class]="'status-' + row.status">{{ row.status }}</span></td>
+                  <td class="row-message">{{ row.message }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <div class="wizard-nav">
+          <button type="button" class="secondary-btn" (click)="step.set('mapping')">Back to mapping</button>
+          <button type="button" class="primary-btn" [disabled]="includedValidRows().length === 0" (click)="goToConfirm()">
+            Continue with {{ includedValidRows().length }} valid row{{ includedValidRows().length === 1 ? '' : 's' }}
+          </button>
+        </div>
+      }
+    </div>
+  }
+
+  @if (step() === 'confirm') {
+    <div class="wizard-body">
+      @if (commitResult()) {
+        <div class="confirm-result">
+          <div class="confirm-icon success">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </div>
+          <p class="confirm-headline">{{ commitResult()!.created }} entries created and submitted for approval.</p>
+          @if (commitResult()!.error > 0) {
+            <p class="confirm-subline">{{ commitResult()!.error }} row(s) could not be created -- something changed since validation.</p>
+          }
+          <div class="wizard-nav centered">
+            <button type="button" class="primary-btn" (click)="finish()">Done</button>
+          </div>
+        </div>
+      } @else {
+        <p class="wizard-intro summary-headline">{{ summaryLabel() }}</p>
+        <p class="wizard-intro">
+          These will be created as <strong>Submitted</strong> entries for {{ category.name }} and land directly in the
+          Approver's queue, exactly like a manually entered field.
+        </p>
+
+        @if (commitError()) {
+          <div class="banner error">{{ commitError() }}</div>
+        }
+
+        <div class="wizard-nav">
+          <button type="button" class="secondary-btn" (click)="step.set('validate')">Back</button>
+          <button type="button" class="primary-btn" [disabled]="committing()" (click)="commitImport()">
+            {{ committing() ? 'Creating…' : 'Confirm and create entries' }}
+          </button>
+        </div>
+      }
+    </div>
+  }
+</div>

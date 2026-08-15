@@ -9,7 +9,6 @@ export interface DataPoint {
   name: string;
   unit: string | null;
   input_type: string | null;
-  default_mode: 'guided' | 'classic';
   is_provisional: boolean;
 }
 
@@ -47,18 +46,6 @@ export interface LastValueEntry {
   period: string | null;
 }
 
-export interface CsvUploadRow {
-  data_point_name: string;
-  status: 'created' | 'updated' | 'skipped' | 'error';
-  detail: string | null;
-}
-
-export interface CsvUploadResult {
-  created: number;
-  updated: number;
-  rows: CsvUploadRow[];
-}
-
 export interface EntryUpsert {
   data_point_id: string;
   location_id: string;
@@ -85,6 +72,32 @@ export interface AttachmentRecord {
   uploaded_at: string;
 }
 
+export interface BulkImportRowIn {
+  row_index: number;
+  data_point_name: string;
+  period_iso: string;
+  value_raw: string;
+  unit_raw?: string | null;
+  note?: string | null;
+}
+
+export interface BulkImportRowResult {
+  row_index: number;
+  status: 'valid' | 'error' | 'created';
+  data_point_name: string;
+  period: string | null;
+  value: number | null;
+  message: string | null;
+  entry_id: string | null;
+}
+
+export interface BulkImportResponse {
+  rows: BulkImportRowResult[];
+  valid_count: number;
+  error_count: number;
+  created_count: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class EntriesApiService {
   private http = inject(HttpClient);
@@ -98,16 +111,6 @@ export class EntriesApiService {
   async listCategories(): Promise<EntryCategory[]> {
     const headers = await this.authHeaders();
     return firstValueFrom(this.http.get<EntryCategory[]>(`${environment.apiBaseUrl}/entries/categories`, { headers }));
-  }
-
-  async getLastValue(dataPointId: string, locationId: string, beforePeriod: string): Promise<LastValue> {
-    const headers = await this.authHeaders();
-    return firstValueFrom(
-      this.http.get<LastValue>(`${environment.apiBaseUrl}/entries/last-value`, {
-        headers,
-        params: { data_point_id: dataPointId, location_id: locationId, before_period: beforePeriod }
-      })
-    );
   }
 
   async getLastValuesBatch(category: string, locationId: string, beforePeriod: string): Promise<LastValueEntry[]> {
@@ -196,17 +199,19 @@ export class EntriesApiService {
     URL.revokeObjectURL(url);
   }
 
-  async uploadCsv(category: string, locationId: string, period: string, file: File): Promise<CsvUploadResult> {
-    const { data } = await this.supabase.client.auth.getSession();
-    const form = new FormData();
-    form.append('category', category);
-    form.append('location_id', locationId);
-    form.append('period', period);
-    form.append('file', file);
+  async bulkImport(
+    category: string,
+    locationId: string,
+    rows: BulkImportRowIn[],
+    commit: boolean
+  ): Promise<BulkImportResponse> {
+    const headers = await this.authHeaders();
     return firstValueFrom(
-      this.http.post<CsvUploadResult>(`${environment.apiBaseUrl}/entries/bulk-csv`, form, {
-        headers: { Authorization: `Bearer ${data.session?.access_token ?? ''}` }
-      })
+      this.http.post<BulkImportResponse>(
+        `${environment.apiBaseUrl}/entries/bulk-import`,
+        { category, location_id: locationId, commit, rows },
+        { headers }
+      )
     );
   }
 

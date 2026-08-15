@@ -1,21 +1,23 @@
 <div class="form-page">
-  <div class="form-header">
-    <button type="button" class="back-link" (click)="back.emit()">← Categories</button>
-    <h2>{{ category.name }}</h2>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <button type="button" class="breadcrumb-link" (click)="back.emit()">Data Entry</button>
+    <svg class="breadcrumb-sep" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+    <span class="breadcrumb-current">{{ category.name }}</span>
     @if (category.is_provisional) {
-      <span class="provisional-badge">Provisional — fields pending confirmation</span>
+      <span class="provisional-badge">Provisional</span>
     }
-  </div>
+  </nav>
 
-  <div class="controls-row">
+  <div class="toolbar-card">
     <label class="month-picker">
-      Period
+      <span>Period</span>
       <input type="month" [ngModel]="monthValue()" (ngModelChange)="monthValue.set($event); onMonthChange()" />
     </label>
 
     <div class="mode-toggle">
-      <button type="button" [class.active]="mode() === 'guided'" (click)="mode.set('guided')">Guided</button>
-      <button type="button" [class.active]="mode() === 'classic'" (click)="mode.set('classic')">Classic</button>
+      <button type="button" [class.active]="mode() === 'entry'" (click)="mode.set('entry')">Data Entry</button>
       <button type="button" [class.active]="mode() === 'bulk'" (click)="mode.set('bulk')">Bulk upload</button>
     </div>
   </div>
@@ -27,140 +29,17 @@
     <div class="banner success">{{ message() }}</div>
   }
 
-  @if (loading()) {
+  @if (mode() === 'bulk') {
+    <app-bulk-upload-wizard
+      [category]="category"
+      [locationId]="locationId"
+      (done)="onBulkUploadDone()"
+    ></app-bulk-upload-wizard>
+  } @else if (loading()) {
     <div class="skeleton-panel">
       <div class="skeleton-bar wide"></div>
       <div class="skeleton-bar"></div>
       <div class="skeleton-bar narrow"></div>
-    </div>
-  } @else if (mode() === 'bulk') {
-    <div class="bulk-panel">
-      <p class="bulk-intro">
-        Upload a spreadsheet of readings for {{ category.name }} at once, instead of entering each field by hand.
-      </p>
-
-      <div class="bulk-step">
-        <span class="bulk-step-num">1</span>
-        <div>
-          <p class="bulk-step-title">Download the template for this category</p>
-          <button type="button" class="secondary-btn" (click)="downloadTemplate()">Download CSV template</button>
-        </div>
-      </div>
-
-      <div class="bulk-step">
-        <span class="bulk-step-num">2</span>
-        <div>
-          <p class="bulk-step-title">Fill in values, then upload it back</p>
-          <label class="secondary-btn upload-btn">
-            {{ csvUploading() ? 'Uploading…' : 'Choose file' }}
-            <input type="file" accept=".csv" hidden [disabled]="csvUploading()" (change)="onCsvSelected($event)" />
-          </label>
-          @if (csvFileName()) {
-            <span class="csv-filename">{{ csvFileName() }}</span>
-          }
-        </div>
-      </div>
-
-      @if (csvResult()) {
-        <div class="csv-result">
-          <p class="csv-summary">{{ csvResult()!.created }} created, {{ csvResult()!.updated }} updated as drafts.</p>
-          <table class="csv-result-table">
-            <tbody>
-              @for (row of csvResult()!.rows; track row.data_point_name) {
-                <tr>
-                  <td>{{ row.data_point_name }}</td>
-                  <td><span class="csv-row-status" [class]="'status-' + row.status">{{ row.status }}</span></td>
-                  <td class="csv-detail">{{ row.detail }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      }
-
-      @if (hasAnyDraft()) {
-        <div class="step-nav">
-          <button type="button" class="primary-btn" [disabled]="submitting()" (click)="submitForApproval()">
-            {{ submitting() ? 'Submitting…' : 'Submit for approval' }}
-          </button>
-        </div>
-      }
-    </div>
-  } @else if (mode() === 'guided' && !reviewing()) {
-    <div class="guided-panel">
-      <div class="progress-bar">
-        <div class="progress-fill" [style.width.%]="((stepIndex() + 1) / fields().length) * 100"></div>
-      </div>
-      <p class="progress-label">{{ category.name }} — step {{ stepIndex() + 1 }} of {{ fields().length }}</p>
-
-      @if (fields()[stepIndex()]; as field) {
-        <div class="field-block">
-          <label class="field-label">
-            {{ field.dataPoint.name }}
-            <span class="unit-tag">{{ field.dataPoint.unit }}</span>
-          </label>
-
-          @if (isLocked(field)) {
-            <p class="locked-value">{{ field.value ?? '—' }} {{ field.dataPoint.unit }}</p>
-            <span class="status-badge">{{ statusLabel(field) }}</span>
-          } @else {
-            <input
-              type="number"
-              [ngModel]="field.value"
-              (ngModelChange)="updateField(stepIndex(), { value: $event })"
-              [placeholder]="field.lastValue?.value != null ? field.lastValue!.value + ' (last month)' : 'Enter a value'"
-            />
-            @if (field.lastValue?.value != null) {
-              <p class="hint">Last approved value: {{ field.lastValue!.value }} {{ field.dataPoint.unit }}</p>
-            }
-            <textarea
-              class="note-input"
-              rows="2"
-              placeholder="Note (optional)"
-              [ngModel]="field.note"
-              (ngModelChange)="updateField(stepIndex(), { note: $event })"
-            ></textarea>
-            @if (field.entry) {
-              <label class="attach-btn">
-                📎 Attach file
-                <input type="file" hidden (change)="onFileSelected(stepIndex(), $event)" />
-              </label>
-            }
-          }
-
-          @if (field.attachments.length) {
-            <p class="attachment-list">{{ field.attachments.length }} file(s) attached</p>
-          }
-        </div>
-
-        <div class="step-nav">
-          <button type="button" class="secondary-btn" (click)="prev()" [disabled]="stepIndex() === 0">Back</button>
-          <button type="button" class="primary-btn" (click)="next()">
-            {{ stepIndex() === fields().length - 1 ? 'Review' : 'Next' }}
-          </button>
-        </div>
-      }
-    </div>
-  } @else if (mode() === 'guided' && reviewing()) {
-    <div class="review-panel">
-      <h3>Review before submitting</h3>
-      <table class="review-table">
-        <tbody>
-          @for (field of fields(); track field.dataPoint.id) {
-            <tr>
-              <td>{{ field.dataPoint.name }}</td>
-              <td>{{ field.value ?? '—' }} {{ field.dataPoint.unit }}</td>
-              <td><span class="status-badge">{{ statusLabel(field) }}</span></td>
-            </tr>
-          }
-        </tbody>
-      </table>
-      <div class="step-nav">
-        <button type="button" class="secondary-btn" (click)="prev()">Back</button>
-        <button type="button" class="primary-btn" [disabled]="submitting() || !hasAnyDraft()" (click)="submitForApproval()">
-          {{ submitting() ? 'Submitting…' : 'Submit for approval' }}
-        </button>
-      </div>
     </div>
   } @else {
     <div class="classic-panel">
@@ -169,7 +48,7 @@
           <div class="classic-label">
             {{ field.dataPoint.name }}
             <span class="unit-tag">{{ field.dataPoint.unit }}</span>
-            <span class="status-badge">{{ statusLabel(field) }}</span>
+            <span class="status-badge" [class]="'status-' + statusLabel(field).toLowerCase()">{{ statusLabel(field) }}</span>
           </div>
 
           @if (isLocked(field)) {

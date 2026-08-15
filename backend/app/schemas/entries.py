@@ -9,7 +9,6 @@ class DataPointOut(BaseModel):
     name: str
     unit: str | None
     input_type: str | None
-    default_mode: str
     is_provisional: bool
 
 
@@ -83,13 +82,34 @@ class LastValueEntry(BaseModel):
     period: date | None
 
 
-class CsvUploadRow(BaseModel):
+class BulkImportRowIn(BaseModel):
+    row_index: int
     data_point_name: str
-    status: str
-    detail: str | None = None
+    period_iso: str
+    value_raw: str
+    unit_raw: str | None = None
+    note: str | None = None
 
 
-class CsvUploadResult(BaseModel):
-    created: int
-    updated: int
-    rows: list[CsvUploadRow]
+class BulkImportRequest(BaseModel):
+    category: str
+    location_id: uuid.UUID
+    commit: bool = False
+    rows: list[BulkImportRowIn]
+
+
+class BulkImportRowResult(BaseModel):
+    row_index: int
+    status: str  # "valid" | "error" | "created"
+    data_point_name: str
+    period: date | None
+    value: float | None
+    message: str | None = None
+    entry_id: uuid.UUID | None = None
+
+
+class BulkImportResponse(BaseModel):
+    rows: list[BulkImportRowResult]
+    valid_count: int
+    error_count: int
+    created_count: int
