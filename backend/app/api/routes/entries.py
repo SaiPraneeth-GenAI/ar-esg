@@ -453,9 +453,12 @@ def csv_template(
     )
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["data_point_name", "period", "value", "unit", "note"])
+    # No Period column by default -- the wizard's own period selector covers
+    # the common single-month case. Add one yourself (any header like
+    # "Period" or "Month") if you want to backfill several months at once.
+    writer.writerow(["data_point_name", "value", "unit", "note"])
     for dp in data_points:
-        writer.writerow([dp.name, "", "", dp.unit or "", ""])
+        writer.writerow([dp.name, "", dp.unit or "", ""])
 
     filename = f"{category.replace(' ', '_')}_template.csv"
     return Response(
@@ -502,8 +505,21 @@ def bulk_import(
             )
             continue
 
+        period_iso = row.period_iso.strip() or payload.default_period
+        if not period_iso:
+            results.append(
+                BulkImportRowResult(
+                    row_index=row.row_index,
+                    status="error",
+                    data_point_name=row.data_point_name,
+                    period=None,
+                    value=None,
+                    message="No period given, and no default period was set for this upload",
+                )
+            )
+            continue
         try:
-            period = date.fromisoformat(row.period_iso)
+            period = date.fromisoformat(period_iso)
         except ValueError:
             results.append(
                 BulkImportRowResult(
@@ -512,7 +528,7 @@ def bulk_import(
                     data_point_name=row.data_point_name,
                     period=None,
                     value=None,
-                    message=f"Could not parse period '{row.period_iso}'",
+                    message=f"Could not parse period '{period_iso}'",
                 )
             )
             continue

@@ -15,7 +15,7 @@ export const TARGET_FIELDS: TargetField[] = [
   {
     key: 'period',
     label: 'Period / Month',
-    required: true,
+    required: false,
     synonyms: ['period', 'month', 'date', 'reporting period', 'period month']
   },
   { key: 'value', label: 'Value', required: true, synonyms: ['value', 'reading', 'amount', 'qty', 'quantity', 'total'] },

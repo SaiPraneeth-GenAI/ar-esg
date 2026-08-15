@@ -88,7 +88,7 @@ class LastValueEntry(BaseModel):
 class BulkImportRowIn(BaseModel):
     row_index: int
     data_point_name: str
-    period_iso: str
+    period_iso: str = ""
     value_raw: str
     unit_raw: str | None = None
     note: str | None = None
@@ -97,6 +97,9 @@ class BulkImportRowIn(BaseModel):
 class BulkImportRequest(BaseModel):
     category: str
     location_id: uuid.UUID
+    # Used for any row that doesn't specify its own period -- i.e. a file
+    # with no Period column at all, which is the common single-month case.
+    default_period: str | None = None
     commit: bool = False
     rows: list[BulkImportRowIn]
 

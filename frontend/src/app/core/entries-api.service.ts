@@ -206,13 +206,14 @@ export class EntriesApiService {
     category: string,
     locationId: string,
     rows: BulkImportRowIn[],
-    commit: boolean
+    commit: boolean,
+    defaultPeriod?: string
   ): Promise<BulkImportResponse> {
     const headers = await this.authHeaders();
     return firstValueFrom(
       this.http.post<BulkImportResponse>(
         `${environment.apiBaseUrl}/entries/bulk-import`,
-        { category, location_id: locationId, commit, rows },
+        { category, location_id: locationId, commit, rows, default_period: defaultPeriod ?? null },
         { headers }
       )
     );

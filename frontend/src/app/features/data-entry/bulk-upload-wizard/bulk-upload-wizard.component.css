@@ -194,6 +194,12 @@
   font-weight: 600;
 }
 
+.wizard-hint {
+  margin: -0.5rem 0 0;
+  font-size: 0.78rem;
+  color: #98a2b3;
+}
+
 /* Step 4: validate */
 
 .row-error {
@@ -228,6 +234,34 @@
   color: #98a2b3;
   white-space: normal;
   min-width: 220px;
+}
+
+.validation-table td {
+  white-space: nowrap;
+}
+
+.validation-table select,
+.validation-table input[type='month'],
+.validation-table input.value-input {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-family: inherit;
+  background: #fff;
+  color: #344054;
+}
+
+.validation-table select {
+  min-width: 160px;
+}
+
+.validation-table input.value-input {
+  width: 100px;
+}
+
+.validation-table input[type='month'] {
+  width: 140px;
 }
 
 /* Step 5: confirm */
@@ -283,6 +317,12 @@
 
 .wizard-nav.centered {
   justify-content: center;
+}
+
+.wizard-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .primary-btn {

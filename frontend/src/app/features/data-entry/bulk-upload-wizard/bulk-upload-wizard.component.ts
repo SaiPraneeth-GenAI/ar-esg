@@ -1,6 +1,7 @@
+import { DatePipe } from '@angular/common';
 import { Component, EventEmitter, Input, Output, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { BulkImportRowIn, BulkImportRowResult, EntriesApiService, EntryCategory } from '../../../core/entries-api.service';
+import { BulkImportRowIn, EntriesApiService, EntryCategory } from '../../../core/entries-api.service';
 import {
   TARGET_FIELDS,
   TargetField,
@@ -11,6 +12,7 @@ import {
 } from './bulk-upload-wizard.utils';
 
 type Step = 'upload' | 'preview' | 'mapping' | 'validate' | 'confirm';
+type RowStatus = 'valid' | 'error' | 'created' | 'unchecked';
 
 interface MappingChoice {
   headerIndex: number;
@@ -18,8 +20,17 @@ interface MappingChoice {
   target: string | null;
 }
 
-interface ValidationRow extends BulkImportRowResult {
+interface EditableRow {
+  row_index: number;
+  data_point_name: string;
+  period_iso: string; // "" means "use the wizard's selected period"
+  value_raw: string;
+  unit_raw: string | null;
+  note: string | null;
   included: boolean;
+  status: RowStatus;
+  message: string | null;
+  entry_id: string | null;
 }
 
 function cellDisplay(value: unknown): string {
@@ -32,7 +43,7 @@ function cellDisplay(value: unknown): string {
 @Component({
   selector: 'app-bulk-upload-wizard',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, DatePipe],
   templateUrl: './bulk-upload-wizard.component.html',
   styleUrl: './bulk-upload-wizard.component.css'
 })
@@ -41,6 +52,9 @@ export class BulkUploadWizardComponent {
 
   @Input({ required: true }) category!: EntryCategory;
   @Input({ required: true }) locationId!: string;
+  /** ISO "YYYY-MM-01" -- the period already selected at the top of the Data
+   * Entry screen. Used for any row that doesn't specify its own period. */
+  @Input({ required: true }) period!: string;
   @Output() done = new EventEmitter<void>();
 
   targetFields: TargetField[] = TARGET_FIELDS;
@@ -55,7 +69,7 @@ export class BulkUploadWizardComponent {
   mapping = signal<MappingChoice[]>([]);
 
   validating = signal(false);
-  validationRows = signal<ValidationRow[]>([]);
+  rows = signal<EditableRow[]>([]);
 
   committing = signal(false);
   commitError = signal('');
@@ -68,18 +82,16 @@ export class BulkUploadWizardComponent {
     return this.targetFields.filter((f) => f.required).every((f) => mapped.has(f.key));
   });
 
-  includedValidRows = computed(() => this.validationRows().filter((r) => r.included && r.status !== 'error'));
-  errorRows = computed(() => this.validationRows().filter((r) => r.status === 'error'));
+  includedValidRows = computed(() => this.rows().filter((r) => r.included && r.status !== 'error'));
+  errorRows = computed(() => this.rows().filter((r) => r.status === 'error'));
+  hasUnchecked = computed(() => this.rows().some((r) => r.status === 'unchecked'));
 
   summaryLabel = computed(() => {
     const rows = this.includedValidRows();
     if (rows.length === 0) {
       return '';
     }
-    const periods = rows.map((r) => r.period).filter(Boolean) as string[];
-    if (periods.length === 0) {
-      return `${rows.length} entr${rows.length === 1 ? 'y' : 'ies'} will be created`;
-    }
+    const periods = rows.map((r) => r.period_iso || this.period).filter(Boolean);
     const sorted = [...periods].sort();
     const first = formatPeriodLabel(sorted[0]);
     const last = formatPeriodLabel(sorted[sorted.length - 1]);
@@ -142,6 +154,7 @@ export class BulkUploadWizardComponent {
     this.headers.set([]);
     this.rawRows.set([]);
     this.fileName.set('');
+    this.rowsBuiltForMapping = null;
   }
 
   confirmPreview(): void {
@@ -159,7 +172,7 @@ export class BulkUploadWizardComponent {
     return this.targetFields.find((f) => f.key === key)?.label ?? 'Unmatched';
   }
 
-  async runValidation(): Promise<void> {
+  private buildRowsFromFile(): EditableRow[] {
     const mapping = this.mapping();
     const indexOf = (key: string) => mapping.find((m) => m.target === key)?.headerIndex;
     const nameIdx = indexOf('data_point_name');
@@ -168,36 +181,87 @@ export class BulkUploadWizardComponent {
     const unitIdx = indexOf('unit');
     const noteIdx = indexOf('note');
 
-    if (nameIdx === undefined || periodIdx === undefined || valueIdx === undefined) {
-      return;
+    if (nameIdx === undefined || valueIdx === undefined) {
+      return [];
     }
 
-    const payloadRows: BulkImportRowIn[] = this.rawRows().map((row, i) => {
-      const periodRaw = row[periodIdx];
-      const periodIso = parsePeriodToIso(periodRaw) ?? String(periodRaw ?? '');
+    return this.rawRows().map((row, i) => {
+      const periodRaw = periodIdx !== undefined ? row[periodIdx] : null;
+      const periodIso = periodRaw ? (parsePeriodToIso(periodRaw) ?? String(periodRaw)) : '';
       return {
         row_index: i + 2, // +1 for header row, +1 for 1-indexing
         data_point_name: String(row[nameIdx] ?? '').trim(),
         period_iso: periodIso,
         value_raw: String(row[valueIdx] ?? '').trim(),
         unit_raw: unitIdx !== undefined ? String(row[unitIdx] ?? '').trim() || null : null,
-        note: noteIdx !== undefined ? String(row[noteIdx] ?? '').trim() || null : null
+        note: noteIdx !== undefined ? String(row[noteIdx] ?? '').trim() || null : null,
+        included: true,
+        status: 'unchecked' as RowStatus,
+        message: null,
+        entry_id: null
       };
     });
+  }
 
-    this.validating.set(true);
-    this.step.set('validate');
-    try {
-      const result = await this.api.bulkImport(this.category.name, this.locationId, payloadRows, false);
-      this.validationRows.set(result.rows.map((r) => ({ ...r, included: r.status !== 'error' })));
-    } finally {
-      this.validating.set(false);
+  private rowsBuiltForMapping: string | null = null;
+
+  async runValidation(): Promise<void> {
+    const mappingKey = JSON.stringify(this.mapping().map((m) => m.target));
+    if (this.rows().length === 0 || mappingKey !== this.rowsBuiltForMapping) {
+      this.rows.set(this.buildRowsFromFile());
+      this.rowsBuiltForMapping = mappingKey;
     }
+    this.step.set('validate');
+    await this.recheck();
+  }
+
+  updateRow(rowIndex: number, patch: Partial<EditableRow>): void {
+    const list = this.rows().map((r) => (r.row_index === rowIndex ? { ...r, ...patch, status: 'unchecked' as RowStatus, message: null } : r));
+    this.rows.set(list);
   }
 
   toggleIncluded(rowIndex: number): void {
-    const list = this.validationRows().map((r) => (r.row_index === rowIndex ? { ...r, included: !r.included } : r));
-    this.validationRows.set(list);
+    const list = this.rows().map((r) => (r.row_index === rowIndex ? { ...r, included: !r.included } : r));
+    this.rows.set(list);
+  }
+
+  removeRow(rowIndex: number): void {
+    this.rows.set(this.rows().filter((r) => r.row_index !== rowIndex));
+  }
+
+  private toPayloadRows(source: EditableRow[]): BulkImportRowIn[] {
+    return source.map((r) => ({
+      row_index: r.row_index,
+      data_point_name: r.data_point_name,
+      period_iso: r.period_iso,
+      value_raw: r.value_raw,
+      unit_raw: r.unit_raw,
+      note: r.note
+    }));
+  }
+
+  async recheck(): Promise<void> {
+    const current = this.rows();
+    if (current.length === 0) {
+      return;
+    }
+    this.validating.set(true);
+    try {
+      const result = await this.api.bulkImport(this.category.name, this.locationId, this.toPayloadRows(current), false, this.period);
+      const byIndex = new Map(result.rows.map((r) => [r.row_index, r]));
+      const merged = current.map((row) => {
+        const r = byIndex.get(row.row_index);
+        return {
+          ...row,
+          status: (r?.status as RowStatus) ?? 'error',
+          message: r?.message ?? null,
+          included: r ? r.status !== 'error' : false
+        };
+      });
+      this.rows.set(merged);
+    } finally {
+      this.validating.set(false);
+    }
   }
 
   goToConfirm(): void {
@@ -205,35 +269,11 @@ export class BulkUploadWizardComponent {
   }
 
   async commitImport(): Promise<void> {
-    const mapping = this.mapping();
-    const indexOf = (key: string) => mapping.find((m) => m.target === key)?.headerIndex;
-    const nameIdx = indexOf('data_point_name')!;
-    const periodIdx = indexOf('period')!;
-    const valueIdx = indexOf('value')!;
-    const unitIdx = indexOf('unit');
-    const noteIdx = indexOf('note');
-
-    const includedRowIndexes = new Set(this.includedValidRows().map((r) => r.row_index));
-    const payloadRows: BulkImportRowIn[] = this.rawRows()
-      .map((row, i) => ({ row, rowIndex: i + 2 }))
-      .filter(({ rowIndex }) => includedRowIndexes.has(rowIndex))
-      .map(({ row, rowIndex }) => {
-        const periodRaw = row[periodIdx];
-        const periodIso = parsePeriodToIso(periodRaw) ?? String(periodRaw ?? '');
-        return {
-          row_index: rowIndex,
-          data_point_name: String(row[nameIdx] ?? '').trim(),
-          period_iso: periodIso,
-          value_raw: String(row[valueIdx] ?? '').trim(),
-          unit_raw: unitIdx !== undefined ? String(row[unitIdx] ?? '').trim() || null : null,
-          note: noteIdx !== undefined ? String(row[noteIdx] ?? '').trim() || null : null
-        };
-      });
-
+    const toCommit = this.includedValidRows();
     this.committing.set(true);
     this.commitError.set('');
     try {
-      const result = await this.api.bulkImport(this.category.name, this.locationId, payloadRows, true);
+      const result = await this.api.bulkImport(this.category.name, this.locationId, this.toPayloadRows(toCommit), true, this.period);
       this.commitResult.set({ created: result.created_count, error: result.error_count });
     } catch {
       this.commitError.set('Could not create these entries. Nothing was saved.');
@@ -252,7 +292,8 @@ export class BulkUploadWizardComponent {
     this.rawRows.set([]);
     this.fileName.set('');
     this.mapping.set([]);
-    this.validationRows.set([]);
+    this.rows.set([]);
+    this.rowsBuiltForMapping = null;
     this.commitResult.set(null);
     this.commitError.set('');
   }

@@ -37,7 +37,8 @@
         Don't have a file yet? Track this in a spreadsheet already? Either works -- upload whatever you have and
         we'll help map its columns in step 3, or
         <button type="button" class="link-btn" (click)="downloadTemplate()">download a blank template</button>
-        to start from. Include a Period column to backfill several months in one upload.
+        to start from. No Period column needed for a single month -- it'll use the period selected above. Add your
+        own Period/Month column only if you want to backfill several months in one upload.
       </p>
     </div>
   }
@@ -76,6 +77,7 @@
   @if (step() === 'mapping') {
     <div class="wizard-body">
       <p class="wizard-intro">Match each column in your file to a field. We've guessed based on the header names.</p>
+      <p class="wizard-hint">Period / Month is optional -- leave it unmatched and every row uses the period selected above.</p>
 
       <table class="mapping-table">
         <thead>
@@ -105,7 +107,7 @@
       </table>
 
       @if (!mappingComplete()) {
-        <div class="banner error">Map a column to Data point, Period / Month, and Value (marked *) before continuing.</div>
+        <div class="banner error">Map a column to Data point and Value (marked *) before continuing.</div>
       }
 
       <div class="wizard-nav">
@@ -119,11 +121,13 @@
 
   @if (step() === 'validate') {
     <div class="wizard-body">
-      @if (validating()) {
+      @if (validating() && rows().length === 0) {
         <p class="wizard-intro">Checking every row against your existing data…</p>
       } @else {
         <p class="wizard-intro">
-          {{ includedValidRows().length }} valid, {{ errorRows().length }} flagged out of {{ validationRows().length }} rows.
+          {{ includedValidRows().length }} valid, {{ errorRows().length }} flagged out of {{ rows().length }} rows.
+          Rows with no Period will use <strong>{{ period | date: 'MMMM yyyy' }}</strong>. Fix a flagged row directly
+          below, then Recheck.
         </p>
 
         <div class="table-scroll">
@@ -137,10 +141,11 @@
                 <th>Value</th>
                 <th>Status</th>
                 <th>Detail</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
-              @for (row of validationRows(); track row.row_index) {
+              @for (row of rows(); track row.row_index) {
                 <tr [class.row-error]="row.status === 'error'">
                   <td>
                     @if (row.status !== 'error') {
@@ -148,11 +153,40 @@
                     }
                   </td>
                   <td>{{ row.row_index }}</td>
-                  <td>{{ row.data_point_name }}</td>
-                  <td>{{ row.period }}</td>
-                  <td>{{ row.value }}</td>
-                  <td><span class="row-status" [class]="'status-' + row.status">{{ row.status }}</span></td>
+                  <td>
+                    <select
+                      [ngModel]="row.data_point_name"
+                      (ngModelChange)="updateRow(row.row_index, { data_point_name: $event })"
+                    >
+                      <option [value]="row.data_point_name" [hidden]="true">{{ row.data_point_name || '(choose a field)' }}</option>
+                      @for (dp of category.data_points; track dp.id) {
+                        <option [value]="dp.name">{{ dp.name }}</option>
+                      }
+                    </select>
+                  </td>
+                  <td>
+                    <input
+                      type="month"
+                      [ngModel]="row.period_iso ? row.period_iso.slice(0, 7) : ''"
+                      [placeholder]="period | date: 'yyyy-MM'"
+                      (ngModelChange)="updateRow(row.row_index, { period_iso: $event ? $event + '-01' : '' })"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      class="value-input"
+                      [ngModel]="row.value_raw"
+                      (ngModelChange)="updateRow(row.row_index, { value_raw: $event })"
+                    />
+                  </td>
+                  <td>
+                    <span class="row-status" [class]="'status-' + row.status">{{ row.status }}</span>
+                  </td>
                   <td class="row-message">{{ row.message }}</td>
+                  <td>
+                    <button type="button" class="link-btn" (click)="removeRow(row.row_index)">Remove</button>
+                  </td>
                 </tr>
               }
             </tbody>
@@ -161,9 +195,16 @@
 
         <div class="wizard-nav">
           <button type="button" class="secondary-btn" (click)="step.set('mapping')">Back to mapping</button>
-          <button type="button" class="primary-btn" [disabled]="includedValidRows().length === 0" (click)="goToConfirm()">
-            Continue with {{ includedValidRows().length }} valid row{{ includedValidRows().length === 1 ? '' : 's' }}
-          </button>
+          <div class="wizard-nav-right">
+            @if (hasUnchecked()) {
+              <button type="button" class="secondary-btn" [disabled]="validating()" (click)="recheck()">
+                {{ validating() ? 'Checking…' : 'Recheck' }}
+              </button>
+            }
+            <button type="button" class="primary-btn" [disabled]="includedValidRows().length === 0 || hasUnchecked()" (click)="goToConfirm()">
+              Continue with {{ includedValidRows().length }} valid row{{ includedValidRows().length === 1 ? '' : 's' }}
+            </button>
+          </div>
         </div>
       }
     </div>

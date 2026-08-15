@@ -33,6 +33,7 @@
     <app-bulk-upload-wizard
       [category]="category"
       [locationId]="locationId"
+      [period]="periodIso"
       (done)="onBulkUploadDone()"
     ></app-bulk-upload-wizard>
   } @else if (loading()) {
