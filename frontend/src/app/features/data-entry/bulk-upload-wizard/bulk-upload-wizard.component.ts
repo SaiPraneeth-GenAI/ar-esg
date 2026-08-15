@@ -187,7 +187,10 @@ export class BulkUploadWizardComponent {
 
     return this.rawRows().map((row, i) => {
       const periodRaw = periodIdx !== undefined ? row[periodIdx] : null;
-      const periodIso = periodRaw ? (parsePeriodToIso(periodRaw) ?? String(periodRaw)) : '';
+      // A blank cell or one we can't parse just falls back to the period
+      // already selected above -- we never leave this looking "empty" in the
+      // Validate table, and we never make that a hard error.
+      const periodIso = (periodRaw ? parsePeriodToIso(periodRaw) : null) ?? this.period;
       return {
         row_index: i + 2, // +1 for header row, +1 for 1-indexing
         data_point_name: String(row[nameIdx] ?? '').trim(),

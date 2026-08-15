@@ -505,8 +505,25 @@ def bulk_import(
             )
             continue
 
-        period_iso = row.period_iso.strip() or payload.default_period
-        if not period_iso:
+        row_period_iso = row.period_iso.strip()
+        period = None
+        if row_period_iso:
+            try:
+                period = date.fromisoformat(row_period_iso)
+            except ValueError:
+                period = None
+        if period is None and payload.default_period:
+            try:
+                period = date.fromisoformat(payload.default_period)
+            except ValueError:
+                period = None
+        if period is None:
+            if not row_period_iso and not payload.default_period:
+                message = "No period given, and no default period was set for this upload"
+            elif row_period_iso:
+                message = f"Could not parse period '{row_period_iso}'"
+            else:
+                message = f"Could not parse default period '{payload.default_period}'"
             results.append(
                 BulkImportRowResult(
                     row_index=row.row_index,
@@ -514,21 +531,7 @@ def bulk_import(
                     data_point_name=row.data_point_name,
                     period=None,
                     value=None,
-                    message="No period given, and no default period was set for this upload",
-                )
-            )
-            continue
-        try:
-            period = date.fromisoformat(period_iso)
-        except ValueError:
-            results.append(
-                BulkImportRowResult(
-                    row_index=row.row_index,
-                    status="error",
-                    data_point_name=row.data_point_name,
-                    period=None,
-                    value=None,
-                    message=f"Could not parse period '{period_iso}'",
+                    message=message,
                 )
             )
             continue
