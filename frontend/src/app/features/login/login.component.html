@@ -1,0 +1,51 @@
+<div class="login-page">
+  <aside class="brand-panel">
+    <div class="brand-content">
+      <div class="brand-name">Enviqo</div>
+      <p class="brand-tagline">Sustainability data, without the spreadsheet chaos.</p>
+      <svg class="chart-motif" viewBox="0 0 300 120" fill="none" aria-hidden="true">
+        <polyline
+          points="0,90 40,72 80,82 120,42 160,58 200,22 240,38 300,12"
+          stroke="currentColor"
+          stroke-width="3"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <circle cx="300" cy="12" r="4" fill="currentColor" />
+      </svg>
+    </div>
+  </aside>
+
+  <main class="form-panel">
+    <form class="login-form" [formGroup]="form" (ngSubmit)="signIn()">
+      <h1>Sign in</h1>
+      <p class="subtitle">Welcome back to Enviqo</p>
+
+      @if (errorMessage()) {
+        <div class="error-banner">{{ errorMessage() }}</div>
+      }
+
+      <label>
+        Email
+        <input type="email" formControlName="email" autocomplete="email" />
+      </label>
+
+      <label>
+        Password
+        <input type="password" formControlName="password" autocomplete="current-password" />
+      </label>
+
+      <div class="form-row">
+        <a class="link" (click)="forgotPassword()">Forgot password?</a>
+      </div>
+
+      <button type="submit" class="primary-btn" [disabled]="form.invalid || loading()">
+        {{ loading() ? 'Signing in…' : 'Sign in' }}
+      </button>
+
+      <div class="divider"><span>or</span></div>
+
+      <button type="button" class="sso-btn" (click)="signInWithMicrosoft()">Continue with Microsoft</button>
+    </form>
+  </main>
+</div>

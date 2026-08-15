@@ -1,0 +1,177 @@
+:host {
+  display: block;
+  min-height: 100vh;
+}
+
+.login-page {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 100vh;
+}
+
+.brand-panel {
+  background: #0e2c21;
+  color: #eaf5ef;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+}
+
+.brand-content {
+  max-width: 380px;
+}
+
+.brand-name {
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.75rem;
+}
+
+.brand-tagline {
+  font-size: 1.05rem;
+  color: #b7d6c5;
+  margin-bottom: 3rem;
+}
+
+.chart-motif {
+  width: 100%;
+  height: auto;
+  color: #4fd1a5;
+}
+
+.form-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fafafa;
+  padding: 2rem;
+}
+
+.login-form {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.login-form h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  color: #101828;
+}
+
+.subtitle {
+  margin: 0 0 0.5rem;
+  color: #667085;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+  color: #344054;
+}
+
+input {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+input:focus {
+  outline: none;
+  border-color: #0e2c21;
+  box-shadow: 0 0 0 3px rgba(14, 44, 33, 0.12);
+}
+
+.form-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.link {
+  color: #0e2c21;
+  font-size: 0.875rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.primary-btn {
+  background: #0e2c21;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: #98a2b3;
+  font-size: 0.8rem;
+  margin: 0.25rem 0;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #eaecf0;
+}
+
+.divider span {
+  padding: 0 0.75rem;
+}
+
+.sso-btn {
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 0.7rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  color: #344054;
+  font-family: inherit;
+}
+
+.sso-btn:hover {
+  background: #f9fafb;
+}
+
+.error-banner {
+  background: #fef3f2;
+  color: #b42318;
+  border: 1px solid #fecdca;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+@media (max-width: 860px) {
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+
+  .brand-panel {
+    padding: 2rem;
+  }
+}

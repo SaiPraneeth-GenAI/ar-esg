@@ -42,7 +42,7 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenant.id", ondelete="CASCADE"), nullable=False)
     email: Mapped[str] = mapped_column(String, nullable=False, unique=True)
-    role: Mapped[str] = mapped_column(String, nullable=False)
+    roles: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, server_default=text("'{}'"))
     location_scope: Mapped[list[uuid.UUID] | None] = mapped_column(ARRAY(UUID(as_uuid=True)))
     auth_provider: Mapped[str | None] = mapped_column(String)
 
