@@ -1,0 +1,51 @@
+.page {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem;
+}
+
+header h1 {
+  margin: 0;
+  color: #101828;
+}
+
+.subtitle {
+  color: #667085;
+  margin: 0.25rem 0 1.5rem;
+}
+
+.empty-state {
+  background: #fff;
+  border: 1px dashed #d0d5dd;
+  border-radius: 14px;
+  padding: 4rem 2rem;
+  text-align: center;
+  color: #667085;
+}
+
+.empty-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 1.25rem;
+  color: #98a2b3;
+}
+
+.empty-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.empty-state h2 {
+  margin: 0 0 0.5rem;
+  color: #344054;
+  font-size: 1.1rem;
+}
+
+.empty-state p {
+  margin: 0;
+  max-width: 360px;
+  margin-left: auto;
+  margin-right: auto;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}

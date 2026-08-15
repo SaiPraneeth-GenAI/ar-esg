@@ -41,7 +41,7 @@ export class LoginComponent {
     }
 
     const roles = (data.session.user.app_metadata?.['roles'] as string[]) ?? [];
-    await this.router.navigateByUrl(roles.includes('Admin') ? '/admin/settings/users' : '/home');
+    await this.router.navigateByUrl(roles.includes('Admin') ? '/admin/dashboard' : '/home');
   }
 
   async forgotPassword(): Promise<void> {

@@ -67,6 +67,18 @@
   background: #1b1d22;
   border-right: 1px solid #262932;
   padding: 1.5rem 0.75rem;
+  animation: slide-in 0.16s ease-out;
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .sub-nav h2 {
