@@ -4,14 +4,87 @@
     <p class="subtitle">Your ESG data, at a glance</p>
   </header>
 
-  <div class="empty-state">
-    <div class="empty-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 3v18h18" />
-        <path d="M7 15l3-3 3 3 5-6" />
-      </svg>
+  @if (!loading() && cards().length === 0) {
+    <div class="empty-state">
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 3v18h18" />
+          <path d="M7 15l3-3 3 3 5-6" />
+        </svg>
+      </div>
+      <h2>Nothing to show yet</h2>
+      <p>Once data starts flowing in, your rollups, trends, and reports will show up right here.</p>
     </div>
-    <h2>Nothing to show yet</h2>
-    <p>Once data starts flowing in, your rollups, trends, and reports will show up right here.</p>
-  </div>
+  } @else if (!loading()) {
+    <p class="period-label">Showing {{ formatMonth(period()) }}</p>
+
+    @for (group of groups(); track group.category) {
+      <section class="metric-group">
+        <h2 class="group-title">{{ group.category }}</h2>
+        <div class="card-grid">
+          @for (card of group.cards; track cardKey(card)) {
+            <div class="metric-card" [class.expanded]="expandedKey() === cardKey(card)">
+              <button type="button" class="card-trigger" (click)="toggleCard(card)">
+                <div class="card-top">
+                  <span class="card-label">{{ card.label }}</span>
+                  <span class="status-dot" [class]="'status-' + card.status"></span>
+                </div>
+                <div class="card-value">
+                  {{ card.value }}<span class="card-unit">{{ card.unit }}</span>
+                </div>
+                <div class="card-comparison" [class]="'comparison-' + card.status">{{ card.comparison_label }}</div>
+              </button>
+
+              @if (expandedKey() === cardKey(card)) {
+                <div class="drilldown">
+                  @if (drilldownLoading()) {
+                    <p class="drilldown-loading">Loading detail…</p>
+                  } @else if (drilldown()) {
+                    <div class="drilldown-section">
+                      <h3>{{ group.category }} entries — {{ formatMonth(drilldown()!.period) }}</h3>
+                      <table class="drilldown-table">
+                        <thead>
+                          <tr>
+                            <th>Location</th>
+                            <th>Data point</th>
+                            <th>Value</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (e of drilldown()!.entries; track e.location_name + e.data_point_name) {
+                            <tr>
+                              <td>{{ e.location_name }}</td>
+                              <td>{{ e.data_point_name }}</td>
+                              <td>{{ e.value }} {{ e.unit }}</td>
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+
+                    @if (card.metric_type === 'intensity' && drilldown()!.production_entries.length) {
+                      <div class="drilldown-section">
+                        <h3>Production (intensity denominator)</h3>
+                        <table class="drilldown-table">
+                          <tbody>
+                            @for (e of drilldown()!.production_entries; track e.location_name + e.data_point_name) {
+                              <tr>
+                                <td>{{ e.location_name }}</td>
+                                <td>{{ e.data_point_name }}</td>
+                                <td>{{ e.value }} {{ e.unit }}</td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
+                    }
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </section>
+    }
+  }
 </div>

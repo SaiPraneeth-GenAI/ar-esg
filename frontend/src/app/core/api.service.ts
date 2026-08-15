@@ -29,6 +29,39 @@ export interface UpdateUserPayload {
   location_id?: string;
 }
 
+export interface DashboardCard {
+  category: string;
+  metric_type: 'total' | 'intensity';
+  label: string;
+  value: number;
+  unit: string;
+  status: 'green' | 'amber' | 'red' | 'neutral';
+  comparison_label: string;
+  period: string;
+}
+
+export interface DashboardSummary {
+  period: string | null;
+  cards: DashboardCard[];
+}
+
+export interface DrilldownEntry {
+  location_name: string;
+  data_point_name: string;
+  value: number;
+  unit: string;
+  period: string;
+  method_of_entry: string;
+}
+
+export interface DrilldownResponse {
+  category: string;
+  metric_type: string;
+  period: string;
+  entries: DrilldownEntry[];
+  production_entries: DrilldownEntry[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private http = inject(HttpClient);
@@ -81,5 +114,20 @@ export class ApiService {
   async removeLocation(id: string): Promise<void> {
     const headers = await this.authHeaders();
     await firstValueFrom(this.http.delete<void>(`${environment.apiBaseUrl}/admin/locations/${id}`, { headers }));
+  }
+
+  async getDashboardSummary(): Promise<DashboardSummary> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(this.http.get<DashboardSummary>(`${environment.apiBaseUrl}/dashboard/summary`, { headers }));
+  }
+
+  async getDashboardDrilldown(category: string, period: string, metricType: string): Promise<DrilldownResponse> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(
+      this.http.get<DrilldownResponse>(`${environment.apiBaseUrl}/dashboard/drilldown`, {
+        headers,
+        params: { category, period, metric_type: metricType }
+      })
+    );
   }
 }
