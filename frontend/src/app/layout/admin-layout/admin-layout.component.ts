@@ -16,8 +16,17 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
   private routerSub?: Subscription;
 
   userEmail = signal('');
+  roles = signal<string[]>([]);
   currentUrl = signal(this.router.url);
+
   isSettingsRoute = computed(() => this.currentUrl().startsWith('/admin/settings'));
+  isDataEntryRoute = computed(() => this.currentUrl().startsWith('/admin/data-entry'));
+  isDashboardRoute = computed(() => !this.isSettingsRoute() && !this.isDataEntryRoute());
+  canAccessDataEntry = computed(() => {
+    const r = this.roles();
+    return r.includes('Manager') || r.includes('Approver') || r.includes('Admin');
+  });
+
   settingsOpen = signal(this.isSettingsRoute());
 
   constructor() {
@@ -30,6 +39,7 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
   async ngOnInit(): Promise<void> {
     const { data } = await this.supabase.client.auth.getSession();
     this.userEmail.set(data.session?.user?.email ?? '');
+    this.roles.set((data.session?.user?.app_metadata?.['roles'] as string[]) ?? []);
   }
 
   ngOnDestroy(): void {
@@ -39,6 +49,11 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
   goToDashboard(): void {
     this.settingsOpen.set(false);
     this.router.navigateByUrl('/admin/dashboard');
+  }
+
+  goToDataEntry(): void {
+    this.settingsOpen.set(false);
+    this.router.navigateByUrl('/admin/data-entry');
   }
 
   openSettings(): void {

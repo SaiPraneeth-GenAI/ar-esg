@@ -15,7 +15,7 @@ export const routes: Routes = [
   },
   {
     path: 'admin',
-    canActivate: [adminGuard],
+    canActivate: [authGuard],
     loadComponent: () => import('./layout/admin-layout/admin-layout.component').then((m) => m.AdminLayoutComponent),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
@@ -24,7 +24,12 @@ export const routes: Routes = [
         loadComponent: () => import('./features/dashboard/dashboard.component').then((m) => m.DashboardComponent)
       },
       {
+        path: 'data-entry',
+        loadComponent: () => import('./features/data-entry/data-entry.component').then((m) => m.DataEntryComponent)
+      },
+      {
         path: 'settings/users',
+        canActivate: [adminGuard],
         loadComponent: () =>
           import('./features/settings/user-management/user-management.component').then(
             (m) => m.UserManagementComponent
@@ -32,11 +37,13 @@ export const routes: Routes = [
       },
       {
         path: 'settings/roles',
+        canActivate: [adminGuard],
         loadComponent: () =>
           import('./features/settings/user-roles/user-roles.component').then((m) => m.UserRolesComponent)
       },
       {
         path: 'settings/plants',
+        canActivate: [adminGuard],
         loadComponent: () =>
           import('./features/settings/assigned-plants/assigned-plants.component').then(
             (m) => m.AssignedPlantsComponent

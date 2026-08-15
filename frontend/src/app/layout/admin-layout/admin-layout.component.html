@@ -7,7 +7,7 @@
     <button
       type="button"
       class="rail-item"
-      [class.active]="!isSettingsRoute()"
+      [class.active]="isDashboardRoute()"
       title="Dashboard"
       (click)="goToDashboard()"
     >
@@ -16,6 +16,21 @@
         <path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" />
       </svg>
     </button>
+
+    @if (canAccessDataEntry()) {
+      <button
+        type="button"
+        class="rail-item"
+        [class.active]="isDataEntryRoute()"
+        title="Data Entry"
+        (click)="goToDataEntry()"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </svg>
+      </button>
+    }
 
     <button
       type="button"

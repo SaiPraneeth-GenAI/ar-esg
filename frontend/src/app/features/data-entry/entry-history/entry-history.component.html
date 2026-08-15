@@ -1,0 +1,20 @@
+<div class="history">
+  @if (loading()) {
+    <p class="muted">Loading history…</p>
+  } @else if (history().length === 0) {
+    <p class="muted">No history yet.</p>
+  } @else {
+    <ul>
+      @for (row of history(); track row.id) {
+        <li>
+          <span class="actor">{{ row.actor || 'system' }}</span>
+          <span class="action">{{ row.action }}</span>
+          @if (row.old_value || row.new_value) {
+            <span class="values">{{ row.old_value ?? '—' }} → {{ row.new_value ?? '—' }}</span>
+          }
+          <span class="timestamp">{{ row.timestamp | date: 'medium' }}</span>
+        </li>
+      }
+    </ul>
+  }
+</div>

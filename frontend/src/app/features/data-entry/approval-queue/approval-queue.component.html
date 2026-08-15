@@ -1,0 +1,66 @@
+<div class="queue-page">
+  @if (errorMessage()) {
+    <div class="banner error">{{ errorMessage() }}</div>
+  }
+  @if (successMessage()) {
+    <div class="banner success">{{ successMessage() }}</div>
+  }
+
+  @if (loading()) {
+    <p class="muted">Loading…</p>
+  } @else if (queue().length === 0) {
+    <div class="empty-state">
+      <p>Nothing waiting for your review.</p>
+    </div>
+  } @else {
+    <table class="queue-table">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Field</th>
+          <th>Plant</th>
+          <th>Period</th>
+          <th>Value</th>
+          <th>Submitted by</th>
+          <th class="actions-col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (entry of queue(); track entry.id) {
+          <tr>
+            <td>{{ entry.category_name }}</td>
+            <td>{{ entry.data_point_name }}</td>
+            <td>{{ entry.location_name }}</td>
+            <td>{{ entry.period }}</td>
+            <td>{{ entry.value }}</td>
+            <td>{{ entry.submitted_by_email }}</td>
+            <td class="actions-col">
+              @if (rejectingId() === entry.id) {
+                <div class="reject-form">
+                  <textarea rows="2" placeholder="Rejection note (required)" [(ngModel)]="rejectNote"></textarea>
+                  <div class="reject-actions">
+                    <button class="link-btn danger" [disabled]="busyId() === entry.id" (click)="confirmReject(entry)">
+                      Confirm reject
+                    </button>
+                    <button class="link-btn muted" (click)="cancelReject()">Cancel</button>
+                  </div>
+                </div>
+              } @else {
+                <button class="link-btn" [disabled]="busyId() === entry.id" (click)="approve(entry)">Approve</button>
+                <button class="link-btn danger" [disabled]="busyId() === entry.id" (click)="startReject(entry)">Reject</button>
+                <button class="link-btn muted" (click)="toggleHistory(entry)">History</button>
+              }
+            </td>
+          </tr>
+          @if (historyOpenId() === entry.id) {
+            <tr>
+              <td colspan="7">
+                <app-entry-history [entryId]="entry.id"></app-entry-history>
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  }
+</div>

@@ -1,0 +1,35 @@
+<div class="page">
+  <header>
+    <h1>Data Entry</h1>
+    <p class="subtitle">Log monthly readings, or review what's waiting on your approval</p>
+  </header>
+
+  @if (errorMessage()) {
+    <div class="banner error">{{ errorMessage() }}</div>
+  }
+
+  @if (loading()) {
+    <p class="muted">Loading…</p>
+  } @else {
+    @if (showTabs()) {
+      <div class="tabs">
+        <button type="button" [class.active]="activeTab() === 'submit'" (click)="activeTab.set('submit')">
+          Submit data
+        </button>
+        <button type="button" [class.active]="activeTab() === 'approve'" (click)="activeTab.set('approve')">
+          Approval queue
+        </button>
+      </div>
+    }
+
+    @if (activeTab() === 'submit' && canSubmit()) {
+      @if (selectedCategory()) {
+        <app-entry-form [category]="selectedCategory()!" [locationId]="locationId()" (back)="backToCategories()"></app-entry-form>
+      } @else {
+        <app-category-picker [categories]="categories()" (pick)="pickCategory($event)"></app-category-picker>
+      }
+    } @else if (activeTab() === 'approve' && canApprove()) {
+      <app-approval-queue></app-approval-queue>
+    }
+  }
+</div>

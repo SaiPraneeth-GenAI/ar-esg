@@ -1,0 +1,44 @@
+.history ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.history li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.78rem;
+  padding: 0.4rem 0.6rem;
+  background: #f9fafb;
+  border-radius: 6px;
+}
+
+.actor {
+  font-weight: 600;
+  color: #344054;
+}
+
+.action {
+  color: #0e2c21;
+  text-transform: capitalize;
+}
+
+.values {
+  color: #667085;
+}
+
+.timestamp {
+  margin-left: auto;
+  color: #98a2b3;
+}
+
+.muted {
+  color: #98a2b3;
+  font-size: 0.85rem;
+  margin: 0;
+}

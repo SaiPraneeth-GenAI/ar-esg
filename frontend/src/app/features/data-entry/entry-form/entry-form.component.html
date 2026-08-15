@@ -1,0 +1,152 @@
+<div class="form-page">
+  <div class="form-header">
+    <button type="button" class="back-link" (click)="back.emit()">← Categories</button>
+    <h2>{{ category.name }}</h2>
+    @if (category.is_provisional) {
+      <span class="provisional-badge">Provisional — fields pending confirmation</span>
+    }
+  </div>
+
+  <div class="controls-row">
+    <label class="month-picker">
+      Period
+      <input type="month" [ngModel]="monthValue()" (ngModelChange)="monthValue.set($event); onMonthChange()" />
+    </label>
+
+    <div class="mode-toggle">
+      <button type="button" [class.active]="mode() === 'guided'" (click)="mode.set('guided')">Guided</button>
+      <button type="button" [class.active]="mode() === 'classic'" (click)="mode.set('classic')">Classic</button>
+    </div>
+  </div>
+
+  @if (errorMessage()) {
+    <div class="banner error">{{ errorMessage() }}</div>
+  }
+  @if (message()) {
+    <div class="banner success">{{ message() }}</div>
+  }
+
+  @if (loading()) {
+    <p class="muted">Loading…</p>
+  } @else if (mode() === 'guided' && !reviewing()) {
+    <div class="guided-panel">
+      <div class="progress-bar">
+        <div class="progress-fill" [style.width.%]="((stepIndex() + 1) / fields().length) * 100"></div>
+      </div>
+      <p class="progress-label">{{ category.name }} — step {{ stepIndex() + 1 }} of {{ fields().length }}</p>
+
+      @if (fields()[stepIndex()]; as field) {
+        <div class="field-block">
+          <label class="field-label">
+            {{ field.dataPoint.name }}
+            <span class="unit-tag">{{ field.dataPoint.unit }}</span>
+          </label>
+
+          @if (isLocked(field)) {
+            <p class="locked-value">{{ field.value ?? '—' }} {{ field.dataPoint.unit }}</p>
+            <span class="status-badge">{{ statusLabel(field) }}</span>
+          } @else {
+            <input
+              type="number"
+              [ngModel]="field.value"
+              (ngModelChange)="updateField(stepIndex(), { value: $event })"
+              [placeholder]="field.lastValue?.value != null ? field.lastValue!.value + ' (last month)' : 'Enter a value'"
+            />
+            @if (field.lastValue?.value != null) {
+              <p class="hint">Last approved value: {{ field.lastValue!.value }} {{ field.dataPoint.unit }}</p>
+            }
+            <textarea
+              class="note-input"
+              rows="2"
+              placeholder="Note (optional)"
+              [ngModel]="field.note"
+              (ngModelChange)="updateField(stepIndex(), { note: $event })"
+            ></textarea>
+            <label class="attach-btn">
+              📎 Attach file
+              <input type="file" hidden (change)="onFileSelected(stepIndex(), $event)" />
+            </label>
+          }
+
+          @if (field.attachments.length) {
+            <p class="attachment-list">{{ field.attachments.length }} file(s) attached</p>
+          }
+        </div>
+
+        <div class="step-nav">
+          <button type="button" class="secondary-btn" (click)="prev()" [disabled]="stepIndex() === 0">Back</button>
+          <button type="button" class="primary-btn" (click)="next()">
+            {{ stepIndex() === fields().length - 1 ? 'Review' : 'Next' }}
+          </button>
+        </div>
+      }
+    </div>
+  } @else if (mode() === 'guided' && reviewing()) {
+    <div class="review-panel">
+      <h3>Review before submitting</h3>
+      <table class="review-table">
+        <tbody>
+          @for (field of fields(); track field.dataPoint.id) {
+            <tr>
+              <td>{{ field.dataPoint.name }}</td>
+              <td>{{ field.value ?? '—' }} {{ field.dataPoint.unit }}</td>
+              <td><span class="status-badge">{{ statusLabel(field) }}</span></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+      <div class="step-nav">
+        <button type="button" class="secondary-btn" (click)="prev()">Back</button>
+        <button type="button" class="primary-btn" [disabled]="submitting() || !hasAnyDraft()" (click)="submitForApproval()">
+          {{ submitting() ? 'Submitting…' : 'Submit for approval' }}
+        </button>
+      </div>
+    </div>
+  } @else {
+    <div class="classic-panel">
+      @for (field of fields(); track field.dataPoint.id; let i = $index) {
+        <div class="classic-row">
+          <div class="classic-label">
+            {{ field.dataPoint.name }}
+            <span class="unit-tag">{{ field.dataPoint.unit }}</span>
+            <span class="status-badge">{{ statusLabel(field) }}</span>
+          </div>
+
+          @if (isLocked(field)) {
+            <div class="locked-value">{{ field.value ?? '—' }} {{ field.dataPoint.unit }}</div>
+          } @else {
+            <input
+              type="number"
+              [ngModel]="field.value"
+              (ngModelChange)="updateField(i, { value: $event })"
+              [placeholder]="field.lastValue?.value != null ? field.lastValue!.value + ' (last month)' : ''"
+            />
+            <input
+              type="text"
+              class="note-input-inline"
+              placeholder="Note (optional)"
+              [ngModel]="field.note"
+              (ngModelChange)="updateField(i, { note: $event })"
+            />
+            <label class="attach-btn small">
+              📎
+              <input type="file" hidden (change)="onFileSelected(i, $event)" />
+            </label>
+          }
+
+          <button type="button" class="link-btn" (click)="toggleHistory(i)">History</button>
+        </div>
+        @if (field.historyOpen && field.entry) {
+          <app-entry-history [entryId]="field.entry.id"></app-entry-history>
+        }
+      }
+
+      <div class="step-nav">
+        <button type="button" class="secondary-btn" [disabled]="submitting()" (click)="saveAllClassic()">Save draft</button>
+        <button type="button" class="primary-btn" [disabled]="submitting() || !hasAnyDraft()" (click)="submitForApproval()">
+          {{ submitting() ? 'Submitting…' : 'Submit for approval' }}
+        </button>
+      </div>
+    </div>
+  }
+</div>
