@@ -48,6 +48,14 @@ export const routes: Routes = [
           import('./features/settings/assigned-plants/assigned-plants.component').then(
             (m) => m.AssignedPlantsComponent
           )
+      },
+      {
+        path: 'settings/mapping-templates',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./features/settings/mapping-templates/mapping-templates.component').then(
+            (m) => m.MappingTemplatesComponent
+          )
       }
     ]
   },

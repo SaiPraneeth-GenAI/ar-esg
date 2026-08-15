@@ -220,6 +220,56 @@
   font-size: 0.78rem;
 }
 
+.info-icon {
+  display: inline-flex;
+  color: #98a2b3;
+  cursor: help;
+}
+
+.info-icon:hover {
+  color: #0e2c21;
+}
+
+.info-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.autosave-flag {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #98a2b3;
+}
+
+.autosave-flag.saved {
+  color: #027a48;
+}
+
+.rejection-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  margin: 0.75rem 0;
+  color: #b42318;
+  font-size: 0.85rem;
+}
+
+.rejection-banner svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.rejection-banner strong {
+  display: block;
+  margin-bottom: 0.15rem;
+}
+
 .status-badge {
   display: inline-block;
   background: #f2f4f7;

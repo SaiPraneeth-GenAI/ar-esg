@@ -1,0 +1,51 @@
+<div class="page">
+  <header>
+    <h1>Mapping templates</h1>
+    <p class="subtitle">Remembered column mappings from past bulk uploads -- reused automatically when a file with the same header layout is uploaded again</p>
+  </header>
+
+  @if (errorMessage()) {
+    <div class="banner error">{{ errorMessage() }}</div>
+  }
+
+  @if (loading()) {
+    <p class="muted">Loading…</p>
+  } @else if (templates().length === 0) {
+    <div class="empty-state">
+      <p>No mapping templates saved yet. They're created automatically the first time a Manager confirms a bulk-upload column mapping.</p>
+    </div>
+  } @else {
+    <div class="template-list">
+      @for (template of templates(); track template.id) {
+        <div class="template-card">
+          <div class="template-header">
+            <button type="button" class="template-header-main" (click)="toggle(template.id)">
+              <span class="template-category">{{ template.category_name }}</span>
+              <span class="template-meta">{{ mappingEntries(template).length }} columns · updated {{ template.updated_at | date: 'mediumDate' }}</span>
+            </button>
+            <button type="button" class="link-btn danger" (click)="remove(template)">Forget</button>
+          </div>
+
+          @if (expandedId() === template.id) {
+            <table class="mapping-table">
+              <thead>
+                <tr>
+                  <th>Uploaded column</th>
+                  <th>Mapped to</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (entry of mappingEntries(template); track entry.header) {
+                  <tr>
+                    <td>{{ entry.header }}</td>
+                    <td>{{ entry.target }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

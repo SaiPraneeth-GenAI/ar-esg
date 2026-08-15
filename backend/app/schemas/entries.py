@@ -10,6 +10,8 @@ class DataPointOut(BaseModel):
     unit: str | None
     input_type: str | None
     is_provisional: bool
+    tooltip: str | None = None
+    example: str | None = None
 
 
 class CategoryOut(BaseModel):
@@ -42,6 +44,7 @@ class EntryOut(BaseModel):
     note: str | None
     submitted_by: uuid.UUID | None
     submitted_by_email: str | None
+    latest_rejection_note: str | None = None
 
 
 class SubmitRequest(BaseModel):

@@ -24,7 +24,12 @@
 
     @if (activeTab() === 'submit' && canSubmit()) {
       @if (selectedCategory()) {
-        <app-entry-form [category]="selectedCategory()!" [locationId]="locationId()" (back)="backToCategories()"></app-entry-form>
+        <app-entry-form
+          [category]="selectedCategory()!"
+          [locationId]="locationId()"
+          [initialPeriod]="initialPeriod()"
+          (back)="backToCategories()"
+        ></app-entry-form>
       } @else {
         <app-category-picker [categories]="categories()" (pick)="pickCategory($event)"></app-category-picker>
       }

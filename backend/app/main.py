@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import admin_locations, admin_users, dashboard, entries, health
+from app.api.routes import admin_locations, admin_mapping_templates, admin_users, dashboard, entries, health
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -21,3 +21,4 @@ app.include_router(admin_users.router)
 app.include_router(admin_locations.router)
 app.include_router(dashboard.router)
 app.include_router(entries.router)
+app.include_router(admin_mapping_templates.router)

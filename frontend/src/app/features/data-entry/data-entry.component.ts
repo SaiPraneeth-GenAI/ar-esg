@@ -1,4 +1,5 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { EntriesApiService, EntryCategory } from '../../core/entries-api.service';
 import { SupabaseService } from '../../core/supabase.service';
@@ -17,6 +18,7 @@ export class DataEntryComponent implements OnInit {
   private entriesApi = inject(EntriesApiService);
   private api = inject(ApiService);
   private supabase = inject(SupabaseService);
+  private route = inject(ActivatedRoute);
 
   loading = signal(true);
   errorMessage = signal('');
@@ -30,6 +32,7 @@ export class DataEntryComponent implements OnInit {
   categories = signal<EntryCategory[]>([]);
   selectedCategory = signal<EntryCategory | null>(null);
   locationId = signal('');
+  initialPeriod = signal<string | null>(null);
 
   async ngOnInit(): Promise<void> {
     this.loading.set(true);
@@ -43,6 +46,20 @@ export class DataEntryComponent implements OnInit {
       this.categories.set(categories);
       if (locations.length) {
         this.locationId.set(locations[0].id);
+      }
+
+      const params = this.route.snapshot.queryParamMap;
+      const categoryName = params.get('category');
+      const period = params.get('period');
+      if (period) {
+        this.initialPeriod.set(period.length === 7 ? `${period}-01` : period);
+      }
+      if (categoryName) {
+        const match = categories.find((c) => c.name === categoryName);
+        if (match) {
+          this.activeTab.set('submit');
+          this.selectedCategory.set(match);
+        }
       }
     } catch {
       this.errorMessage.set('Could not load the data entry module.');

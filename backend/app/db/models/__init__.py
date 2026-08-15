@@ -1,4 +1,5 @@
 from app.db.models.config_tenancy import Category, DataPoint, Location, Tenant, User
+from app.db.models.mapping_template import MappingTemplate
 from app.db.models.output import (
     ComplianceReport,
     EmailLog,
@@ -34,4 +35,5 @@ __all__ = [
     "ReportRequest",
     "MailingList",
     "EmailLog",
+    "MappingTemplate",
 ]

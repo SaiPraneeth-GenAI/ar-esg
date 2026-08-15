@@ -8,8 +8,9 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.auth import CurrentUser, require_roles
+from app.core.config import get_settings
 from app.core.supabase_storage import upload_file
-from app.db.models import Approval, AuditLog, Attachment, Category, DataPoint, Entry, Location, User
+from app.db.models import Approval, AuditLog, Attachment, Category, DataPoint, EmailLog, Entry, Location, MappingTemplate, User
 from app.db.session import get_db
 from app.schemas.entries import (
     AttachmentOut,
@@ -26,7 +27,17 @@ from app.schemas.entries import (
     RejectRequest,
     SubmitRequest,
 )
+from app.schemas.mapping import (
+    ColumnSuggestion,
+    DetectRequest,
+    DetectResponse,
+    MappingTemplateOut,
+    SaveTemplateRequest,
+    SheetDetectionResult,
+)
 from app.services.audit import write_audit
+from app.services.mailing import MailingError, send_email
+from app.services.mapping import header_fingerprint, infer_period, match_category, match_data_point, match_metadata_field
 from app.services.rollups import recompute_rollup_for_entry
 
 router = APIRouter(prefix="/entries", tags=["entries"])
@@ -44,6 +55,17 @@ def _entry_out(db: Session, entry: Entry) -> EntryOut:
     if entry.submitted_by:
         submitter = db.get(User, entry.submitted_by)
         submitter_email = submitter.email if submitter else None
+
+    latest_rejection_note = None
+    if entry.status == "Rejected":
+        latest_reject = (
+            db.query(Approval)
+            .filter(Approval.entry_id == entry.id, Approval.action == "reject")
+            .order_by(Approval.timestamp.desc())
+            .first()
+        )
+        latest_rejection_note = latest_reject.reject_note if latest_reject else None
+
     return EntryOut(
         id=entry.id,
         data_point_id=entry.data_point_id,
@@ -57,6 +79,7 @@ def _entry_out(db: Session, entry: Entry) -> EntryOut:
         note=entry.note,
         submitted_by=entry.submitted_by,
         submitted_by_email=submitter_email,
+        latest_rejection_note=latest_rejection_note,
     )
 
 
@@ -86,6 +109,8 @@ def list_categories(current: CurrentUser = Depends(require_roles("Admin", "Manag
                 unit=dp.unit,
                 input_type=dp.input_type,
                 is_provisional=_is_provisional(dp.validation_rules),
+                tooltip=(dp.validation_rules or {}).get("tooltip"),
+                example=(dp.validation_rules or {}).get("example"),
             )
             for dp in points_by_category.get(category.id, [])
         ]
@@ -252,6 +277,165 @@ def upsert_entries(
         entry = _upsert_one(db, current, item.data_point_id, item.location_id, item.period, item.value, item.note, item.meter_id)
         results.append(_entry_out(db, entry))
     return results
+
+
+@router.post("/bulk-import/detect", response_model=DetectResponse)
+def detect_bulk_import(
+    payload: DetectRequest,
+    current: CurrentUser = Depends(require_roles("Admin", "Manager")),
+    db: Session = Depends(get_db),
+):
+    """Fully deterministic: exact alias hit -> fuzzy match -> unmatched. No
+    AI/LLM call. Per sheet: guesses which category it belongs to (from the
+    sheet name, falling back to the filename), then maps each column header
+    either to a metadata field (period/note) or directly to one of that
+    category's data points. If a mapping was confirmed before for this exact
+    header signature, it's reused and the customer skips straight to preview."""
+    categories = db.query(Category).filter(Category.tenant_id == current.tenant_id).all()
+    category_names = [c.name for c in categories]
+    categories_by_name = {c.name: c for c in categories}
+
+    all_data_points = (
+        db.query(DataPoint)
+        .join(Category, Category.id == DataPoint.category_id)
+        .filter(Category.tenant_id == current.tenant_id)
+        .all()
+    )
+    dp_by_category: dict[uuid.UUID, list[tuple[str, str]]] = {}
+    dp_name_by_id: dict[str, str] = {}
+    for dp in all_data_points:
+        dp_by_category.setdefault(dp.category_id, []).append((str(dp.id), dp.name))
+        dp_name_by_id[str(dp.id)] = dp.name
+
+    results: list[SheetDetectionResult] = []
+    for sheet in payload.sheets:
+        fingerprint = header_fingerprint(sheet.headers)
+
+        cat_match = match_category(sheet.name, category_names)
+        if cat_match.key is None:
+            cat_match = match_category(sheet.filename, category_names)
+        category = categories_by_name.get(cat_match.key) if cat_match.key else None
+
+        template = None
+        if category is not None:
+            template = (
+                db.query(MappingTemplate)
+                .filter(
+                    MappingTemplate.tenant_id == current.tenant_id,
+                    MappingTemplate.category_id == category.id,
+                    MappingTemplate.header_fingerprint == fingerprint,
+                )
+                .first()
+            )
+
+        columns: list[ColumnSuggestion] = []
+        if template is not None:
+            for header in sheet.headers:
+                target = template.column_mapping.get(header)
+                if target in ("period", "note"):
+                    columns.append(ColumnSuggestion(header=header, target=target, target_type="metadata", score=1.0, rule="template"))
+                elif target:
+                    columns.append(
+                        ColumnSuggestion(
+                            header=header,
+                            target=target,
+                            target_type="data_point",
+                            data_point_name=dp_name_by_id.get(target),
+                            score=1.0,
+                            rule="template",
+                        )
+                    )
+                else:
+                    columns.append(ColumnSuggestion(header=header, target=None, target_type="unmatched", score=1.0, rule="template"))
+        elif category is not None:
+            category_dps = dp_by_category.get(category.id, [])
+            for header in sheet.headers:
+                meta_match = match_metadata_field(header)
+                if meta_match.key:
+                    columns.append(
+                        ColumnSuggestion(header=header, target=meta_match.key, target_type="metadata", score=meta_match.score, rule=meta_match.rule)
+                    )
+                    continue
+                dp_match, dp_id = match_data_point(header, category_dps)
+                if dp_id:
+                    columns.append(
+                        ColumnSuggestion(
+                            header=header,
+                            target=dp_id,
+                            target_type="data_point",
+                            data_point_name=dp_name_by_id.get(dp_id),
+                            score=dp_match.score,
+                            rule=dp_match.rule,
+                        )
+                    )
+                else:
+                    columns.append(ColumnSuggestion(header=header, target=None, target_type="unmatched", score=dp_match.score, rule="no_match"))
+        else:
+            columns = [ColumnSuggestion(header=h, target=None, target_type="unmatched", score=0.0, rule="no_match") for h in sheet.headers]
+
+        has_period_column = any(c.target == "period" for c in columns)
+        inferred_period = None if has_period_column else infer_period(sheet.name, sheet.filename)
+
+        results.append(
+            SheetDetectionResult(
+                sheet_name=sheet.name,
+                header_fingerprint=fingerprint,
+                category_id=category.id if category else None,
+                category_name=category.name if category else None,
+                category_score=cat_match.score,
+                category_rule=cat_match.rule,
+                columns=columns,
+                inferred_period=inferred_period,
+                from_template=template is not None,
+                template_id=template.id if template else None,
+            )
+        )
+
+    return DetectResponse(sheets=results)
+
+
+@router.post("/bulk-import/save-template", response_model=MappingTemplateOut)
+def save_mapping_template(
+    payload: SaveTemplateRequest,
+    current: CurrentUser = Depends(require_roles("Admin", "Manager")),
+    db: Session = Depends(get_db),
+):
+    category = db.get(Category, payload.category_id)
+    if category is None or category.tenant_id != current.tenant_id:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    template = (
+        db.query(MappingTemplate)
+        .filter(
+            MappingTemplate.tenant_id == current.tenant_id,
+            MappingTemplate.category_id == payload.category_id,
+            MappingTemplate.header_fingerprint == payload.header_fingerprint,
+        )
+        .first()
+    )
+    if template is None:
+        template = MappingTemplate(
+            tenant_id=current.tenant_id,
+            category_id=payload.category_id,
+            header_fingerprint=payload.header_fingerprint,
+            column_mapping=payload.column_mapping,
+            created_by=current.id,
+        )
+        db.add(template)
+    else:
+        template.column_mapping = payload.column_mapping
+    db.commit()
+    db.refresh(template)
+
+    return MappingTemplateOut(
+        id=template.id,
+        category_id=template.category_id,
+        category_name=category.name,
+        header_fingerprint=template.header_fingerprint,
+        column_mapping=template.column_mapping,
+        created_at=template.created_at,
+        updated_at=template.updated_at,
+    )
 
 
 @router.get("/csv-template")
@@ -509,7 +693,7 @@ def approve_entry(
 
 
 @router.post("/{entry_id}/reject", response_model=EntryOut)
-def reject_entry(
+async def reject_entry(
     entry_id: uuid.UUID,
     payload: RejectRequest,
     current: CurrentUser = Depends(require_roles("Admin", "Approver")),
@@ -527,7 +711,41 @@ def reject_entry(
     db.commit()
     write_audit(db, entry.id, current.email, "rejected", "Submitted", f"Rejected: {payload.reject_note}")
 
+    await _send_rejection_email(db, entry, payload.reject_note)
+
     return _entry_out(db, entry)
+
+
+async def _send_rejection_email(db: Session, entry: Entry, reject_note: str) -> None:
+    if entry.submitted_by is None:
+        return
+    submitter = db.get(User, entry.submitted_by)
+    if submitter is None:
+        return
+
+    dp = db.get(DataPoint, entry.data_point_id)
+    category = db.get(Category, dp.category_id)
+    settings = get_settings()
+    link = f"{settings.frontend_url}/admin/data-entry?category={category.name}&period={entry.period.isoformat()[:7]}"
+    subject = f"Enviqo: {category.name} entry for {entry.period.strftime('%B %Y')} was rejected"
+    html_body = (
+        f"<p>Your submission for <strong>{dp.name}</strong> ({category.name}, {entry.period.strftime('%B %Y')}) "
+        f"was rejected.</p>"
+        f"<p><strong>Reason:</strong> {reject_note}</p>"
+        f'<p><a href="{link}">Open this entry in Enviqo</a> to fix and resubmit it.</p>'
+    )
+    text_body = (
+        f"Your submission for {dp.name} ({category.name}, {entry.period.strftime('%B %Y')}) was rejected.\n\n"
+        f"Reason: {reject_note}\n\nFix and resubmit: {link}"
+    )
+
+    status = "sent"
+    try:
+        await send_email(submitter.email, subject, html_body, text_body)
+    except MailingError:
+        status = "failed"
+    db.add(EmailLog(recipient=submitter.email, subject=subject, related_id=entry.id, status=status))
+    db.commit()
 
 
 @router.get("/{entry_id}/history", response_model=list[AuditLogOut])

@@ -44,11 +44,39 @@
   } @else {
     <div class="classic-panel">
       @for (field of fields(); track field.dataPoint.id; let i = $index) {
+        @if (field.entry?.status === 'Rejected' && field.entry?.latest_rejection_note) {
+          <div class="rejection-banner">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <div>
+              <strong>{{ field.dataPoint.name }} was rejected:</strong>
+              <span>{{ field.entry?.latest_rejection_note }}</span>
+            </div>
+          </div>
+        }
+
         <div class="classic-row">
           <div class="classic-label">
             {{ field.dataPoint.name }}
+            @if (field.dataPoint.tooltip) {
+              <span class="info-icon" [title]="field.dataPoint.tooltip + (field.dataPoint.example ? ' (' + field.dataPoint.example + ')' : '')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+              </span>
+            }
             <span class="unit-tag">{{ field.dataPoint.unit }}</span>
             <span class="status-badge" [class]="'status-' + statusLabel(field).toLowerCase()">{{ statusLabel(field) }}</span>
+            @if (field.saving) {
+              <span class="autosave-flag">Saving…</span>
+            } @else if (field.autosaved) {
+              <span class="autosave-flag saved">Saved</span>
+            }
           </div>
 
           @if (isLocked(field)) {
@@ -58,6 +86,7 @@
               type="number"
               [ngModel]="field.value"
               (ngModelChange)="updateField(i, { value: $event })"
+              (blur)="onFieldBlur(i)"
               [placeholder]="field.lastValue?.value != null ? field.lastValue!.value + ' (last month)' : ''"
             />
             <input
@@ -66,6 +95,7 @@
               placeholder="Note (optional)"
               [ngModel]="field.note"
               (ngModelChange)="updateField(i, { note: $event })"
+              (blur)="onFieldBlur(i)"
             />
             @if (field.entry) {
               <label class="attach-btn small" title="Attach file">

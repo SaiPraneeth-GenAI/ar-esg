@@ -10,6 +10,8 @@ export interface DataPoint {
   unit: string | null;
   input_type: string | null;
   is_provisional: boolean;
+  tooltip: string | null;
+  example: string | null;
 }
 
 export interface EntryCategory {
@@ -33,6 +35,7 @@ export interface EntryRecord {
   note: string | null;
   submitted_by: string | null;
   submitted_by_email: string | null;
+  latest_rejection_note: string | null;
 }
 
 export interface LastValue {

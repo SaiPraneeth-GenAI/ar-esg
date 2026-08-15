@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     smtp_username: str = ""
     smtp_app_password: str = ""
 
+    # Transactional email (Resend). Sends from Resend's shared sandbox domain
+    # until a real sending domain is verified -- see app/services/mailing.py.
+    email_provider_api_key: str = ""
+    email_from: str = "Enviqo <onboarding@resend.dev>"
+
+    frontend_url: str = "http://localhost:4200"
+
     cors_allowed_origins: str = "http://localhost:4200"
 
     @property
