@@ -1,0 +1,132 @@
+.page {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem;
+  font-family: inherit;
+}
+
+header h1 {
+  margin: 0;
+  color: #101828;
+}
+
+.subtitle {
+  color: #667085;
+  margin: 0.25rem 0 1.5rem;
+}
+
+.banner {
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.banner.error {
+  background: #fef3f2;
+  color: #b42318;
+  border: 1px solid #fecdca;
+}
+
+.banner.success {
+  background: #ecfdf3;
+  color: #027a48;
+  border: 1px solid #abefc6;
+}
+
+.role-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+.role-card {
+  background: #fff;
+  border: 1px solid #eaecf0;
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.role-card h2 {
+  margin: 0 0 0.4rem;
+  color: #101828;
+  font-size: 1.1rem;
+}
+
+.role-description {
+  color: #667085;
+  font-size: 0.85rem;
+  margin: 0 0 1rem;
+  line-height: 1.4;
+}
+
+.role-members {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.role-members li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.85rem;
+  color: #344054;
+}
+
+.role-members li.empty {
+  color: #98a2b3;
+  background: none;
+  padding: 0.2rem 0;
+}
+
+.remove-btn {
+  background: none;
+  border: none;
+  color: #98a2b3;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.2rem;
+}
+
+.remove-btn:hover {
+  color: #b42318;
+}
+
+.add-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.add-row select {
+  flex: 1;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.add-btn {
+  background: #0e2c21;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.add-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

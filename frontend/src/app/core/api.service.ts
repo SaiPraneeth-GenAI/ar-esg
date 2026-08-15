@@ -24,6 +24,11 @@ export interface CreateUserPayload {
   location_id: string;
 }
 
+export interface UpdateUserPayload {
+  roles?: string[];
+  location_id?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private http = inject(HttpClient);
@@ -39,13 +44,42 @@ export class ApiService {
     return firstValueFrom(this.http.get<AdminUser[]>(`${environment.apiBaseUrl}/admin/users`, { headers }));
   }
 
+  async createUser(payload: CreateUserPayload): Promise<AdminUser> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(this.http.post<AdminUser>(`${environment.apiBaseUrl}/admin/users`, payload, { headers }));
+  }
+
+  async updateUser(id: string, payload: UpdateUserPayload): Promise<AdminUser> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(this.http.patch<AdminUser>(`${environment.apiBaseUrl}/admin/users/${id}`, payload, { headers }));
+  }
+
+  async removeUser(id: string): Promise<void> {
+    const headers = await this.authHeaders();
+    await firstValueFrom(this.http.delete<void>(`${environment.apiBaseUrl}/admin/users/${id}`, { headers }));
+  }
+
   async listLocations(): Promise<AdminLocation[]> {
     const headers = await this.authHeaders();
     return firstValueFrom(this.http.get<AdminLocation[]>(`${environment.apiBaseUrl}/admin/locations`, { headers }));
   }
 
-  async createUser(payload: CreateUserPayload): Promise<AdminUser> {
+  async createLocation(name: string): Promise<AdminLocation> {
     const headers = await this.authHeaders();
-    return firstValueFrom(this.http.post<AdminUser>(`${environment.apiBaseUrl}/admin/users`, payload, { headers }));
+    return firstValueFrom(
+      this.http.post<AdminLocation>(`${environment.apiBaseUrl}/admin/locations`, { name }, { headers })
+    );
+  }
+
+  async renameLocation(id: string, name: string): Promise<AdminLocation> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(
+      this.http.patch<AdminLocation>(`${environment.apiBaseUrl}/admin/locations/${id}`, { name }, { headers })
+    );
+  }
+
+  async removeLocation(id: string): Promise<void> {
+    const headers = await this.authHeaders();
+    await firstValueFrom(this.http.delete<void>(`${environment.apiBaseUrl}/admin/locations/${id}`, { headers }));
   }
 }

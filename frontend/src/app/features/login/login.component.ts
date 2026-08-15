@@ -41,14 +41,7 @@ export class LoginComponent {
     }
 
     const roles = (data.session.user.app_metadata?.['roles'] as string[]) ?? [];
-    await this.router.navigateByUrl(roles.includes('Admin') ? '/admin/users' : '/home');
-  }
-
-  async signInWithMicrosoft(): Promise<void> {
-    await this.supabase.client.auth.signInWithOAuth({
-      provider: 'azure',
-      options: { redirectTo: window.location.origin }
-    });
+    await this.router.navigateByUrl(roles.includes('Admin') ? '/admin/settings/users' : '/home');
   }
 
   async forgotPassword(): Promise<void> {

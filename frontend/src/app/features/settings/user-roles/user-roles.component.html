@@ -1,0 +1,48 @@
+<div class="page">
+  <header>
+    <h1>User roles</h1>
+    <p class="subtitle">What each role can do, and who currently holds it</p>
+  </header>
+
+  @if (errorMessage()) {
+    <div class="banner error">{{ errorMessage() }}</div>
+  }
+  @if (successMessage()) {
+    <div class="banner success">{{ successMessage() }}</div>
+  }
+
+  <div class="role-grid">
+    @for (role of roles; track role.key) {
+      <section class="role-card">
+        <h2>{{ role.label }}</h2>
+        <p class="role-description">{{ role.description }}</p>
+
+        <ul class="role-members">
+          @for (user of usersByRole()[role.key]; track user.id) {
+            <li>
+              <span>{{ user.email }}</span>
+              <button class="remove-btn" (click)="removeFromRole(user, role.key)" title="Remove this role">×</button>
+            </li>
+          }
+          @if (usersByRole()[role.key].length === 0) {
+            <li class="empty">No one has this role yet.</li>
+          }
+        </ul>
+
+        <div class="add-row">
+          <select
+            [ngModel]="selectedCandidate(role.key)"
+            (ngModelChange)="setSelectedCandidate(role.key, $event)"
+            name="candidate-{{ role.key }}"
+          >
+            <option value="">Add a user…</option>
+            @for (candidate of candidatesByRole()[role.key]; track candidate.id) {
+              <option [value]="candidate.id">{{ candidate.email }}</option>
+            }
+          </select>
+          <button class="add-btn" [disabled]="!selectedCandidate(role.key)" (click)="addToRole(role.key)">Add</button>
+        </div>
+      </section>
+    }
+  </div>
+</div>
