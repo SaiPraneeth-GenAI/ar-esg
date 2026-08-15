@@ -19,6 +19,14 @@ ADMIN_PASSWORD = "admin@123456"  # demo placeholder -- rotate after first login
 DEFAULT_TENANT_NAME = "Amara Raja"
 DEFAULT_LOCATION_NAME = "ARE&M"
 
+# Which logo to record against this tenant's branding_config. Point this at any
+# file under the repo's /assets folder -- proprietary formats (.cdr, .ai, .eps)
+# need to be exported to something web-friendly first (see assets/converted/).
+# Changing this and re-running the script updates the stored value; it does not
+# by itself change what the frontend renders -- today the frontend uses a
+# static bundled copy in frontend/public/, not this DB value.
+LOGO_ASSET = "converted/Amara_Raja_lockup.png"
+
 
 def main() -> None:
     db = SessionLocal()
@@ -30,6 +38,12 @@ def main() -> None:
             db.commit()
             db.refresh(tenant)
             print(f"created tenant {tenant.id}")
+
+        branding_config = {**(tenant.branding_config or {}), "logo_asset": LOGO_ASSET}
+        if tenant.branding_config != branding_config:
+            tenant.branding_config = branding_config
+            db.commit()
+            print(f"set branding_config.logo_asset = {LOGO_ASSET}")
 
         location = (
             db.query(Location)
