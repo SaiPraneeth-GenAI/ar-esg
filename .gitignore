@@ -1,0 +1,22 @@
+# Secrets - never commit
+claude.md
+CLAUDE.md.local
+*.env
+.env
+.env.*
+!.env.example
+!frontend/.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+backend/.venv_check/
+
+# Node (frontend has its own .gitignore for dist/node_modules)
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
