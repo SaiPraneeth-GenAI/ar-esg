@@ -92,6 +92,8 @@ export interface BulkImportRowResult {
   value: number | null;
   message: string | null;
   entry_id: string | null;
+  unit_note: string | null;
+  suggested_unit: string | null;
 }
 
 export interface BulkImportResponse {

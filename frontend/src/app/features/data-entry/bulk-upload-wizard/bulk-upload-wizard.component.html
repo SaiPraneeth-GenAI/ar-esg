@@ -127,7 +127,8 @@
         <p class="wizard-intro">
           {{ includedValidRows().length }} valid, {{ errorRows().length }} flagged out of {{ rows().length }} rows.
           Rows with no Period will use <strong>{{ period | date: 'MMMM yyyy' }}</strong>. Fix a flagged row directly
-          below, then Recheck.
+          below, then Recheck -- or download the file back with every issue and suggested fix marked, fix it in
+          Excel, and re-upload.
         </p>
 
         <div class="table-scroll">
@@ -139,6 +140,7 @@
                 <th>Data point</th>
                 <th>Period</th>
                 <th>Value</th>
+                <th>Unit</th>
                 <th>Status</th>
                 <th>Detail</th>
                 <th></th>
@@ -146,7 +148,7 @@
             </thead>
             <tbody>
               @for (row of rows(); track row.row_index) {
-                <tr [class.row-error]="row.status === 'error'">
+                <tr [class.row-error]="row.status === 'error'" [class.row-converted]="!!row.unitNote">
                   <td>
                     @if (row.status !== 'error') {
                       <input type="checkbox" [checked]="row.included" (change)="toggleIncluded(row.row_index)" />
@@ -181,9 +183,28 @@
                     />
                   </td>
                   <td>
+                    <input
+                      type="text"
+                      class="unit-input"
+                      [ngModel]="row.unit_raw"
+                      (ngModelChange)="updateRow(row.row_index, { unit_raw: $event })"
+                    />
+                  </td>
+                  <td>
                     <span class="row-status" [class]="'status-' + row.status">{{ row.status }}</span>
                   </td>
-                  <td class="row-message">{{ row.message }}</td>
+                  <td class="row-message">
+                    @if (row.unitNote) {
+                      <span class="unit-converted">✓ {{ row.unitNote }}</span>
+                    } @else {
+                      {{ row.message }}
+                    }
+                    @if (row.suggestedUnit) {
+                      <button type="button" class="link-btn suggest-btn" (click)="applySuggestedUnit(row.row_index)">
+                        Use "{{ row.suggestedUnit }}"
+                      </button>
+                    }
+                  </td>
                   <td>
                     <button type="button" class="link-btn" (click)="removeRow(row.row_index)">Remove</button>
                   </td>
@@ -196,6 +217,7 @@
         <div class="wizard-nav">
           <button type="button" class="secondary-btn" (click)="step.set('mapping')">Back to mapping</button>
           <div class="wizard-nav-right">
+            <button type="button" class="secondary-btn" (click)="downloadAnnotatedFile()">Download reviewed file</button>
             @if (hasUnchecked()) {
               <button type="button" class="secondary-btn" [disabled]="validating()" (click)="recheck()">
                 {{ validating() ? 'Checking…' : 'Recheck' }}

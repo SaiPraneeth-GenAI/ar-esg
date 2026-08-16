@@ -112,6 +112,13 @@ class BulkImportRowResult(BaseModel):
     value: float | None
     message: str | None = None
     entry_id: uuid.UUID | None = None
+    # Set when the uploaded unit differed from what the data point expects
+    # but was successfully converted (e.g. "Converted 1.5 KL → 1500 litres").
+    unit_note: str | None = None
+    # Set on a unit error -- the exact unit string this data point expects,
+    # so the UI (and the annotated file re-download) can suggest it
+    # directly instead of just saying "wrong unit".
+    suggested_unit: str | None = None
 
 
 class BulkImportResponse(BaseModel):

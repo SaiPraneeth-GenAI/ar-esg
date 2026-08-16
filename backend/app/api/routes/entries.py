@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import CurrentUser, require_roles
 from app.core.config import get_settings
 from app.core.supabase_storage import upload_file
+from app.core.unit_conversion import convert_unit, units_equivalent
 from app.db.models import Approval, AuditLog, Attachment, Category, DataPoint, EmailLog, Entry, Location, MappingTemplate, User
 from app.db.session import get_db
 from app.schemas.entries import (
@@ -552,18 +553,24 @@ def bulk_import(
             )
             continue
 
-        if row.unit_raw and dp.unit and row.unit_raw.strip().lower() != dp.unit.strip().lower():
-            results.append(
-                BulkImportRowResult(
-                    row_index=row.row_index,
-                    status="error",
-                    data_point_name=row.data_point_name,
-                    period=period,
-                    value=value,
-                    message=f"Unit '{row.unit_raw}' does not match expected unit '{dp.unit}'",
+        unit_note = None
+        if row.unit_raw and dp.unit and not units_equivalent(row.unit_raw, dp.unit):
+            converted = convert_unit(value, row.unit_raw, dp.unit)
+            if converted is None:
+                results.append(
+                    BulkImportRowResult(
+                        row_index=row.row_index,
+                        status="error",
+                        data_point_name=row.data_point_name,
+                        period=period,
+                        value=value,
+                        message=f"'{row.unit_raw}' isn't recognized as, or convertible to, the expected unit '{dp.unit}'",
+                        suggested_unit=dp.unit,
+                    )
                 )
-            )
-            continue
+                continue
+            unit_note = f"Converted {value:g} {row.unit_raw} → {converted:g} {dp.unit}"
+            value = converted
 
         key = (dp.id, period)
         if key in seen_in_file:
@@ -602,7 +609,12 @@ def bulk_import(
         if not payload.commit:
             results.append(
                 BulkImportRowResult(
-                    row_index=row.row_index, status="valid", data_point_name=row.data_point_name, period=period, value=value
+                    row_index=row.row_index,
+                    status="valid",
+                    data_point_name=row.data_point_name,
+                    period=period,
+                    value=value,
+                    unit_note=unit_note,
                 )
             )
             continue
@@ -627,6 +639,7 @@ def bulk_import(
                 period=period,
                 value=value,
                 entry_id=entry.id,
+                unit_note=unit_note,
             )
         )
 

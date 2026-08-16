@@ -31,6 +31,8 @@ interface EditableRow {
   status: RowStatus;
   message: string | null;
   entry_id: string | null;
+  unitNote: string | null;
+  suggestedUnit: string | null;
 }
 
 function cellDisplay(value: unknown): string {
@@ -201,7 +203,9 @@ export class BulkUploadWizardComponent {
         included: true,
         status: 'unchecked' as RowStatus,
         message: null,
-        entry_id: null
+        entry_id: null,
+        unitNote: null,
+        suggestedUnit: null
       };
     });
   }
@@ -219,7 +223,11 @@ export class BulkUploadWizardComponent {
   }
 
   updateRow(rowIndex: number, patch: Partial<EditableRow>): void {
-    const list = this.rows().map((r) => (r.row_index === rowIndex ? { ...r, ...patch, status: 'unchecked' as RowStatus, message: null } : r));
+    const list = this.rows().map((r) =>
+      r.row_index === rowIndex
+        ? { ...r, ...patch, status: 'unchecked' as RowStatus, message: null, unitNote: null, suggestedUnit: null }
+        : r
+    );
     this.rows.set(list);
   }
 
@@ -258,13 +266,46 @@ export class BulkUploadWizardComponent {
           ...row,
           status: (r?.status as RowStatus) ?? 'error',
           message: r?.message ?? null,
-          included: r ? r.status !== 'error' : false
+          included: r ? r.status !== 'error' : false,
+          unitNote: r?.unit_note ?? null,
+          suggestedUnit: r?.suggested_unit ?? null
         };
       });
       this.rows.set(merged);
     } finally {
       this.validating.set(false);
     }
+  }
+
+  /** One-click fix for a unit error: swaps in the exact unit the data
+   * point expects and re-marks the row for re-validation. */
+  applySuggestedUnit(rowIndex: number): void {
+    const row = this.rows().find((r) => r.row_index === rowIndex);
+    if (!row?.suggestedUnit) return;
+    this.updateRow(rowIndex, { unit_raw: row.suggestedUnit });
+  }
+
+  /** Hands back a real .xlsx with every row's outcome -- status, message,
+   * and (for unit errors) the exact expected unit -- so a user working in
+   * Excel can fix problems there and re-upload, instead of only seeing
+   * errors inside this wizard. */
+  async downloadAnnotatedFile(): Promise<void> {
+    const XLSX = await import('xlsx');
+    const data = this.rows().map((r) => ({
+      data_point_name: r.data_point_name,
+      period: r.period_iso || this.period,
+      value: r.value_raw,
+      unit: r.unit_raw ?? '',
+      note: r.note ?? '',
+      status: r.status === 'error' ? 'Needs fix' : r.status === 'created' ? 'Created' : 'Ready to upload',
+      message: r.message ?? (r.unitNote ?? ''),
+      suggested_unit: r.suggestedUnit ?? ''
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws['!cols'] = [{ wch: 28 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 14 }, { wch: 40 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Review');
+    XLSX.writeFile(wb, `${this.category.name.replace(/\s+/g, '_')}_review.xlsx`);
   }
 
   goToConfirm(): void {
