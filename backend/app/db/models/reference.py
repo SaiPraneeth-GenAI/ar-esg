@@ -32,6 +32,10 @@ class EmissionFactor(Base):
     # Which seeded ipcc_reference row this was derived from via the
     # IPCC-assisted panel. Null for manual entry or bulk upload.
     ipcc_reference_key: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("ipcc_reference.id", ondelete="SET NULL"))
+    # Soft delete -- a factor already used in a historical calculation is
+    # never hard-deleted, just deactivated so it drops out of new entries.
+    is_active: Mapped[bool] = mapped_column(nullable=False, server_default=text("true"))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_user.id", ondelete="SET NULL"))
 
 
 class IpccReference(Base):
@@ -49,6 +53,7 @@ class IpccReference(Base):
     aliases: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     scope: Mapped[int] = mapped_column(nullable=False)
     factor_type: Mapped[str] = mapped_column(String, nullable=False)  # fuel | gwp | odp | grid_electricity | spend_based
+    scope3_category: Mapped[str | None] = mapped_column(String)
     publication: Mapped[str] = mapped_column(String, nullable=False)
     effective_year: Mapped[int] = mapped_column(nullable=False)
     ncv_mj_per_unit: Mapped[float | None] = mapped_column(Numeric)

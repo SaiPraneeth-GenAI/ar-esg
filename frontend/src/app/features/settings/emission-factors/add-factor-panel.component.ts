@@ -1,7 +1,8 @@
-import { Component, EventEmitter, Output, computed, inject, signal } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   EmissionFactorCreate,
+  EmissionFactorOut,
   EmissionFactorsApiService,
   IpccSearchResult,
   IpccVersionOut
@@ -41,14 +42,17 @@ interface BreakdownLine {
   templateUrl: './add-factor-panel.component.html',
   styleUrl: './add-factor-panel.component.css'
 })
-export class AddFactorPanelComponent {
+export class AddFactorPanelComponent implements OnInit {
   private api = inject(EmissionFactorsApiService);
+  @Input() editingFactor: EmissionFactorOut | null = null;
   @Output() closed = new EventEmitter<void>();
   @Output() saved = new EventEmitter<void>();
 
   scope3Categories = SCOPE3_CATEGORIES;
 
   mode = signal<PanelMode>('search');
+  isEditing = signal(false);
+  isActive = signal(true);
 
   // Search
   searchQuery = signal('');
@@ -128,6 +132,24 @@ export class AddFactorPanelComponent {
     if (scope === 3) return !!this.scope3Category();
     return false;
   });
+
+  ngOnInit(): void {
+    const f = this.editingFactor;
+    if (!f) return;
+    this.isEditing.set(true);
+    this.isActive.set(f.is_active);
+    this.mode.set('manual');
+    this.manualScope.set(f.scope);
+    this.gasType.set(f.gas_type ?? '');
+    this.method.set(f.method ?? '');
+    this.scope3Category.set(f.scope3_category ?? '');
+    this.description.set(f.description ?? '');
+    this.unit.set(f.unit);
+    this.effectiveYear.set(f.effective_year);
+    this.source.set(f.source ?? '');
+    this.sourceReference.set(f.source_reference ?? '');
+    this.resultValue.set(f.factor_value);
+  }
 
   onSearchInput(q: string): void {
     this.searchQuery.set(q);
@@ -219,7 +241,15 @@ export class AddFactorPanelComponent {
       effective_year: this.mode() === 'ipcc-selected' ? this.selectedVersion()?.effective_year ?? this.effectiveYear() : this.effectiveYear(),
       source: this.source().trim() || null,
       source_reference: this.sourceReference().trim(),
-      ipcc_reference_key: this.mode() === 'ipcc-selected' ? this.selectedVersionId() : null
+      // Editing always lands on the manual form (see ngOnInit), which
+      // would otherwise silently clear an existing IPCC link on every
+      // edit -- preserve whatever the factor already had unless this
+      // save is actually coming from a fresh IPCC selection.
+      ipcc_reference_key: this.isEditing()
+        ? this.editingFactor?.ipcc_reference_key ?? null
+        : this.mode() === 'ipcc-selected'
+          ? this.selectedVersionId()
+          : null
     };
     if (scope === 1) payload.gas_type = this.gasType().trim();
     if (scope === 2) payload.method = this.method();
@@ -229,7 +259,11 @@ export class AddFactorPanelComponent {
     }
 
     try {
-      await this.api.create(payload);
+      if (this.isEditing() && this.editingFactor) {
+        await this.api.update(this.editingFactor.id, { ...payload, is_active: this.isActive() });
+      } else {
+        await this.api.create(payload);
+      }
       this.saved.emit();
     } catch (err) {
       this.formError.set(this.extractError(err) ?? 'Could not save this factor.');

@@ -9,22 +9,49 @@
   font-family: inherit;
 }
 
-/* Sidebar */
+/* Sidebar -- collapsed to an icon rail by default (fixed footprint, so the
+   main content never reflows), expands as an overlay on hover to reveal
+   text labels. */
 .sidebar {
-  width: 232px;
+  width: 68px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 30;
+}
+
+.sidebar-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 68px;
   background: #14161a;
   display: flex;
   flex-direction: column;
   padding: 1.25rem 0.85rem;
+  overflow: hidden;
+  transition: width 0.16s ease, box-shadow 0.16s ease;
+}
+
+/* Hover/focus is bound to .sidebar-inner itself, not the outer .sidebar --
+   .sidebar-inner is the element that actually grows (position: absolute),
+   so as the mouse moves further into the newly-revealed area it's still
+   inside sidebar-inner's own (now wider) box. Binding this to the outer
+   .sidebar instead would keep its hit-box pinned at 68px, so the panel
+   would snap shut the instant the cursor crossed past the icon rail. */
+.sidebar-inner:hover,
+.sidebar-inner:focus-within {
+  width: 240px;
+  box-shadow: 6px 0 28px rgba(0, 0, 0, 0.25);
 }
 
 .sidebar-logo {
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  padding: 0 0.5rem;
+  padding: 0 0.15rem;
   margin-bottom: 1.75rem;
+  white-space: nowrap;
 }
 
 .sidebar-logo img {
@@ -62,6 +89,7 @@
   font-family: inherit;
   text-align: left;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .nav-item svg {
@@ -74,11 +102,26 @@
   flex: 1;
 }
 
+/* Labels (text + trailing chevron) fade in only once the rail has
+   expanded -- kept in the DOM at their natural width so the expanded
+   panel doesn't need a second layout pass, just clipped by the collapsed
+   sidebar-inner's overflow:hidden until then. */
+.nav-label {
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.sidebar-inner:hover .nav-label,
+.sidebar-inner:focus-within .nav-label {
+  opacity: 1;
+  transition: opacity 0.14s ease 0.06s;
+}
+
 .nav-item .chevron {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease, opacity 0.1s ease;
 }
 
 .nav-item .chevron.open {
@@ -102,6 +145,7 @@
   gap: 0.1rem;
   padding: 0.3rem 0 0.5rem 2.1rem;
   animation: slide-in 0.16s ease-out;
+  white-space: nowrap;
 }
 
 @keyframes slide-in {

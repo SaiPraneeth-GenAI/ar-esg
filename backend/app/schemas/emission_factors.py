@@ -20,6 +20,8 @@ class EmissionFactorOut(BaseModel):
     source: str | None
     source_reference: str | None
     ipcc_reference_key: uuid.UUID | None = None
+    is_active: bool = True
+    created_by: uuid.UUID | None = None
 
 
 class EmissionFactorCreate(BaseModel):
@@ -56,6 +58,13 @@ class EmissionFactorCreate(BaseModel):
         return self
 
 
+class EmissionFactorUpdate(EmissionFactorCreate):
+    """Same shape and validation as create -- the edit panel always submits
+    the full form, so this is a full replace, not a partial patch."""
+
+    is_active: bool = True
+
+
 # ---- IPCC reference (seeded, read-only) -----------------------------------
 
 
@@ -63,6 +72,7 @@ class IpccSearchResult(BaseModel):
     substance_name: str
     scope: int
     factor_type: str
+    scope3_category: str | None = None
     latest_effective_year: int
     latest_publication: str
 
@@ -72,6 +82,7 @@ class IpccVersionOut(BaseModel):
     substance_name: str
     scope: int
     factor_type: str
+    scope3_category: str | None = None
     publication: str
     effective_year: int
     ncv_mj_per_unit: float | None

@@ -2,7 +2,7 @@
 
 <aside class="slide-panel">
   <header class="panel-header">
-    <h2>Add factor</h2>
+    <h2>{{ isEditing() ? 'Edit factor' : 'Add factor' }}</h2>
     <button type="button" class="close-btn" (click)="close()" aria-label="Close">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <line x1="18" y1="6" x2="6" y2="18" />
@@ -119,7 +119,9 @@
     }
 
     @if (mode() === 'manual') {
-      <button type="button" class="link-btn back-link" (click)="backToSearch()">← Back to search</button>
+      @if (!isEditing()) {
+        <button type="button" class="link-btn back-link" (click)="backToSearch()">← Back to search</button>
+      }
 
       <div class="scope-select">
         <span class="field-label">Scope</span>
@@ -183,6 +185,13 @@
         <input type="text" [ngModel]="sourceReference()" (ngModelChange)="sourceReference.set($event)" placeholder="Citation, document name, or URL" />
       </label>
 
+      @if (isEditing()) {
+        <label class="active-toggle">
+          <input type="checkbox" [ngModel]="isActive()" (ngModelChange)="isActive.set($event)" />
+          <span>Active -- available for new entries</span>
+        </label>
+      }
+
       @if (formError()) {
         <div class="banner error">{{ formError() }}</div>
       }
@@ -192,7 +201,7 @@
 
       <div class="panel-actions">
         <button type="button" class="primary-btn" [disabled]="!canSave() || submitting()" (click)="save()">
-          {{ submitting() ? 'Saving…' : 'Save factor' }}
+          {{ submitting() ? 'Saving…' : isEditing() ? 'Save changes' : 'Save factor' }}
         </button>
       </div>
     }

@@ -28,6 +28,14 @@ export const routes: Routes = [
         loadComponent: () => import('./features/data-entry/data-entry.component').then((m) => m.DataEntryComponent)
       },
       {
+        path: 'emission-factors',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./features/settings/emission-factors/emission-factors.component').then(
+            (m) => m.EmissionFactorsComponent
+          )
+      },
+      {
         path: 'settings/users',
         canActivate: [adminGuard],
         loadComponent: () =>
@@ -55,14 +63,6 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/settings/mapping-templates/mapping-templates.component').then(
             (m) => m.MappingTemplatesComponent
-          )
-      },
-      {
-        path: 'settings/emission-factors',
-        canActivate: [adminGuard],
-        loadComponent: () =>
-          import('./features/settings/emission-factors/emission-factors.component').then(
-            (m) => m.EmissionFactorsComponent
           )
       }
     ]

@@ -1,7 +1,17 @@
 <div class="page">
   <header>
-    <h1>Emission factors</h1>
-    <p class="subtitle">The factor library used to convert activity data into GHG emissions -- versioned, so an update never silently rewrites a historical calculation.</p>
+    <div class="header-row">
+      <div>
+        <h1>Emission factors</h1>
+        <p class="subtitle">The factor library used to convert activity data into GHG emissions -- versioned, so an update never silently rewrites a historical calculation.</p>
+      </div>
+      @if (mode() === 'list') {
+        <button type="button" class="primary-btn" (click)="openAddPanel()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+          Add factor
+        </button>
+      }
+    </div>
   </header>
 
   @if (errorMessage()) {
@@ -16,80 +26,100 @@
       <button type="button" [class.active]="mode() === 'list'" (click)="mode.set('list')">Factors</button>
       <button type="button" [class.active]="mode() === 'bulk'" (click)="mode.set('bulk')">Bulk upload</button>
     </div>
-
-    @if (mode() === 'list') {
-      <button type="button" class="primary-btn" (click)="openPanel()">+ Add factor</button>
-    }
   </div>
 
   @if (mode() === 'bulk') {
     <app-emission-factor-bulk-upload-wizard (done)="onBulkUploadDone()"></app-emission-factor-bulk-upload-wizard>
   } @else {
-    @if (loading()) {
-      <p class="muted">Loading…</p>
-    } @else if (factors().length === 0) {
-      <div class="empty-state">
-        <p>No emission factors yet. Add one manually or use Bulk upload for a full workbook.</p>
+    <div class="list-card">
+      <div class="scope-switcher">
+        <div class="scope-tabs">
+          <button type="button" class="scope-tab" [class.active]="activeScope() === 1" (click)="setScope(1)">
+            Scope 1 <span class="tab-count">{{ scopeCounts()[1] }}</span>
+          </button>
+          <button type="button" class="scope-tab" [class.active]="activeScope() === 2" (click)="setScope(2)">
+            Scope 2 <span class="tab-count">{{ scopeCounts()[2] }}</span>
+          </button>
+          <button type="button" class="scope-tab" [class.active]="activeScope() === 3" (click)="setScope(3)">
+            Scope 3 <span class="tab-count">{{ scopeCounts()[3] }}</span>
+          </button>
+        </div>
+        <label class="show-inactive">
+          <input type="checkbox" [checked]="showInactive()" (change)="toggleShowInactive()" />
+          Show inactive
+        </label>
       </div>
-    } @else {
-      @for (group of [
-        { scope: 1, label: 'Scope 1', rows: scope1Factors() },
-        { scope: 2, label: 'Scope 2', rows: scope2Factors() },
-        { scope: 3, label: 'Scope 3', rows: scope3Factors() }
-      ]; track group.scope) {
-        <section class="scope-section">
-          <div class="scope-section-header">
-            <h2>{{ group.label }}</h2>
-            <span class="count-pill">{{ group.rows.length }}</span>
-          </div>
 
-          @if (group.rows.length === 0) {
-            <p class="empty-row">No {{ group.label }} factors yet.</p>
-          } @else {
-            <table class="factors-table">
-              <thead>
-                <tr>
-                  <th>Substance / method / category</th>
-                  <th class="unit-col">Unit</th>
-                  <th>Value</th>
-                  <th>Effective year</th>
-                  <th>Version</th>
-                  <th>Source</th>
-                  <th>Origin</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (f of group.rows; track f.id) {
-                  <tr>
-                    <td>
-                      {{ displayName(f) }}
-                      @if (f.scope === 3 && f.description) {
-                        <span class="muted-inline"> -- {{ f.description }}</span>
-                      }
-                    </td>
-                    <td class="unit-col"><span class="unit-badge">{{ f.unit }}</span></td>
-                    <td>{{ f.factor_value }}</td>
-                    <td>{{ f.effective_year }}</td>
-                    <td>{{ f.version }}</td>
-                    <td class="source-cell" [title]="f.source_reference ?? ''">{{ f.source_reference ?? '—' }}</td>
-                    <td>
-                      @if (f.ipcc_reference_key) {
-                        <span class="origin-badge ipcc">IPCC-derived</span>
-                      } @else {
-                        <span class="origin-badge custom">Custom</span>
-                      }
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          }
-        </section>
+      @if (loading()) {
+        <div class="skeleton-list">
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+        </div>
+      } @else if (visibleFactors().length === 0) {
+        <div class="empty-state">
+          <p>No Scope {{ activeScope() }} factors yet. Add one manually or use Bulk upload for a full workbook.</p>
+        </div>
+      } @else {
+        <table class="factors-table">
+          <thead>
+            <tr>
+              <th>Substance / method / category</th>
+              <th class="unit-col">Unit</th>
+              <th>Value</th>
+              <th>Effective year</th>
+              <th>Version</th>
+              <th>Source</th>
+              <th>Origin</th>
+              <th class="actions-col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (f of visibleFactors(); track f.id) {
+              <tr [class.inactive-row]="!f.is_active">
+                <td>
+                  {{ displayName(f) }}
+                  @if (f.scope === 3 && f.description) {
+                    <span class="muted-inline"> -- {{ f.description }}</span>
+                  }
+                  @if (!f.is_active) {
+                    <span class="inactive-badge">Inactive</span>
+                  }
+                </td>
+                <td class="unit-col"><span class="unit-badge">{{ f.unit }}</span></td>
+                <td class="value-cell">{{ f.factor_value }}</td>
+                <td>{{ f.effective_year }}</td>
+                <td>{{ f.version }}</td>
+                <td class="source-cell" [title]="f.source_reference ?? ''">{{ f.source_reference ?? '—' }}</td>
+                <td>
+                  @if (f.ipcc_reference_key) {
+                    <span class="origin-badge ipcc">IPCC-derived</span>
+                  } @else {
+                    <span class="origin-badge custom">Custom</span>
+                  }
+                </td>
+                <td class="actions-col">
+                  <div class="row-actions">
+                    <button type="button" class="row-action-btn" (click)="openEditPanel(f)" title="Edit">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                      </svg>
+                    </button>
+                    <button type="button" class="row-action-link" (click)="toggleActive(f)">
+                      {{ f.is_active ? 'Deactivate' : 'Reactivate' }}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
       }
-    }
+    </div>
   }
 
   @if (showPanel()) {
-    <app-add-factor-panel (closed)="closePanel()" (saved)="onSaved()"></app-add-factor-panel>
+    <app-add-factor-panel [editingFactor]="editingFactor()" (closed)="closePanel()" (saved)="onSaved()"></app-add-factor-panel>
   }
 </div>

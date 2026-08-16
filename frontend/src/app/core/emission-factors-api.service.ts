@@ -18,6 +18,8 @@ export interface EmissionFactorOut {
   source: string | null;
   source_reference: string | null;
   ipcc_reference_key: string | null;
+  is_active: boolean;
+  created_by: string | null;
 }
 
 export interface EmissionFactorCreate {
@@ -34,10 +36,15 @@ export interface EmissionFactorCreate {
   ipcc_reference_key?: string | null;
 }
 
+export interface EmissionFactorUpdate extends EmissionFactorCreate {
+  is_active: boolean;
+}
+
 export interface IpccSearchResult {
   substance_name: string;
   scope: number;
   factor_type: string;
+  scope3_category: string | null;
   latest_effective_year: number;
   latest_publication: string;
 }
@@ -47,6 +54,7 @@ export interface IpccVersionOut {
   substance_name: string;
   scope: number;
   factor_type: string;
+  scope3_category: string | null;
   publication: string;
   effective_year: number;
   ncv_mj_per_unit: number | null;
@@ -146,10 +154,11 @@ export class EmissionFactorsApiService {
     return { Authorization: `Bearer ${data.session?.access_token ?? ''}` };
   }
 
-  async list(scope?: number): Promise<EmissionFactorOut[]> {
+  async list(scope?: number, includeInactive = false): Promise<EmissionFactorOut[]> {
     const headers = await this.authHeaders();
     const params: Record<string, string> = {};
     if (scope) params['scope'] = String(scope);
+    if (includeInactive) params['include_inactive'] = 'true';
     return firstValueFrom(
       this.http.get<EmissionFactorOut[]>(`${environment.apiBaseUrl}/admin/emission-factors`, { headers, params })
     );
@@ -159,6 +168,13 @@ export class EmissionFactorsApiService {
     const headers = await this.authHeaders();
     return firstValueFrom(
       this.http.post<EmissionFactorOut>(`${environment.apiBaseUrl}/admin/emission-factors`, payload, { headers })
+    );
+  }
+
+  async update(id: string, payload: EmissionFactorUpdate): Promise<EmissionFactorOut> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(
+      this.http.patch<EmissionFactorOut>(`${environment.apiBaseUrl}/admin/emission-factors/${id}`, payload, { headers })
     );
   }
 

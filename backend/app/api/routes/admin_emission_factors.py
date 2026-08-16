@@ -1,9 +1,9 @@
+import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-
+from fastapi import APIRouter, Depends, HTTPException
 from rapidfuzz import fuzz
+from sqlalchemy.orm import Session
 
 from app.core.auth import CurrentUser, require_roles
 from app.core.emission_factor_aliases import SCOPE3_CATEGORY_ALIASES
@@ -20,6 +20,7 @@ from app.schemas.emission_factors import (
     EFSheetDetectionResult,
     EmissionFactorCreate,
     EmissionFactorOut,
+    EmissionFactorUpdate,
     IpccMatch,
     IpccSearchResult,
     IpccVersionOut,
@@ -53,18 +54,23 @@ def _out(f: EmissionFactor) -> EmissionFactorOut:
         source=f.source,
         source_reference=f.source_reference,
         ipcc_reference_key=f.ipcc_reference_key,
+        is_active=f.is_active,
+        created_by=f.created_by,
     )
 
 
 @router.get("", response_model=list[EmissionFactorOut])
 def list_factors(
     scope: int | None = None,
+    include_inactive: bool = False,
     current: CurrentUser = Depends(require_roles("Admin", "Approver")),
     db: Session = Depends(get_db),
 ):
     q = db.query(EmissionFactor).filter(EmissionFactor.tenant_id == current.tenant_id)
     if scope is not None:
         q = q.filter(EmissionFactor.scope == scope)
+    if not include_inactive:
+        q = q.filter(EmissionFactor.is_active.is_(True))
     rows = q.order_by(EmissionFactor.scope, EmissionFactor.effective_date.desc()).all()
     return [_out(r) for r in rows]
 
@@ -89,8 +95,39 @@ def create_factor(
         source=payload.source,
         source_reference=payload.source_reference,
         ipcc_reference_key=payload.ipcc_reference_key,
+        created_by=current.id,
     )
     db.add(factor)
+    db.commit()
+    db.refresh(factor)
+    return _out(factor)
+
+
+@router.patch("/{factor_id}", response_model=EmissionFactorOut)
+def update_factor(
+    factor_id: uuid.UUID,
+    payload: EmissionFactorUpdate,
+    current: CurrentUser = Depends(require_roles("Admin", "Approver")),
+    db: Session = Depends(get_db),
+):
+    factor = db.get(EmissionFactor, factor_id)
+    if factor is None or factor.tenant_id != current.tenant_id:
+        raise HTTPException(status_code=404, detail="Emission factor not found")
+
+    factor.scope = payload.scope
+    factor.gas_type = payload.gas_type
+    factor.method = payload.method
+    factor.scope3_category = payload.scope3_category
+    factor.description = payload.description
+    factor.unit = payload.unit
+    factor.factor_value = payload.factor_value
+    factor.effective_date = date(payload.effective_year, 1, 1)
+    factor.version = f"FY{str(payload.effective_year)[2:]}"
+    factor.source = payload.source
+    factor.source_reference = payload.source_reference
+    factor.ipcc_reference_key = payload.ipcc_reference_key
+    factor.is_active = payload.is_active
+
     db.commit()
     db.refresh(factor)
     return _out(factor)
@@ -154,6 +191,7 @@ def search_ipcc_reference(
             substance_name=name,
             scope=latest.scope,
             factor_type=latest.factor_type,
+            scope3_category=latest.scope3_category,
             latest_effective_year=latest.effective_year,
             latest_publication=latest.publication,
         )
@@ -182,6 +220,7 @@ def list_ipcc_versions(
             substance_name=r.substance_name,
             scope=r.scope,
             factor_type=r.factor_type,
+            scope3_category=r.scope3_category,
             publication=r.publication,
             effective_year=r.effective_year,
             ncv_mj_per_unit=float(r.ncv_mj_per_unit) if r.ncv_mj_per_unit is not None else None,
@@ -512,6 +551,7 @@ def bulk_import(
             version=draft.version or f"FY{str(draft.effective_year)[2:]}",
             source=draft.source,
             source_reference=draft.source_reference,
+            created_by=current.id,
         )
         db.add(factor)
         db.flush()

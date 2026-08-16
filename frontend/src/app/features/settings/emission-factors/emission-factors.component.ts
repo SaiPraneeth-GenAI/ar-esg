@@ -18,11 +18,22 @@ export class EmissionFactorsComponent implements OnInit {
   successMessage = signal('');
   factors = signal<EmissionFactorOut[]>([]);
   mode = signal<'list' | 'bulk'>('list');
-  showPanel = signal(false);
+  activeScope = signal(1);
+  showInactive = signal(false);
 
-  scope1Factors = computed(() => this.factors().filter((f) => f.scope === 1));
-  scope2Factors = computed(() => this.factors().filter((f) => f.scope === 2));
-  scope3Factors = computed(() => this.factors().filter((f) => f.scope === 3));
+  showPanel = signal(false);
+  editingFactor = signal<EmissionFactorOut | null>(null);
+
+  scopeCounts = computed(() => {
+    const all = this.factors();
+    return {
+      1: all.filter((f) => f.scope === 1).length,
+      2: all.filter((f) => f.scope === 2).length,
+      3: all.filter((f) => f.scope === 3).length
+    };
+  });
+
+  visibleFactors = computed(() => this.factors().filter((f) => f.scope === this.activeScope()));
 
   async ngOnInit(): Promise<void> {
     await this.refresh();
@@ -32,7 +43,7 @@ export class EmissionFactorsComponent implements OnInit {
     this.loading.set(true);
     this.errorMessage.set('');
     try {
-      this.factors.set(await this.api.list());
+      this.factors.set(await this.api.list(undefined, this.showInactive()));
     } catch {
       this.errorMessage.set('Could not load emission factors.');
     } finally {
@@ -40,23 +51,63 @@ export class EmissionFactorsComponent implements OnInit {
     }
   }
 
-  openPanel(): void {
+  async toggleShowInactive(): Promise<void> {
+    this.showInactive.set(!this.showInactive());
+    await this.refresh();
+  }
+
+  setScope(scope: number): void {
+    this.activeScope.set(scope);
+  }
+
+  openAddPanel(): void {
+    this.editingFactor.set(null);
+    this.showPanel.set(true);
+  }
+
+  openEditPanel(factor: EmissionFactorOut): void {
+    this.editingFactor.set(factor);
     this.showPanel.set(true);
   }
 
   closePanel(): void {
     this.showPanel.set(false);
+    this.editingFactor.set(null);
   }
 
   async onSaved(): Promise<void> {
+    const wasEditing = this.editingFactor() !== null;
     this.showPanel.set(false);
-    this.successMessage.set('Emission factor saved.');
+    this.editingFactor.set(null);
+    this.successMessage.set(wasEditing ? 'Emission factor updated.' : 'Emission factor saved.');
     await this.refresh();
+  }
+
+  async toggleActive(factor: EmissionFactorOut): Promise<void> {
+    try {
+      await this.api.update(factor.id, {
+        scope: factor.scope,
+        gas_type: factor.gas_type,
+        method: factor.method,
+        scope3_category: factor.scope3_category,
+        description: factor.description,
+        unit: factor.unit,
+        factor_value: factor.factor_value,
+        effective_year: factor.effective_year,
+        source: factor.source,
+        source_reference: factor.source_reference ?? '',
+        ipcc_reference_key: factor.ipcc_reference_key,
+        is_active: !factor.is_active
+      });
+      await this.refresh();
+    } catch {
+      this.errorMessage.set('Could not update this factor.');
+    }
   }
 
   displayName(f: EmissionFactorOut): string {
     if (f.scope === 1) return f.gas_type ?? '—';
-    if (f.scope === 2) return f.method ?? '—';
+    if (f.scope === 2) return f.gas_type || f.method || '—';
     return f.scope3_category ?? '—';
   }
 

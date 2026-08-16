@@ -1,54 +1,66 @@
 <div class="shell">
   <aside class="sidebar">
-    <div class="sidebar-logo">
-      <img src="/logo-icon.png" alt="Amara Raja" />
-      <span>Amara Raja</span>
-    </div>
+    <div class="sidebar-inner">
+      <div class="sidebar-logo">
+        <img src="/logo-icon.png" alt="Amara Raja" />
+        <span class="nav-label">Amara Raja</span>
+      </div>
 
-    <nav class="sidebar-nav">
-      <button type="button" class="nav-item" [class.active]="isDashboardRoute()" (click)="goToDashboard()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 9.5 12 3l9 6.5" />
-          <path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" />
-        </svg>
-        <span>Home</span>
-      </button>
-
-      @if (canAccessDataEntry()) {
-        <button type="button" class="nav-item" [class.active]="isDataEntryRoute()" (click)="goToDataEntry()">
+      <nav class="sidebar-nav">
+        <button type="button" class="nav-item" [class.active]="isDashboardRoute()" (click)="goToDashboard()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 20h9" />
-            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            <path d="M3 9.5 12 3l9 6.5" />
+            <path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" />
           </svg>
-          <span>Data Entry</span>
-        </button>
-      }
-
-      @if (canAccessSettings()) {
-        <button type="button" class="nav-item" [class.active]="isSettingsRoute()" (click)="openSettings()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path
-              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
-            />
-          </svg>
-          <span>Settings</span>
-          <svg class="chevron" [class.open]="settingsOpen()" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m6 9 6 6 6-6" />
-          </svg>
+          <span class="nav-label">Home</span>
         </button>
 
-        @if (settingsOpen()) {
-          <div class="nav-subitems">
-            <a routerLink="/admin/settings/users" routerLinkActive="active" class="nav-subitem">User Management</a>
-            <a routerLink="/admin/settings/roles" routerLinkActive="active" class="nav-subitem">User Roles</a>
-            <a routerLink="/admin/settings/plants" routerLinkActive="active" class="nav-subitem">Assigned Plants</a>
-            <a routerLink="/admin/settings/mapping-templates" routerLinkActive="active" class="nav-subitem">Mapping Templates</a>
-            <a routerLink="/admin/settings/emission-factors" routerLinkActive="active" class="nav-subitem">Emission Factors</a>
-          </div>
+        @if (canAccessDataEntry()) {
+          <button type="button" class="nav-item" [class.active]="isDataEntryRoute()" (click)="goToDataEntry()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+            <span class="nav-label">Data Entry</span>
+          </button>
         }
-      }
-    </nav>
+
+        @if (canAccessEmissionFactors()) {
+          <button type="button" class="nav-item" [class.active]="isEmissionFactorsRoute()" (click)="goToEmissionFactors()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 3h6" />
+              <path d="M10 3v5.5L4.5 18a2 2 0 0 0 1.7 3h11.6a2 2 0 0 0 1.7-3L14 8.5V3" />
+              <path d="M7 15h10" />
+            </svg>
+            <span class="nav-label">Emission Factors</span>
+          </button>
+        }
+
+        @if (canAccessSettings()) {
+          <button type="button" class="nav-item" [class.active]="isSettingsRoute()" (click)="openSettings()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+              />
+            </svg>
+            <span class="nav-label">Settings</span>
+            <svg class="chevron nav-label" [class.open]="settingsOpen()" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+
+          @if (settingsOpen()) {
+            <div class="nav-subitems">
+              <a routerLink="/admin/settings/users" routerLinkActive="active" class="nav-subitem">User Management</a>
+              <a routerLink="/admin/settings/roles" routerLinkActive="active" class="nav-subitem">User Roles</a>
+              <a routerLink="/admin/settings/plants" routerLinkActive="active" class="nav-subitem">Assigned Plants</a>
+              <a routerLink="/admin/settings/mapping-templates" routerLinkActive="active" class="nav-subitem">Mapping Templates</a>
+            </div>
+          }
+        }
+      </nav>
+    </div>
   </aside>
 
   <div class="main">

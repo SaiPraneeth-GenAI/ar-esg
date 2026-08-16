@@ -208,6 +208,15 @@
   align-self: flex-start;
 }
 
+.active-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #344054;
+  cursor: pointer;
+}
+
 .breakdown-box {
   background: #f9fafb;
   border: 1px solid #eaecf0;
