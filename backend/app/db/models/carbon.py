@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import ForeignKey, Numeric, String, Text, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -73,3 +73,46 @@ class ProductionVolumeMapping(Base):
     conversion_multiplier: Mapped[Decimal] = mapped_column(Numeric, nullable=False, server_default=text("1"))
     is_active: Mapped[bool] = mapped_column(nullable=False, server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
+
+
+class EmissionTarget(Base):
+    """A target's baseline is provisional until activate() locks it to a
+    specific set of calculation snapshot ids (baseline_calculation_ids) and
+    a boundary_config_hash -- after that, neither a factor change nor a
+    boundary edit can silently move what the target is measured against.
+    Draft targets have no such lock and can be freely edited/deleted."""
+
+    __tablename__ = "emission_target"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenant.id", ondelete="CASCADE"), nullable=False)
+    location_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("location.id", ondelete="CASCADE"))
+
+    scope: Mapped[str] = mapped_column(String, nullable=False)  # '1' | '2' | '1_2_combined'
+    calculation_method: Mapped[str | None] = mapped_column(String)  # location_based | market_based
+    metric_type: Mapped[str] = mapped_column(String, nullable=False)  # absolute_tco2e | intensity_tco2e_per_mnah
+
+    baseline_period_start: Mapped[date] = mapped_column(nullable=False)
+    baseline_period_end: Mapped[date] = mapped_column(nullable=False)
+    baseline_value: Mapped[Decimal | None] = mapped_column(Numeric)
+    baseline_completeness_pct: Mapped[Decimal | None] = mapped_column(Numeric)
+    baseline_calculation_ids: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    baseline_locked_at: Mapped[datetime | None] = mapped_column()
+
+    reduction_percentage: Mapped[Decimal | None] = mapped_column(Numeric)
+    target_period_start: Mapped[date] = mapped_column(nullable=False)
+    target_period_end: Mapped[date] = mapped_column(nullable=False)
+    target_value: Mapped[Decimal | None] = mapped_column(Numeric)
+    monthly_phasing: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+
+    status: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'draft'"))
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_user.id", ondelete="SET NULL"))
+    rationale: Mapped[str | None] = mapped_column(Text)
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_user.id", ondelete="SET NULL"))
+    approved_at: Mapped[datetime | None] = mapped_column()
+
+    boundary_config_hash: Mapped[str | None] = mapped_column(String)
+
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_user.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"))

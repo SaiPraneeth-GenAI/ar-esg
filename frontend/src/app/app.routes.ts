@@ -40,6 +40,11 @@ export const routes: Routes = [
           )
       },
       {
+        path: 'targets',
+        canActivate: [adminGuard],
+        loadComponent: () => import('./features/settings/targets/targets.component').then((m) => m.TargetsComponent)
+      },
+      {
         path: 'settings/users',
         canActivate: [adminGuard],
         loadComponent: () =>

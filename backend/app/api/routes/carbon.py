@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import CurrentUser, require_roles
 from app.core.carbon_mapping import get_carbon_mapping
-from app.db.models import Category, DataPoint, EmissionCalculation, Entry, Location, User
+from app.db.models import Category, DataPoint, EmissionCalculation, EmissionTarget, Entry, Location, User
 from app.db.session import get_db
 from app.schemas.carbon import (
     CarbonOverview,
@@ -16,9 +16,18 @@ from app.schemas.carbon import (
     CarbonPreviewResponse,
     EmissionCalculationOut,
     RecalculateResponse,
+    TargetComparison,
 )
-from app.services.carbon_calculation import CalculationOutcome, calculate_entries_batch, run_calculation, to_decimal
+from app.services.carbon_calculation import (
+    CalculationOutcome,
+    calculate_entries_batch,
+    compute_period_totals,
+    prior_month,
+    run_calculation,
+    to_decimal,
+)
 from app.services.rollups import month_start
+from app.services.target_calculation import classify_status, months_between, target_value_for_month
 
 router = APIRouter(prefix="/carbon", tags=["carbon"])
 
@@ -210,72 +219,6 @@ def unresolved_queue(
     return [_calc_out(db, r) for r in rows]
 
 
-def _prior_month(d: date) -> date:
-    if d.month == 1:
-        return d.replace(year=d.year - 1, month=12)
-    return d.replace(month=d.month - 1)
-
-
-def _period_totals(db: Session, tenant_id, location_id, period: date) -> dict:
-    q = db.query(EmissionCalculation).filter(
-        EmissionCalculation.tenant_id == tenant_id,
-        EmissionCalculation.reporting_period == period,
-        EmissionCalculation.status == "calculated",
-    )
-    if location_id is not None:
-        q = q.filter(EmissionCalculation.location_id == location_id)
-    rows = q.all()
-
-    scope1 = sum((r.emissions_kgco2e for r in rows if r.scope == 1), Decimal("0"))
-    scope2_loc = sum(
-        (r.emissions_kgco2e for r in rows if r.scope == 2 and r.calculation_method == "location_based"), Decimal("0")
-    )
-    scope2_mkt = sum(
-        (r.emissions_kgco2e for r in rows if r.scope == 2 and r.calculation_method == "market_based"), Decimal("0")
-    )
-    has_scope2_mkt = any(r.scope == 2 and r.calculation_method == "market_based" for r in rows)
-    scope1_2_loc = scope1 + scope2_loc
-
-    from app.db.models import ProductionVolumeMapping
-
-    prod_mapping_q = db.query(ProductionVolumeMapping).filter(
-        ProductionVolumeMapping.tenant_id == tenant_id, ProductionVolumeMapping.is_active.is_(True)
-    )
-    if location_id is not None:
-        prod_mapping_q = prod_mapping_q.filter(
-            (ProductionVolumeMapping.location_id == location_id) | (ProductionVolumeMapping.location_id.is_(None))
-        )
-    prod_mapping = prod_mapping_q.first()
-
-    production_value = None
-    production_unit = None
-    intensity = None
-    if prod_mapping is not None:
-        entry_q = db.query(Entry).filter(
-            Entry.data_point_id == prod_mapping.data_point_id, Entry.status == "Approved", Entry.period == period
-        )
-        if location_id is not None:
-            entry_q = entry_q.filter(Entry.location_id == location_id)
-        production_entries = entry_q.all()
-        if production_entries:
-            total_native = sum((to_decimal(e.value) for e in production_entries if e.value is not None), Decimal("0"))
-            production_value = float(total_native * to_decimal(prod_mapping.conversion_multiplier))
-            production_unit = prod_mapping.canonical_unit
-            if production_value and production_value > 0:
-                intensity = float(scope1_2_loc / 1000) / production_value
-
-    return {
-        "rows": rows,
-        "scope1_tco2e": float(scope1 / 1000),
-        "scope2_loc_tco2e": float(scope2_loc / 1000),
-        "scope2_mkt_tco2e": (float(scope2_mkt / 1000) if has_scope2_mkt else None),
-        "scope1_2_loc_tco2e": float(scope1_2_loc / 1000),
-        "production_value": production_value,
-        "production_unit": production_unit,
-        "intensity": intensity,
-    }
-
-
 @router.get("/calculations", response_model=list[EmissionCalculationOut])
 def list_calculations(
     period: date,
@@ -322,21 +265,12 @@ def carbon_overview(
     """Approved calculation snapshots only -- never a live sum of raw
     entries (rule #10)."""
     period = month_start(period)
-    current_totals = _period_totals(db, current.tenant_id, location_id, period)
-    prior_totals = _period_totals(db, current.tenant_id, location_id, _prior_month(period))
+    current_totals = compute_period_totals(db, current.tenant_id, location_id, period)
+    prior_totals = compute_period_totals(db, current.tenant_id, location_id, prior_month(period))
     rows = current_totals["rows"]
-
-    unresolved_q = db.query(EmissionCalculation).filter(
-        EmissionCalculation.tenant_id == current.tenant_id,
-        EmissionCalculation.reporting_period == period,
-        EmissionCalculation.status == "unresolved",
-    )
-    if location_id is not None:
-        unresolved_q = unresolved_q.filter(EmissionCalculation.location_id == location_id)
-    unresolved_count = unresolved_q.count()
-    calculated_count = len(rows)
-    total_attempts = calculated_count + unresolved_count
-    completeness_pct = (calculated_count / total_attempts * 100) if total_attempts > 0 else None
+    unresolved_count = current_totals["unresolved_count"]
+    calculated_count = current_totals["calculated_count"]
+    completeness_pct = current_totals["completeness_pct"]
 
     by_source: dict[tuple[str, int, str | None], list] = {}
     dp_names: dict[uuid.UUID, str] = {}
@@ -360,6 +294,13 @@ def carbon_overview(
 
     insight = _build_insight(sources, current_totals["scope1_2_loc_tco2e"], prior_totals["scope1_2_loc_tco2e"], unresolved_count)
 
+    scope1_2_target = _active_target_comparison(
+        db, current.tenant_id, location_id, "1_2_combined", "absolute_tco2e", period, current_totals["scope1_2_loc_tco2e"]
+    )
+    intensity_target = _active_target_comparison(
+        db, current.tenant_id, location_id, "1_2_combined", "intensity_tco2e_per_mnah", period, current_totals["intensity"]
+    )
+
     return CarbonOverview(
         period=period,
         scope1_tco2e=current_totals["scope1_tco2e"],
@@ -376,10 +317,41 @@ def carbon_overview(
         completeness_pct=completeness_pct,
         sources=sources,
         insight=insight,
+        scope1_2_target=scope1_2_target,
+        intensity_target=intensity_target,
     )
 
 
-def _build_insight(sources: list[CarbonOverviewSource], current_total: float, prior_total: float | None, unresolved_count: int) -> str | None:
+def _active_target_comparison(
+    db: Session, tenant_id, location_id, scope: str, metric_type: str, period: date, actual: float | None
+) -> TargetComparison | None:
+    """Only ever reads an active target for the exact same boundary this
+    card already shows -- never substitutes a different location/scope
+    target, and never fabricates a comparison when none has been
+    declared (rule: targets are never auto-created)."""
+    target = (
+        db.query(EmissionTarget)
+        .filter(
+            EmissionTarget.tenant_id == tenant_id,
+            EmissionTarget.location_id == location_id,
+            EmissionTarget.scope == scope,
+            EmissionTarget.metric_type == metric_type,
+            EmissionTarget.status == "active",
+            EmissionTarget.target_period_start <= period,
+            EmissionTarget.target_period_end >= period,
+        )
+        .first()
+    )
+    if target is None or target.target_value is None:
+        return None
+    num_months = len(months_between(target.target_period_start, target.target_period_end))
+    month_target = target_value_for_month(target.monthly_phasing, period, float(target.target_value), num_months)
+    if month_target is None:
+        return None
+    return TargetComparison(target_id=target.id, target_value=month_target, status=classify_status(actual, month_target))
+
+
+def _build_insight(sources: list[CarbonOverviewSource], current_total: float | None, prior_total: float | None, unresolved_count: int) -> str | None:
     """Short, deterministic observation from the actual numbers -- largest
     source and period-over-period variance. No causal claims (rule in
     Prompt 4's dashboard section)."""

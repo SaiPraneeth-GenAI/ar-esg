@@ -178,6 +178,51 @@
   margin-bottom: 0.4rem;
 }
 
+.target-comparison {
+  margin-top: 0.5rem;
+  font-size: 0.76rem;
+  color: #667085;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.target-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.76rem;
+  color: #98a2b3;
+  text-decoration: underline;
+}
+
+.status-pill {
+  font-size: 0.66rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.status-pill.status-green {
+  background: #e7f6ee;
+  color: #027a48;
+}
+
+.status-pill.status-amber {
+  background: #fffaeb;
+  color: #b54708;
+}
+
+.status-pill.status-red {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.status-pill.status-neutral {
+  background: #f2f4f7;
+  color: #667085;
+}
+
 .unresolved-link {
   display: inline-block;
   margin-top: 0.5rem;

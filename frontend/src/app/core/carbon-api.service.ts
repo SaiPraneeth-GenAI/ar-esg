@@ -12,6 +12,12 @@ export interface CarbonOverviewSource {
   entry_count: number;
 }
 
+export interface TargetComparison {
+  target_id: string;
+  target_value: number;
+  status: string;
+}
+
 export interface CarbonOverview {
   period: string | null;
   scope1_tco2e: number | null;
@@ -28,6 +34,8 @@ export interface CarbonOverview {
   completeness_pct: number | null;
   sources: CarbonOverviewSource[];
   insight: string | null;
+  scope1_2_target: TargetComparison | null;
+  intensity_target: TargetComparison | null;
 }
 
 export interface EmissionCalculationOut {

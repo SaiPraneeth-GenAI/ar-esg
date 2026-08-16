@@ -1,4 +1,4 @@
-from app.db.models.carbon import EmissionCalculation, ProductionVolumeMapping
+from app.db.models.carbon import EmissionCalculation, EmissionTarget, ProductionVolumeMapping
 from app.db.models.config_tenancy import Category, DataPoint, Location, Tenant, User
 from app.db.models.mapping_template import MappingTemplate
 from app.db.models.output import (
@@ -40,4 +40,5 @@ __all__ = [
     "MappingTemplate",
     "EmissionCalculation",
     "ProductionVolumeMapping",
+    "EmissionTarget",
 ]

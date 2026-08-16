@@ -1,6 +1,7 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { CarbonApiService, CarbonOverview, CarbonOverviewSource, EmissionCalculationOut } from '../../../core/carbon-api.service';
 import { EntryHistoryComponent } from '../../data-entry/entry-history/entry-history.component';
 
@@ -25,7 +26,7 @@ const TREND_MONTHS = 6;
 @Component({
   selector: 'app-carbon-overview',
   standalone: true,
-  imports: [FormsModule, DecimalPipe, EntryHistoryComponent],
+  imports: [FormsModule, DecimalPipe, RouterLink, EntryHistoryComponent],
   templateUrl: './carbon-overview.component.html',
   styleUrl: './carbon-overview.component.css'
 })
@@ -177,6 +178,19 @@ export class CarbonOverviewComponent implements OnInit {
     if (pct <= 0) return 'green';
     if (pct <= 10) return 'amber';
     return 'red';
+  }
+
+  targetStatusClass(status: string): string {
+    switch (status) {
+      case 'On track':
+        return 'status-green';
+      case 'Watch':
+        return 'status-amber';
+      case 'Off track':
+        return 'status-red';
+      default:
+        return 'status-neutral';
+    }
   }
 
   completenessStatus(pct: number | null): 'green' | 'amber' | 'red' | 'neutral' {

@@ -17,7 +17,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.core.carbon_mapping import CarbonSourceMapping, get_carbon_mapping
-from app.db.models import DataPoint, EmissionCalculation, EmissionFactor, Entry, IpccReference
+from app.db.models import DataPoint, EmissionCalculation, EmissionFactor, Entry, IpccReference, ProductionVolumeMapping
 
 UNRESOLVED_REASONS = {
     "missing_factor": "No approved factor found for this substance/scope/period.",
@@ -360,3 +360,95 @@ def calculate_entries_batch(
             dp_cache[entry.data_point_id] = dp
         results.append((entry, build_calculation_row(db, entry, dp, tenant_id, calculated_by)))
     return results
+
+
+# ---- Period rollups (shared by the dashboard overview and target baselines) -
+
+
+def prior_month(d: date) -> date:
+    if d.month == 1:
+        return d.replace(year=d.year - 1, month=12)
+    return d.replace(month=d.month - 1)
+
+
+def compute_period_totals(db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, period: date) -> dict:
+    """Approved-calculation-snapshot totals for one reporting month --
+    scope 1/2 (location- and market-based), the combined location-based
+    figure, and production-based intensity when a mapping and approved
+    production entries exist. Never a live sum of raw entries (rule #10)."""
+    q = db.query(EmissionCalculation).filter(
+        EmissionCalculation.tenant_id == tenant_id,
+        EmissionCalculation.reporting_period == period,
+        EmissionCalculation.status == "calculated",
+    )
+    if location_id is not None:
+        q = q.filter(EmissionCalculation.location_id == location_id)
+    rows = q.all()
+
+    # An empty period (no calculated rows at all) must read as "no data",
+    # not a fabricated zero -- rule against invented numbers. A period with
+    # at least some calculated data legitimately sums a missing component
+    # as zero (e.g. Scope 1 approved, Scope 2 not yet), but a wholly empty
+    # period is a different state entirely and must stay None end to end.
+    has_any_data = len(rows) > 0
+    scope1 = sum((r.emissions_kgco2e for r in rows if r.scope == 1), Decimal("0"))
+    scope2_loc = sum(
+        (r.emissions_kgco2e for r in rows if r.scope == 2 and r.calculation_method == "location_based"), Decimal("0")
+    )
+    scope2_mkt = sum(
+        (r.emissions_kgco2e for r in rows if r.scope == 2 and r.calculation_method == "market_based"), Decimal("0")
+    )
+    has_scope2_mkt = any(r.scope == 2 and r.calculation_method == "market_based" for r in rows)
+    scope1_2_loc = scope1 + scope2_loc
+
+    prod_mapping_q = db.query(ProductionVolumeMapping).filter(
+        ProductionVolumeMapping.tenant_id == tenant_id, ProductionVolumeMapping.is_active.is_(True)
+    )
+    if location_id is not None:
+        prod_mapping_q = prod_mapping_q.filter(
+            (ProductionVolumeMapping.location_id == location_id) | (ProductionVolumeMapping.location_id.is_(None))
+        )
+    prod_mapping = prod_mapping_q.first()
+
+    production_value = None
+    production_unit = None
+    intensity = None
+    if prod_mapping is not None:
+        entry_q = db.query(Entry).filter(
+            Entry.data_point_id == prod_mapping.data_point_id, Entry.status == "Approved", Entry.period == period
+        )
+        if location_id is not None:
+            entry_q = entry_q.filter(Entry.location_id == location_id)
+        production_entries = entry_q.all()
+        if production_entries:
+            total_native = sum((to_decimal(e.value) for e in production_entries if e.value is not None), Decimal("0"))
+            production_value = float(total_native * to_decimal(prod_mapping.conversion_multiplier))
+            production_unit = prod_mapping.canonical_unit
+            if production_value and production_value > 0 and has_any_data:
+                intensity = float(scope1_2_loc / 1000) / production_value
+
+    unresolved_q = db.query(EmissionCalculation).filter(
+        EmissionCalculation.tenant_id == tenant_id,
+        EmissionCalculation.reporting_period == period,
+        EmissionCalculation.status == "unresolved",
+    )
+    if location_id is not None:
+        unresolved_q = unresolved_q.filter(EmissionCalculation.location_id == location_id)
+    unresolved_count = unresolved_q.count()
+    calculated_count = len(rows)
+    total_attempts = calculated_count + unresolved_count
+    completeness_pct = (calculated_count / total_attempts * 100) if total_attempts > 0 else None
+
+    return {
+        "rows": rows,
+        "scope1_tco2e": (float(scope1 / 1000) if has_any_data else None),
+        "scope2_loc_tco2e": (float(scope2_loc / 1000) if has_any_data else None),
+        "scope2_mkt_tco2e": (float(scope2_mkt / 1000) if has_scope2_mkt else None),
+        "scope1_2_loc_tco2e": (float(scope1_2_loc / 1000) if has_any_data else None),
+        "production_value": production_value,
+        "production_unit": production_unit,
+        "intensity": intensity,
+        "unresolved_count": unresolved_count,
+        "calculated_count": calculated_count,
+        "completeness_pct": completeness_pct,
+    }

@@ -1,0 +1,130 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <h1>Targets</h1>
+      <p class="subtitle">Declared reduction targets, locked to the approved data behind them at activation.</p>
+    </div>
+    <button type="button" class="primary-btn" (click)="openWizard()">+ New target</button>
+  </header>
+
+  @if (errorMessage()) {
+    <div class="banner error">{{ errorMessage() }}</div>
+  }
+  @if (successMessage()) {
+    <div class="banner success">{{ successMessage() }}</div>
+  }
+
+  <div class="tabs">
+    <button type="button" class="tab" [class.active]="activeTab() === 'active'" (click)="setTab('active')">
+      Active <span class="tab-count">{{ tabCounts().active }}</span>
+    </button>
+    <button type="button" class="tab" [class.active]="activeTab() === 'draft'" (click)="setTab('draft')">
+      Drafts <span class="tab-count">{{ tabCounts().draft }}</span>
+    </button>
+    <button type="button" class="tab" [class.active]="activeTab() === 'archived'" (click)="setTab('archived')">
+      Archived <span class="tab-count">{{ tabCounts().archived }}</span>
+    </button>
+  </div>
+
+  @if (loading()) {
+    <p class="muted">Loading targets…</p>
+  } @else if (visibleTargets().length === 0) {
+    <div class="empty-state">
+      <p>
+        @if (activeTab() === 'active') {
+          No active targets yet. Create one to start tracking actual vs. target.
+        } @else if (activeTab() === 'draft') {
+          No draft targets. Start the wizard to define a boundary, compute a baseline, and set a target.
+        } @else {
+          No archived targets.
+        }
+      </p>
+    </div>
+  } @else {
+    <div class="target-list">
+      @for (t of visibleTargets(); track t.id) {
+        <div class="target-card" [class.expanded]="expandedId() === t.id">
+          <button type="button" class="target-trigger" (click)="toggleExpand(t)">
+            <div class="target-top">
+              <div>
+                <span class="target-boundary">{{ boundaryLabel(t) }}</span>
+                <span class="target-location">{{ t.location_name ?? 'Org-wide' }}</span>
+              </div>
+              @if (t.status === 'active') {
+                <span class="status-pill" [class]="statusClass(t.current_status_label)">{{ t.current_status_label }}</span>
+              }
+            </div>
+            <div class="target-values">
+              @if (t.baseline_value !== null) {
+                <span>Baseline: <strong>{{ t.baseline_value | number: '1.2-4' }}</strong> {{ unit(t) }}</span>
+              }
+              @if (t.target_value !== null) {
+                <span>Target: <strong>{{ t.target_value | number: '1.2-4' }}</strong> {{ unit(t) }} by {{ t.target_period_end }}</span>
+              }
+            </div>
+            @if (t.rationale && t.status !== 'draft') {
+              <p class="target-rationale">{{ t.rationale }}</p>
+            }
+          </button>
+
+          <div class="target-actions">
+            @if (t.status === 'draft') {
+              @if (activatingId() === t.id) {
+                <input
+                  type="text"
+                  class="rationale-input"
+                  placeholder="Rationale for activating -- required"
+                  [ngModel]="activateRationale()"
+                  (ngModelChange)="activateRationale.set($event)"
+                />
+                <button type="button" class="link-btn" [disabled]="!activateRationale().trim()" (click)="confirmActivate(t)">Confirm activate</button>
+                <button type="button" class="link-btn muted-link" (click)="cancelActivate()">Cancel</button>
+              } @else {
+                <button type="button" class="link-btn" (click)="startActivate(t)">Activate</button>
+                <button type="button" class="link-btn danger-link" (click)="deleteTarget(t)">Delete draft</button>
+              }
+            }
+            @if (t.status === 'active') {
+              <button type="button" class="link-btn danger-link" (click)="archiveTarget(t)">Archive</button>
+            }
+          </div>
+
+          @if (expandedId() === t.id) {
+            <div class="performance-panel">
+              @if (performanceLoading()) {
+                <p class="muted">Loading monthly performance…</p>
+              } @else {
+                <table class="perf-table">
+                  <thead>
+                    <tr>
+                      <th>Month</th>
+                      <th>Actual</th>
+                      <th>Target</th>
+                      <th>Variance</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (m of performanceMonths(); track m.period) {
+                      <tr>
+                        <td>{{ m.period }}</td>
+                        <td>{{ m.actual !== null ? (m.actual | number: '1.2-4') : '—' }}</td>
+                        <td>{{ m.target !== null ? (m.target | number: '1.2-4') : '—' }}</td>
+                        <td>{{ m.variance_pct !== null ? (m.variance_pct | number: '1.0-1') + '%' : '—' }}</td>
+                        <td><span class="status-pill" [class]="statusClass(m.status)">{{ m.status }}</span></td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  @if (showWizard()) {
+    <app-target-wizard (closed)="closeWizard()" (saved)="onWizardSaved()"></app-target-wizard>
+  }
+</div>

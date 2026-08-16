@@ -10,6 +10,7 @@ from app.api.routes import (
     dashboard,
     entries,
     health,
+    targets,
 )
 from app.core.config import get_settings
 
@@ -33,3 +34,4 @@ app.include_router(entries.router)
 app.include_router(admin_mapping_templates.router)
 app.include_router(admin_emission_factors.router)
 app.include_router(carbon.router)
+app.include_router(targets.router)

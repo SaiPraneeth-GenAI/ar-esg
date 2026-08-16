@@ -76,6 +76,12 @@ class CarbonOverviewSource(BaseModel):
     entry_count: int
 
 
+class TargetComparison(BaseModel):
+    target_id: uuid.UUID
+    target_value: float
+    status: str  # On track | Watch | Off track | Not enough data
+
+
 class CarbonOverview(BaseModel):
     period: date | None
     scope1_tco2e: float | None
@@ -92,3 +98,5 @@ class CarbonOverview(BaseModel):
     completeness_pct: float | None
     sources: list[CarbonOverviewSource]
     insight: str | None
+    scope1_2_target: TargetComparison | None = None
+    intensity_target: TargetComparison | None = None
