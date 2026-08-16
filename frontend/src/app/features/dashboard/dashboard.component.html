@@ -1,92 +1,60 @@
 <div class="page">
-  <header>
-    <h1>Dashboard</h1>
-    <p class="subtitle">Your ESG data, at a glance</p>
+  <header class="dash-header">
+    <div class="header-top">
+      <div class="title-block">
+        <h1>Amara Raja ESG Dashboard</h1>
+        <p class="subtitle">Showing {{ formatMonth() }}</p>
+      </div>
+
+      <div class="header-controls">
+        <label class="control">
+          <span class="control-label">Period</span>
+          <input
+            type="month"
+            [ngModel]="period()"
+            (ngModelChange)="period.set($event)"
+          />
+        </label>
+
+        <label class="control">
+          <span class="control-label">Site</span>
+          <select [ngModel]="locationId()" (ngModelChange)="locationId.set($event); onFiltersChange()">
+            <option value="">Company-wide</option>
+            @for (loc of locations(); track loc.id) {
+              <option [value]="loc.id">{{ loc.name }}</option>
+            }
+          </select>
+        </label>
+
+        <a class="status-badge" [class.has-issues]="unresolvedCount() > 0" routerLink="/admin/data-entry">
+          <span class="status-dot"></span>
+          {{ unresolvedCount() }} unresolved {{ unresolvedCount() === 1 ? 'entry' : 'entries' }}
+        </a>
+      </div>
+    </div>
+
+    <nav class="tabs">
+      <button type="button" class="tab" [class.active]="activeTab() === 'absolute'" (click)="setTab('absolute')">Absolute Metrics</button>
+      <button type="button" class="tab" [class.active]="activeTab() === 'production'" (click)="setTab('production')">Intensity by Production</button>
+      <button type="button" class="tab" [class.active]="activeTab() === 'revenue'" (click)="setTab('revenue')">Intensity by Revenue</button>
+      <button type="button" class="tab" [class.active]="activeTab() === 'safety'" (click)="setTab('safety')">Safety &amp; Trends</button>
+    </nav>
   </header>
 
-  <app-carbon-overview></app-carbon-overview>
-
-  @if (!loading() && cards().length === 0) {
-    <div class="empty-state">
-      <div class="empty-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 3v18h18" />
-          <path d="M7 15l3-3 3 3 5-6" />
-        </svg>
-      </div>
-      <h2>Nothing to show yet</h2>
-      <p>Once data starts flowing in, your rollups, trends, and reports will show up right here.</p>
-    </div>
-  } @else if (!loading()) {
-    <p class="period-label">Showing {{ formatMonth(period()) }}</p>
-
-    @for (group of groups(); track group.category) {
-      <section class="metric-group">
-        <h2 class="group-title">{{ group.category }}</h2>
-        <div class="card-grid">
-          @for (card of group.cards; track cardKey(card)) {
-            <div class="metric-card" [class.expanded]="expandedKey() === cardKey(card)">
-              <button type="button" class="card-trigger" (click)="toggleCard(card)">
-                <div class="card-top">
-                  <span class="card-label">{{ card.label }}</span>
-                  <span class="status-dot" [class]="'status-' + card.status"></span>
-                </div>
-                <div class="card-value">
-                  {{ card.value }}<span class="card-unit">{{ card.unit }}</span>
-                </div>
-                <div class="card-comparison" [class]="'comparison-' + card.status">{{ card.comparison_label }}</div>
-              </button>
-
-              @if (expandedKey() === cardKey(card)) {
-                <div class="drilldown">
-                  @if (drilldownLoading()) {
-                    <p class="drilldown-loading">Loading detail…</p>
-                  } @else if (drilldown()) {
-                    <div class="drilldown-section">
-                      <h3>{{ group.category }} entries — {{ formatMonth(drilldown()!.period) }}</h3>
-                      <table class="drilldown-table">
-                        <thead>
-                          <tr>
-                            <th>Location</th>
-                            <th>Data point</th>
-                            <th>Value</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          @for (e of drilldown()!.entries; track e.location_name + e.data_point_name) {
-                            <tr>
-                              <td>{{ e.location_name }}</td>
-                              <td>{{ e.data_point_name }}</td>
-                              <td>{{ e.value }} {{ e.unit }}</td>
-                            </tr>
-                          }
-                        </tbody>
-                      </table>
-                    </div>
-
-                    @if (card.metric_type === 'intensity' && drilldown()!.production_entries.length) {
-                      <div class="drilldown-section">
-                        <h3>Production (intensity denominator)</h3>
-                        <table class="drilldown-table">
-                          <tbody>
-                            @for (e of drilldown()!.production_entries; track e.location_name + e.data_point_name) {
-                              <tr>
-                                <td>{{ e.location_name }}</td>
-                                <td>{{ e.data_point_name }}</td>
-                                <td>{{ e.value }} {{ e.unit }}</td>
-                              </tr>
-                            }
-                          </tbody>
-                        </table>
-                      </div>
-                    }
-                  }
-                </div>
-              }
-            </div>
-          }
-        </div>
-      </section>
+  <div class="tab-content">
+    @switch (activeTab()) {
+      @case ('absolute') {
+        <app-absolute-metrics-view [period]="period()" [locationId]="effectiveLocationId()"></app-absolute-metrics-view>
+      }
+      @case ('production') {
+        <app-intensity-view mode="production" [period]="period()" [locationId]="effectiveLocationId()"></app-intensity-view>
+      }
+      @case ('revenue') {
+        <app-intensity-view mode="revenue" [period]="period()" [locationId]="effectiveLocationId()"></app-intensity-view>
+      }
+      @case ('safety') {
+        <app-safety-view [period]="period()" [locationId]="effectiveLocationId()"></app-safety-view>
+      }
     }
-  }
+  </div>
 </div>

@@ -1,0 +1,63 @@
+<div class="intensity-view">
+  @if (errorMessage()) {
+    <div class="banner error">{{ errorMessage() }}</div>
+  }
+
+  <div class="denominator-card">
+    <span class="denominator-label">{{ denominatorLabel() }} this month</span>
+    @if (denominatorValue() !== null) {
+      <span class="denominator-value">{{ denominatorValue() | number: '1.1-2' }} <span class="denominator-unit">{{ denominatorUnit() }}</span></span>
+    } @else {
+      <span class="denominator-empty">
+        Not yet entered -- {{ mode === 'production' ? 'production volume' : 'revenue' }} intensity is unavailable until an approved entry exists for this month.
+      </span>
+    }
+  </div>
+
+  @if (loading()) {
+    <div class="skeleton-cards">
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+    </div>
+  } @else {
+    <div class="metric-cards">
+      @for (m of metrics(); track m.label) {
+        <div class="metric-card">
+          <div class="card-top">
+            <span class="card-label">{{ m.label }}</span>
+            <span class="status-dot" [class]="'status-' + comparisonStatus(m.current, m.prior)"></span>
+          </div>
+          @if (m.current !== null) {
+            <div class="card-value">{{ m.current | number: '1.2-4' }}<span class="card-unit">{{ m.unit }}</span></div>
+            <div class="card-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.prior)">
+              {{ comparisonLabel(m.current, m.prior) }}
+            </div>
+          } @else {
+            <div class="card-empty">Data required</div>
+          }
+        </div>
+      }
+    </div>
+
+    <div class="trend-chart">
+      <h3>GHG intensity -- last {{ trendPoints().length }} months</h3>
+      @if (trendLoading()) {
+        <p class="muted">Loading…</p>
+      } @else {
+        <div class="bar-chart">
+          @for (point of trendPoints(); track point.period) {
+            <div class="bar-column">
+              <span class="bar-value">{{ point.ghg !== null ? (point.ghg | number: '1.2-3') : '—' }}</span>
+              <div class="bar-track">
+                <div class="bar" [style.height.%]="barHeightPct(point.ghg)" [class.bar-empty]="point.ghg === null"></div>
+              </div>
+              <span class="bar-label">{{ point.label }}</span>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

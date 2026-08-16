@@ -1,0 +1,38 @@
+<div class="absolute-view">
+  <app-carbon-overview [period]="period" [locationId]="locationId"></app-carbon-overview>
+
+  <section class="totals-section">
+    <h2 class="totals-title">Other absolute totals</h2>
+
+    @if (errorMessage()) {
+      <div class="banner error">{{ errorMessage() }}</div>
+    }
+
+    @if (loading()) {
+      <div class="skeleton-cards">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+    } @else {
+      <div class="metric-cards">
+        @for (m of metrics(); track m.label) {
+          <div class="metric-card">
+            <div class="card-top">
+              <span class="card-label">{{ m.label }}</span>
+              <span class="status-dot" [class]="'status-' + comparisonStatus(m)"></span>
+            </div>
+            @if (m.current !== null) {
+              <div class="card-value">{{ m.current | number: '1.0-1' }}<span class="card-unit">{{ m.unit }}</span></div>
+              <div class="card-comparison" [class]="'comparison-' + comparisonStatus(m)">{{ comparisonLabel(m) }}</div>
+            } @else {
+              <div class="card-empty">Not yet entered</div>
+            }
+          </div>
+        }
+      </div>
+    }
+  </section>
+</div>

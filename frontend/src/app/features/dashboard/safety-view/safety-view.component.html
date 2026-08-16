@@ -1,0 +1,37 @@
+<div class="safety-view">
+  <p class="section-note">
+    Safety metrics are entered directly, not calculated from activity data -- LTIFR is computed by HR before it reaches this
+    platform.
+  </p>
+
+  @if (errorMessage()) {
+    <div class="banner error">{{ errorMessage() }}</div>
+  }
+
+  @if (loading()) {
+    <div class="skeleton-cards">
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+    </div>
+  } @else {
+    <div class="metric-cards">
+      @for (m of metrics(); track m.name) {
+        <div class="metric-card">
+          <div class="card-top">
+            <span class="card-label">{{ m.name }}</span>
+            <span class="status-dot" [class]="'status-' + comparisonStatus(m)"></span>
+          </div>
+          @if (m.value !== null) {
+            <div class="card-value">{{ m.value | number: '1.0-2' }}<span class="card-unit">{{ m.unit }}</span></div>
+            <div class="card-comparison" [class]="'comparison-' + comparisonStatus(m)">{{ comparisonLabel(m) }}</div>
+          } @else {
+            <div class="card-empty">Not yet entered</div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

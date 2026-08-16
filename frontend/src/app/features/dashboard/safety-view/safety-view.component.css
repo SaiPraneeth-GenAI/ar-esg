@@ -1,0 +1,137 @@
+.safety-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.section-note {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #98a2b3;
+}
+
+.banner {
+  border-radius: 8px;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.85rem;
+}
+
+.banner.error {
+  background: #fef3f2;
+  color: #b42318;
+  border: 1px solid #fecdca;
+}
+
+.skeleton-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.9rem;
+}
+
+.skeleton-card {
+  height: 110px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #f2f4f7 25%, #eaecf0 37%, #f2f4f7 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+.metric-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.9rem;
+}
+
+.metric-card {
+  background: #fff;
+  border: 1px solid #eaecf0;
+  border-radius: 12px;
+  padding: 1.1rem 1.2rem;
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.card-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475467;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.status-green {
+  background: #12b76a;
+}
+
+.status-dot.status-amber {
+  background: #f79009;
+}
+
+.status-dot.status-red {
+  background: #f04438;
+}
+
+.status-dot.status-neutral {
+  background: #98a2b3;
+}
+
+.card-value {
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: #101828;
+  line-height: 1.1;
+  margin-bottom: 0.4rem;
+}
+
+.card-unit {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #667085;
+  margin-left: 0.3rem;
+}
+
+.card-comparison {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.comparison-green {
+  color: #027a48;
+}
+
+.comparison-amber {
+  color: #b54708;
+}
+
+.comparison-red {
+  color: #b42318;
+}
+
+.comparison-neutral {
+  color: #667085;
+}
+
+.card-empty {
+  font-size: 0.8rem;
+  color: #98a2b3;
+  font-style: italic;
+}

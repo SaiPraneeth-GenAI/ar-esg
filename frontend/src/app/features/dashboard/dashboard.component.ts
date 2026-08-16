@@ -1,79 +1,64 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { ApiService, DashboardCard, DrilldownResponse } from '../../core/api.service';
-import { CarbonOverviewComponent } from './carbon-overview/carbon-overview.component';
+import { Component, OnInit, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
+import { AdminLocation, ApiService } from '../../core/api.service';
+import { CarbonApiService } from '../../core/carbon-api.service';
+import { AbsoluteMetricsViewComponent } from './absolute-metrics-view/absolute-metrics-view.component';
+import { IntensityViewComponent } from './intensity-view/intensity-view.component';
+import { SafetyViewComponent } from './safety-view/safety-view.component';
 
-interface CardGroup {
-  category: string;
-  cards: DashboardCard[];
+type TabId = 'absolute' | 'production' | 'revenue' | 'safety';
+
+function currentMonthValue(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CarbonOverviewComponent],
+  imports: [FormsModule, RouterLink, AbsoluteMetricsViewComponent, IntensityViewComponent, SafetyViewComponent],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.css'
 })
 export class DashboardComponent implements OnInit {
   private api = inject(ApiService);
+  private carbonApi = inject(CarbonApiService);
 
-  loading = signal(true);
-  cards = signal<DashboardCard[]>([]);
-  period = signal<string | null>(null);
-
-  expandedKey = signal<string | null>(null);
-  drilldown = signal<DrilldownResponse | null>(null);
-  drilldownLoading = signal(false);
-
-  groups = computed<CardGroup[]>(() => {
-    const map = new Map<string, DashboardCard[]>();
-    for (const card of this.cards()) {
-      if (!map.has(card.category)) {
-        map.set(card.category, []);
-      }
-      map.get(card.category)!.push(card);
-    }
-    return Array.from(map.entries()).map(([category, cards]) => ({ category, cards }));
-  });
+  period = signal(currentMonthValue());
+  locationId = signal<string>(''); // '' = company-wide
+  activeTab = signal<TabId>('absolute');
+  locations = signal<AdminLocation[]>([]);
+  unresolvedCount = signal(0);
 
   async ngOnInit(): Promise<void> {
-    this.loading.set(true);
+    this.locations.set(await this.api.listLocations());
+    await this.refreshUnresolvedBadge();
+  }
+
+  async refreshUnresolvedBadge(): Promise<void> {
     try {
-      const summary = await this.api.getDashboardSummary();
-      this.cards.set(summary.cards);
-      this.period.set(summary.period);
-    } finally {
-      this.loading.set(false);
+      const items = await this.carbonApi.getUnresolved(this.locationId() || undefined);
+      this.unresolvedCount.set(items.length);
+    } catch {
+      // Non-critical badge -- a failed fetch shouldn't block the rest of the dashboard.
     }
   }
 
-  cardKey(card: DashboardCard): string {
-    return `${card.category}:${card.metric_type}`;
+  setTab(tab: TabId): void {
+    this.activeTab.set(tab);
   }
 
-  async toggleCard(card: DashboardCard): Promise<void> {
-    const key = this.cardKey(card);
-    if (this.expandedKey() === key) {
-      this.expandedKey.set(null);
-      this.drilldown.set(null);
-      return;
-    }
-
-    this.expandedKey.set(key);
-    this.drilldown.set(null);
-    this.drilldownLoading.set(true);
-    try {
-      this.drilldown.set(await this.api.getDashboardDrilldown(card.category, card.period, card.metric_type));
-    } finally {
-      this.drilldownLoading.set(false);
-    }
+  onFiltersChange(): void {
+    void this.refreshUnresolvedBadge();
   }
 
-  formatMonth(period: string | null): string {
-    if (!period) {
-      return '';
-    }
-    const parsed = new Date(`${period}T00:00:00`);
-    return parsed.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  formatMonth(): string {
+    const d = new Date(`${this.period()}-01T00:00:00`);
+    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
+
+  effectiveLocationId(): string | null {
+    return this.locationId() || null;
   }
 }

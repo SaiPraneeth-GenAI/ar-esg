@@ -4,10 +4,6 @@
       <h2 class="carbon-title">Carbon footprint</h2>
       <p class="carbon-subtitle">From approved entries and their versioned emission factor -- calculation snapshots only, never a live sum.</p>
     </div>
-    <label class="month-picker">
-      <span>Period</span>
-      <input type="month" [ngModel]="monthValue()" (ngModelChange)="monthValue.set($event); onMonthChange()" />
-    </label>
   </div>
 
   @if (errorMessage()) {

@@ -1,14 +1,8 @@
 import { DecimalPipe } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { Component, Input, OnChanges, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CarbonApiService, CarbonOverview, CarbonOverviewSource, EmissionCalculationOut } from '../../../core/carbon-api.service';
 import { EntryHistoryComponent } from '../../data-entry/entry-history/entry-history.component';
-
-function currentMonthValue(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-}
 
 function sourceKey(s: CarbonOverviewSource): string {
   return `${s.data_point_name}:${s.scope}:${s.calculation_method ?? ''}`;
@@ -26,14 +20,16 @@ const TREND_MONTHS = 6;
 @Component({
   selector: 'app-carbon-overview',
   standalone: true,
-  imports: [FormsModule, DecimalPipe, RouterLink, EntryHistoryComponent],
+  imports: [DecimalPipe, RouterLink, EntryHistoryComponent],
   templateUrl: './carbon-overview.component.html',
   styleUrl: './carbon-overview.component.css'
 })
-export class CarbonOverviewComponent implements OnInit {
+export class CarbonOverviewComponent implements OnChanges {
   private api = inject(CarbonApiService);
 
-  monthValue = signal(currentMonthValue());
+  @Input({ required: true }) period!: string;
+  @Input() locationId: string | null = null;
+
   loading = signal(true);
   errorMessage = signal('');
   overview = signal<CarbonOverview | null>(null);
@@ -52,12 +48,12 @@ export class CarbonOverviewComponent implements OnInit {
 
   sourceKey = sourceKey;
 
-  async ngOnInit(): Promise<void> {
+  async ngOnChanges(): Promise<void> {
     await Promise.all([this.load(), this.loadTrend()]);
   }
 
   private periodIso(): string {
-    return `${this.monthValue()}-01`;
+    return `${this.period}-01`;
   }
 
   async load(): Promise<void> {
@@ -66,7 +62,7 @@ export class CarbonOverviewComponent implements OnInit {
     this.expandedSourceKey.set(null);
     this.showUnresolved.set(false);
     try {
-      this.overview.set(await this.api.getOverview(this.periodIso()));
+      this.overview.set(await this.api.getOverview(this.periodIso(), this.locationId ?? undefined));
     } catch {
       this.errorMessage.set('Could not load the carbon overview.');
     } finally {
@@ -74,12 +70,8 @@ export class CarbonOverviewComponent implements OnInit {
     }
   }
 
-  async onMonthChange(): Promise<void> {
-    await Promise.all([this.load(), this.loadTrend()]);
-  }
-
   private trendMonths(): { period: string; label: string }[] {
-    const [year, month] = this.monthValue().split('-').map(Number);
+    const [year, month] = this.period.split('-').map(Number);
     const months: { period: string; label: string }[] = [];
     for (let i = TREND_MONTHS - 1; i >= 0; i--) {
       const d = new Date(year, month - 1 - i, 1);
@@ -94,7 +86,9 @@ export class CarbonOverviewComponent implements OnInit {
     this.trendLoading.set(true);
     try {
       const months = this.trendMonths();
-      const overviews = await Promise.all(months.map((m) => this.api.getOverview(m.period).catch(() => null)));
+      const overviews = await Promise.all(
+        months.map((m) => this.api.getOverview(m.period, this.locationId ?? undefined).catch(() => null))
+      );
       this.trendPoints.set(
         months.map((m, i) => ({
           period: m.period,
@@ -136,7 +130,8 @@ export class CarbonOverviewComponent implements OnInit {
         await this.api.getCalculations(this.periodIso(), {
           scope: source.scope,
           calculationMethod: source.calculation_method ?? undefined,
-          dataPointName: source.data_point_name
+          dataPointName: source.data_point_name,
+          locationId: this.locationId ?? undefined
         })
       );
     } finally {
@@ -154,7 +149,7 @@ export class CarbonOverviewComponent implements OnInit {
     if (!this.showUnresolved()) return;
     this.unresolvedLoading.set(true);
     try {
-      this.unresolvedItems.set(await this.api.getUnresolved());
+      this.unresolvedItems.set(await this.api.getUnresolved(this.locationId ?? undefined));
     } finally {
       this.unresolvedLoading.set(false);
     }
