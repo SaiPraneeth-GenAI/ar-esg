@@ -5,7 +5,7 @@ import { environment } from '../../environments/environment';
 import { SupabaseService } from './supabase.service';
 
 export type TargetScope = '1' | '2' | '1_2_combined';
-export type TargetMetricType = 'absolute_tco2e' | 'intensity_tco2e_per_mnah';
+export type TargetMetricType = 'absolute_tco2e' | 'intensity_tco2e_per_mnah' | 'intensity_tco2e_per_revenue';
 export type TargetStatus = 'draft' | 'active' | 'archived';
 
 export interface MonthlyPhaseEntry {
@@ -154,6 +154,11 @@ export class TargetApiService {
   async archive(id: string): Promise<TargetOut> {
     const headers = await this.authHeaders();
     return firstValueFrom(this.http.post<TargetOut>(`${environment.apiBaseUrl}/targets/${id}/archive`, {}, { headers }));
+  }
+
+  async restore(id: string): Promise<TargetOut> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(this.http.post<TargetOut>(`${environment.apiBaseUrl}/targets/${id}/restore`, {}, { headers }));
   }
 
   async performance(id: string): Promise<TargetPerformanceResponse> {

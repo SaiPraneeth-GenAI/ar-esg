@@ -12,9 +12,9 @@
   </header>
 
   <div class="steps">
-    <span class="step-dot" [class.active]="step() === 1" [class.done]="step() > 1">1. Boundary &amp; metric</span>
+    <span class="step-dot" [class.active]="step() === 1" [class.done]="step() > 1">1. Pick a target</span>
     <span class="step-dot" [class.active]="step() === 2" [class.done]="step() > 2">2. Baseline</span>
-    <span class="step-dot" [class.active]="step() === 3">3. Target &amp; approval</span>
+    <span class="step-dot" [class.active]="step() === 3">3. Confirm</span>
   </div>
 
   <div class="panel-body">
@@ -23,7 +23,7 @@
     }
 
     @if (step() === 1) {
-      <p class="panel-hint">Start from the recommended structure, or set your own boundary.</p>
+      <p class="panel-hint">Pick the target you want to track. Each one computes its baseline automatically.</p>
       <div class="preset-list">
         @for (preset of presets; track preset.label) {
           <button type="button" class="preset-btn" (click)="applyPreset(preset)">
@@ -33,64 +33,62 @@
         }
       </div>
 
-      <label class="field">
-        <span class="field-label">Location</span>
-        <select [ngModel]="locationId()" (ngModelChange)="locationId.set($event)">
-          <option value="">Org-wide (all locations)</option>
-          @for (loc of locations(); track loc.id) {
-            <option [value]="loc.id">{{ loc.name }}</option>
-          }
-        </select>
-      </label>
+      <button type="button" class="link-btn" (click)="customizeBoundary.set(!customizeBoundary())">
+        {{ customizeBoundary() ? 'Hide custom boundary' : 'Need something different? Set a custom boundary' }}
+      </button>
 
-      <label class="field">
-        <span class="field-label">Scope boundary</span>
-        <select [ngModel]="scope()" (ngModelChange)="onScopeChange($event)">
-          <option value="1_2_combined">Scope 1+2 combined</option>
-          <option value="1">Scope 1 only</option>
-          <option value="2">Scope 2 only</option>
-        </select>
-      </label>
-
-      @if (scope() !== '1') {
+      @if (customizeBoundary()) {
         <label class="field">
-          <span class="field-label">Calculation method</span>
-          <select [ngModel]="calculationMethod()" (ngModelChange)="calculationMethod.set($event)">
-            <option value="location_based">Location-based</option>
-            <option value="market_based">Market-based</option>
+          <span class="field-label">Location</span>
+          <select [ngModel]="locationId()" (ngModelChange)="locationId.set($event)">
+            <option value="">Org-wide (all locations)</option>
+            @for (loc of locations(); track loc.id) {
+              <option [value]="loc.id">{{ loc.name }}</option>
+            }
           </select>
         </label>
-      }
 
-      <label class="field">
-        <span class="field-label">Metric type</span>
-        <select [ngModel]="metricType()" (ngModelChange)="metricType.set($event)">
-          <option value="absolute_tco2e">Absolute (tCO2e)</option>
-          <option value="intensity_tco2e_per_mnah" [disabled]="intensityDisabled()">Intensity (tCO2e/MnAh)</option>
-        </select>
-        @if (intensityDisabled()) {
-          <span class="field-hint">Intensity is only available for the Scope 1+2 combined boundary.</span>
+        <label class="field">
+          <span class="field-label">Scope boundary</span>
+          <select [ngModel]="scope()" (ngModelChange)="onScopeChange($event)">
+            <option value="1_2_combined">Scope 1+2 combined</option>
+            <option value="1">Scope 1 only</option>
+            <option value="2">Scope 2 only</option>
+          </select>
+        </label>
+
+        @if (scope() !== '1') {
+          <label class="field">
+            <span class="field-label">Calculation method</span>
+            <select [ngModel]="calculationMethod()" (ngModelChange)="calculationMethod.set($event)">
+              <option value="location_based">Location-based</option>
+              <option value="market_based">Market-based</option>
+            </select>
+          </label>
         }
-      </label>
 
-      <div class="panel-actions">
-        <button type="button" class="primary-btn" (click)="goToStep2()">Next: Baseline →</button>
-      </div>
+        <label class="field">
+          <span class="field-label">Metric type</span>
+          <select [ngModel]="metricType()" (ngModelChange)="metricType.set($event)">
+            <option value="absolute_tco2e">Absolute (tCO2e)</option>
+            <option value="intensity_tco2e_per_mnah" [disabled]="intensityDisabled()">Intensity by production (tCO2e/MnAh)</option>
+            <option value="intensity_tco2e_per_revenue" [disabled]="intensityDisabled()">Intensity by revenue (tCO2e/Cr)</option>
+          </select>
+          @if (intensityDisabled()) {
+            <span class="field-hint">Intensity is only available for the Scope 1+2 combined boundary.</span>
+          }
+        </label>
+
+        <div class="panel-actions">
+          <button type="button" class="primary-btn" (click)="goToStep2()">Next: Baseline →</button>
+        </div>
+      }
     }
 
     @if (step() === 2) {
-      <p class="panel-hint">Defaults to the latest 12 consecutive months. Adjust if needed, then preview.</p>
-      <div class="field-row">
-        <label class="field">
-          <span class="field-label">Baseline start</span>
-          <input type="month" [ngModel]="baselineStart()" (ngModelChange)="baselineStart.set($event)" />
-        </label>
-        <label class="field">
-          <span class="field-label">Baseline end</span>
-          <input type="month" [ngModel]="baselineEnd()" (ngModelChange)="baselineEnd.set($event)" />
-        </label>
-      </div>
-      <button type="button" class="link-btn" (click)="refreshBaseline()">Recompute baseline</button>
+      @if (selectedPresetLabel()) {
+        <p class="panel-hint">{{ selectedPresetLabel() }} -- baseline is the latest 12 fully-approved months.</p>
+      }
 
       @if (baselineLoading()) {
         <p class="muted">Computing baseline…</p>
@@ -99,7 +97,7 @@
           @if (baselinePreview()!.baseline_value !== null) {
             <div class="baseline-value">
               {{ baselinePreview()!.baseline_value | number: '1.2-4' }}
-              <span class="baseline-unit">{{ metricType() === 'intensity_tco2e_per_mnah' ? 'tCO2e/MnAh' : 'tCO2e' }}</span>
+              <span class="baseline-unit">{{ metricUnit() }}</span>
             </div>
           }
           <p class="baseline-message">{{ baselinePreview()!.message }}</p>
@@ -108,104 +106,128 @@
           }
         </div>
 
-        <table class="month-table">
-          <thead>
-            <tr>
-              <th>Month</th>
-              <th>Value</th>
-              <th>Completeness</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (m of baselinePreview()!.months; track m.period) {
+        <button type="button" class="link-btn" (click)="showBaselineMonths.set(!showBaselineMonths())">
+          {{ showBaselineMonths() ? 'Hide month-by-month' : 'Show month-by-month' }}
+        </button>
+
+        @if (showBaselineMonths()) {
+          <div class="field-row">
+            <label class="field">
+              <span class="field-label">Baseline start</span>
+              <input type="month" [ngModel]="baselineStart()" (ngModelChange)="baselineStart.set($event)" />
+            </label>
+            <label class="field">
+              <span class="field-label">Baseline end</span>
+              <input type="month" [ngModel]="baselineEnd()" (ngModelChange)="baselineEnd.set($event)" />
+            </label>
+          </div>
+          <button type="button" class="link-btn" (click)="refreshBaseline()">Recompute baseline</button>
+
+          <table class="month-table">
+            <thead>
               <tr>
-                <td>{{ m.period }}</td>
-                <td>{{ m.value !== null ? (m.value | number: '1.2-4') : '—' }}</td>
-                <td>{{ m.completeness_pct !== null ? (m.completeness_pct | number: '1.0-0') + '%' : '—' }}</td>
+                <th>Month</th>
+                <th>Value</th>
+                <th>Completeness</th>
               </tr>
-            }
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              @for (m of baselinePreview()!.months; track m.period) {
+                <tr>
+                  <td>{{ m.period }}</td>
+                  <td>{{ m.value !== null ? (m.value | number: '1.2-4') : '—' }}</td>
+                  <td>{{ m.completeness_pct !== null ? (m.completeness_pct | number: '1.0-0') + '%' : '—' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
       }
 
       <div class="panel-actions split">
         <button type="button" class="secondary-btn" (click)="backToStep(1)">← Back</button>
-        <button type="button" class="primary-btn" [disabled]="!baselinePreview()?.ready" (click)="goToStep3()">Next: Target →</button>
+        <button type="button" class="primary-btn" [disabled]="!baselinePreview()?.ready" (click)="goToStep3()">Next: Set target →</button>
       </div>
     }
 
     @if (step() === 3) {
-      <div class="field-row">
-        <label class="field">
-          <span class="field-label">Target period start</span>
-          <input type="month" [ngModel]="targetStart()" (ngModelChange)="targetStart.set($event); regeneratePhasing()" />
-        </label>
-        <label class="field">
-          <span class="field-label">Target period end</span>
-          <input type="month" [ngModel]="targetEnd()" (ngModelChange)="targetEnd.set($event); regeneratePhasing()" />
-        </label>
-      </div>
-
       <label class="field">
         <span class="field-label">Reduction vs. baseline (%)</span>
         <input type="number" min="0" max="100" step="0.1" [ngModel]="reductionPercentage()" (ngModelChange)="reductionPercentage.set($event); targetValueOverride.set(null); regeneratePhasing()" />
       </label>
 
-      <label class="field">
-        <span class="field-label">Or set target value directly</span>
-        <input type="number" step="any" [ngModel]="targetValueOverride()" (ngModelChange)="targetValueOverride.set($event); regeneratePhasing()" placeholder="Overrides the reduction % above" />
-      </label>
-
       @if (computedTargetValue() !== null) {
         <div class="computed-target">
-          Annual target: <strong>{{ computedTargetValue() | number: '1.2-4' }} {{ metricType() === 'intensity_tco2e_per_mnah' ? 'tCO2e/MnAh' : 'tCO2e' }}</strong>
+          Annual target: <strong>{{ computedTargetValue() | number: '1.2-4' }} {{ metricUnit() }}</strong>
         </div>
       }
 
-      <label class="active-toggle">
-        <input type="checkbox" [ngModel]="phaseMonthly()" (ngModelChange)="togglePhasing()" />
-        <span>Phase this target month by month</span>
-      </label>
-
-      @if (phaseMonthly()) {
-        <table class="month-table">
-          <thead>
-            <tr>
-              <th>Month</th>
-              <th>Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (m of phasedMonths(); track m.period; let i = $index) {
-              <tr>
-                <td>{{ m.period }}</td>
-                <td>
-                  <input type="number" step="any" class="phase-input" [ngModel]="m.value" (ngModelChange)="updatePhaseValue(i, $event)" />
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
-        <p class="phase-total" [class.mismatch]="phasedMismatch()">
-          Sum: {{ phasedTotal() | number: '1.2-4' }} / {{ computedTargetValue() | number: '1.2-4' }}
-          @if (phasedMismatch()) { -- doesn't match the annual target yet }
-        </p>
-      }
-
-      <label class="field">
-        <span class="field-label">Owner</span>
-        <select [ngModel]="ownerId()" (ngModelChange)="ownerId.set($event)">
-          <option value="">Unassigned</option>
-          @for (u of users(); track u.id) {
-            <option [value]="u.id">{{ u.email }}</option>
-          }
-        </select>
-      </label>
-
       <label class="field">
         <span class="field-label">Rationale <span class="required">*</span></span>
-        <textarea rows="3" [ngModel]="rationale()" (ngModelChange)="rationale.set($event)" placeholder="Why this reduction percentage / target value -- required to activate"></textarea>
+        <textarea rows="3" [ngModel]="rationale()" (ngModelChange)="rationale.set($event)" placeholder="Why this reduction percentage -- required to activate"></textarea>
       </label>
+
+      <button type="button" class="link-btn" (click)="showAdvanced.set(!showAdvanced())">
+        {{ showAdvanced() ? 'Hide advanced options' : 'Advanced: target period, monthly phasing, owner, exact value' }}
+      </button>
+
+      @if (showAdvanced()) {
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Target period start</span>
+            <input type="month" [ngModel]="targetStart()" (ngModelChange)="targetStart.set($event); regeneratePhasing()" />
+          </label>
+          <label class="field">
+            <span class="field-label">Target period end</span>
+            <input type="month" [ngModel]="targetEnd()" (ngModelChange)="targetEnd.set($event); regeneratePhasing()" />
+          </label>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Or set target value directly</span>
+          <input type="number" step="any" [ngModel]="targetValueOverride()" (ngModelChange)="targetValueOverride.set($event); regeneratePhasing()" placeholder="Overrides the reduction % above" />
+        </label>
+
+        <label class="active-toggle">
+          <input type="checkbox" [ngModel]="phaseMonthly()" (ngModelChange)="togglePhasing()" />
+          <span>Phase this target month by month</span>
+        </label>
+
+        @if (phaseMonthly()) {
+          <table class="month-table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (m of phasedMonths(); track m.period; let i = $index) {
+                <tr>
+                  <td>{{ m.period }}</td>
+                  <td>
+                    <input type="number" step="any" class="phase-input" [ngModel]="m.value" (ngModelChange)="updatePhaseValue(i, $event)" />
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+          <p class="phase-total" [class.mismatch]="phasedMismatch()">
+            Sum: {{ phasedTotal() | number: '1.2-4' }} / {{ computedTargetValue() | number: '1.2-4' }}
+            @if (phasedMismatch()) { -- doesn't match the annual target yet }
+          </p>
+        }
+
+        <label class="field">
+          <span class="field-label">Owner</span>
+          <select [ngModel]="ownerId()" (ngModelChange)="ownerId.set($event)">
+            <option value="">Unassigned</option>
+            @for (u of users(); track u.id) {
+              <option [value]="u.id">{{ u.email }}</option>
+            }
+          </select>
+        </label>
+      }
 
       <div class="panel-actions split">
         <button type="button" class="secondary-btn" (click)="backToStep(2)">← Back</button>

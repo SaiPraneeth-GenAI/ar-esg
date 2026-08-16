@@ -336,6 +336,27 @@ def archive_target(
     return _target_out(db, target)
 
 
+@router.post("/{target_id}/restore", response_model=TargetOut)
+def restore_target(
+    target_id: uuid.UUID,
+    current: CurrentUser = Depends(require_roles(*MANAGE_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """Brings an archived target back as a draft -- not directly back to
+    active, since real time has passed since it was archived and its old
+    baseline lock may no longer reflect the tenant's current data. The
+    user reviews it and re-activates through the normal flow, the same
+    way any other draft does."""
+    target = _get_tenant_target(db, current.tenant_id, target_id)
+    if target.status != "archived":
+        raise HTTPException(status_code=409, detail="Only an archived target can be restored.")
+    target.status = "draft"
+    target.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(target)
+    return _target_out(db, target)
+
+
 @router.get("/{target_id}/performance", response_model=TargetPerformanceResponse)
 def target_performance(
     target_id: uuid.UUID,

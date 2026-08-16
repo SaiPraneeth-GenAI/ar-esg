@@ -58,11 +58,15 @@ def boundary_config_hash(
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+INTENSITY_METRIC_TYPES = ("intensity_tco2e_per_mnah", "intensity_tco2e_per_revenue")
+
+
 def validate_metric_scope(scope: str, metric_type: str) -> str | None:
     """Intensity is only defined for the combined Scope 1+2 location-based
-    boundary -- the only denominator (production volume) the platform
-    tracks. Returns an error message, or None if valid."""
-    if metric_type == "intensity_tco2e_per_mnah" and scope != "1_2_combined":
+    boundary -- the only two denominators (production volume, revenue) the
+    platform tracks are both defined against that boundary. Returns an
+    error message, or None if valid."""
+    if metric_type in INTENSITY_METRIC_TYPES and scope != "1_2_combined":
         return "Intensity targets are only supported for the Scope 1+2 (location-based) boundary."
     return None
 
@@ -79,10 +83,11 @@ def extract_metric_value(
     (a total) even for the identical scope/method boundary, so falling
     through to the scope branches below for an intensity target would
     silently return the absolute total instead."""
-    if metric_type == "intensity_tco2e_per_mnah":
+    if metric_type in INTENSITY_METRIC_TYPES:
         if scope != "1_2_combined":
             return None, "Intensity is only defined for the Scope 1+2 combined boundary."
-        return totals["intensity"], None
+        key = "intensity" if metric_type == "intensity_tco2e_per_mnah" else "intensity_revenue"
+        return totals[key], None
     if scope == "1_2_combined":
         return totals["scope1_2_loc_tco2e"], None
     if scope == "1":
@@ -139,9 +144,11 @@ def compute_baseline(
     months = months_between(period_start, period_end)
     month_results: list[MonthBaseline] = []
     total_emissions_kg = Decimal("0")
-    total_production = Decimal("0")
+    total_denominator = Decimal("0")
     any_month_incomplete = False
     any_data_at_all = False
+    denominator_key = "production_value" if metric_type == "intensity_tco2e_per_mnah" else "revenue_value"
+    denominator_label = "production volume" if metric_type == "intensity_tco2e_per_mnah" else "revenue"
 
     for m in months:
         totals = compute_period_totals(db, tenant_id, location_id, m)
@@ -158,12 +165,12 @@ def compute_baseline(
 
         if metric_type == "absolute_tco2e" and value is not None:
             total_emissions_kg += Decimal(str(value)) * 1000
-        elif metric_type == "intensity_tco2e_per_mnah":
+        elif metric_type in INTENSITY_METRIC_TYPES:
             scope1_2 = totals["scope1_2_loc_tco2e"]
             if scope1_2 is not None:
                 total_emissions_kg += Decimal(str(scope1_2)) * 1000
-            if totals["production_value"]:
-                total_production += Decimal(str(totals["production_value"]))
+            if totals[denominator_key]:
+                total_denominator += Decimal(str(totals[denominator_key]))
 
     if not any_data_at_all:
         return BaselineResult(
@@ -178,16 +185,16 @@ def compute_baseline(
     if metric_type == "absolute_tco2e":
         baseline_value = float(total_emissions_kg / 1000)
     else:
-        if total_production <= 0:
+        if total_denominator <= 0:
             return BaselineResult(
                 ready=False,
                 provisional=False,
                 baseline_value=None,
                 completeness_pct=None,
                 months=month_results,
-                message="Baseline not ready -- no approved production volume found in this period, so intensity can't be computed.",
+                message=f"Baseline not ready -- no approved {denominator_label} found in this period, so intensity can't be computed.",
             )
-        baseline_value = float(total_emissions_kg / 1000) / float(total_production)
+        baseline_value = float(total_emissions_kg / 1000) / float(total_denominator)
 
     overall_completeness = sum(m.completeness_pct or 0 for m in month_results) / len(month_results)
 
@@ -262,7 +269,7 @@ def target_value_for_month(
         return None
     if target_value is None:
         return None
-    if metric_type == "intensity_tco2e_per_mnah":
+    if metric_type in INTENSITY_METRIC_TYPES:
         return target_value
     if num_months == 0:
         return None

@@ -64,12 +64,19 @@ export class TargetsComponent implements OnInit {
   boundaryLabel(t: TargetOut): string {
     const scopeLabel = t.scope === '1_2_combined' ? 'Scope 1+2' : `Scope ${t.scope}`;
     const method = t.calculation_method ? ` (${t.calculation_method === 'location_based' ? 'location-based' : 'market-based'})` : '';
-    const metric = t.metric_type === 'intensity_tco2e_per_mnah' ? 'intensity' : 'absolute';
+    const metric =
+      t.metric_type === 'intensity_tco2e_per_mnah'
+        ? 'intensity by production'
+        : t.metric_type === 'intensity_tco2e_per_revenue'
+          ? 'intensity by revenue'
+          : 'absolute';
     return `${scopeLabel}${method} -- ${metric}`;
   }
 
   unit(t: TargetOut): string {
-    return t.metric_type === 'intensity_tco2e_per_mnah' ? 'tCO2e/MnAh' : 'tCO2e';
+    if (t.metric_type === 'intensity_tco2e_per_mnah') return 'tCO2e/MnAh';
+    if (t.metric_type === 'intensity_tco2e_per_revenue') return 'tCO2e/Cr';
+    return 'tCO2e';
   }
 
   statusClass(label: string | null): string {
@@ -127,6 +134,16 @@ export class TargetsComponent implements OnInit {
       await this.refresh();
     } catch {
       this.errorMessage.set('Could not archive this target.');
+    }
+  }
+
+  async restoreTarget(t: TargetOut): Promise<void> {
+    try {
+      await this.api.restore(t.id);
+      this.successMessage.set('Target restored as a draft -- review it and reactivate when ready.');
+      await this.refresh();
+    } catch {
+      this.errorMessage.set('Could not restore this target.');
     }
   }
 

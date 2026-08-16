@@ -18,7 +18,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.carbon_mapping import CarbonSourceMapping, get_carbon_mapping
-from app.db.models import DataPoint, EmissionCalculation, EmissionFactor, Entry, IpccReference, ProductionVolumeMapping
+from app.db.models import DataPoint, EmissionCalculation, EmissionFactor, Entry, IpccReference, ProductionVolumeMapping, RevenueMapping
 
 UNRESOLVED_REASONS = {
     "missing_factor": "No approved factor found for this substance/scope/period.",
@@ -443,6 +443,29 @@ def compute_period_totals_batch(
         unresolved_q = unresolved_q.filter(EmissionCalculation.location_id == location_id)
     unresolved_counts = dict(unresolved_q.group_by(EmissionCalculation.reporting_period).all())
 
+    # Revenue denominator -- same pattern as production above. Kept here
+    # (rather than reusing intensity_calculation.compute_revenue_batch)
+    # to avoid a circular import: intensity_calculation already imports
+    # from this module.
+    rev_mapping_q = db.query(RevenueMapping).filter(RevenueMapping.tenant_id == tenant_id, RevenueMapping.is_active.is_(True))
+    if location_id is not None:
+        rev_mapping_q = rev_mapping_q.filter((RevenueMapping.location_id == location_id) | (RevenueMapping.location_id.is_(None)))
+    rev_mapping = rev_mapping_q.first()
+
+    revenue_by_period: dict[date, float] = {}
+    if rev_mapping is not None:
+        rev_entry_q = db.query(Entry).filter(
+            Entry.data_point_id == rev_mapping.data_point_id, Entry.status == "Approved", Entry.period.in_(periods)
+        )
+        if location_id is not None:
+            rev_entry_q = rev_entry_q.filter(Entry.location_id == location_id)
+        rev_entries_by_period: dict[date, list] = {}
+        for e in rev_entry_q.all():
+            rev_entries_by_period.setdefault(e.period, []).append(e)
+        for p, entries in rev_entries_by_period.items():
+            total_native = sum((to_decimal(e.value) for e in entries if e.value is not None), Decimal("0"))
+            revenue_by_period[p] = float(total_native * to_decimal(rev_mapping.conversion_multiplier))
+
     result: dict[date, dict] = {}
     for period in periods:
         rows = rows_by_period.get(period, [])
@@ -462,6 +485,11 @@ def compute_period_totals_batch(
         if production_value and production_value > 0 and has_any_data:
             intensity = float(scope1_2_loc / 1000) / production_value
 
+        revenue_value = revenue_by_period.get(period)
+        intensity_revenue = None
+        if revenue_value and revenue_value > 0 and has_any_data:
+            intensity_revenue = float(scope1_2_loc / 1000) / revenue_value
+
         unresolved_count = unresolved_counts.get(period, 0)
         calculated_count = len(rows)
         total_attempts = calculated_count + unresolved_count
@@ -476,6 +504,9 @@ def compute_period_totals_batch(
             "production_value": production_value,
             "production_unit": prod_mapping.canonical_unit if prod_mapping else None,
             "intensity": intensity,
+            "revenue_value": revenue_value,
+            "revenue_unit": rev_mapping.canonical_unit if rev_mapping else None,
+            "intensity_revenue": intensity_revenue,
             "unresolved_count": unresolved_count,
             "calculated_count": calculated_count,
             "completeness_pct": completeness_pct,

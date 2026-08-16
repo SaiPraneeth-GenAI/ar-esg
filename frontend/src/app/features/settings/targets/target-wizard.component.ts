@@ -20,22 +20,29 @@ interface Preset {
 
 const PRESETS: Preset[] = [
   {
-    label: 'Primary target',
-    description: 'Scope 1+2 location-based intensity (tCO2e/MnAh)',
+    label: 'Intensity by production',
+    description: 'Scope 1+2 location-based, per Mn Ah of battery production -- the primary target most tenants track',
     scope: '1_2_combined',
     calculationMethod: 'location_based',
     metricType: 'intensity_tco2e_per_mnah'
   },
   {
-    label: 'Secondary guardrail',
-    description: 'Scope 1+2 location-based absolute (tCO2e)',
+    label: 'Intensity by revenue',
+    description: 'Scope 1+2 location-based, per INR crore of revenue',
+    scope: '1_2_combined',
+    calculationMethod: 'location_based',
+    metricType: 'intensity_tco2e_per_revenue'
+  },
+  {
+    label: 'Absolute guardrail',
+    description: 'Scope 1+2 location-based total (tCO2e) -- so production growth alone can\'t hide an absolute increase',
     scope: '1_2_combined',
     calculationMethod: 'location_based',
     metricType: 'absolute_tco2e'
   },
   {
     label: 'Disclosure target',
-    description: 'Scope 2 market-based absolute (tCO2e) -- shown beside, never instead of, location-based',
+    description: 'Scope 2 market-based total (tCO2e) -- shown beside, never instead of, location-based',
     scope: '2',
     calculationMethod: 'market_based',
     metricType: 'absolute_tco2e'
@@ -81,6 +88,15 @@ export class TargetWizardComponent implements OnInit {
   metricType = signal<TargetMetricType>('intensity_tco2e_per_mnah');
 
   intensityDisabled = computed(() => this.scope() !== '1_2_combined');
+  customizeBoundary = signal(false);
+  showAdvanced = signal(false);
+  showBaselineMonths = signal(false);
+
+  metricUnit(): string {
+    if (this.metricType() === 'intensity_tco2e_per_mnah') return 'tCO2e/MnAh';
+    if (this.metricType() === 'intensity_tco2e_per_revenue') return 'tCO2e/Cr';
+    return 'tCO2e';
+  }
 
   // Step 2
   today = new Date();
@@ -120,15 +136,23 @@ export class TargetWizardComponent implements OnInit {
     this.users.set(users);
   }
 
-  applyPreset(preset: Preset): void {
+  selectedPresetLabel = signal<string | null>(null);
+
+  async applyPreset(preset: Preset): Promise<void> {
     this.scope.set(preset.scope);
     this.calculationMethod.set(preset.calculationMethod);
     this.metricType.set(preset.metricType);
+    this.selectedPresetLabel.set(preset.label);
+    // A preset already fully specifies the boundary -- jump straight to
+    // the baseline instead of making the user click through a form
+    // they've already answered via the card they just picked.
+    await this.goToStep2();
   }
 
   onScopeChange(scope: TargetScope): void {
     this.scope.set(scope);
-    if (scope !== '1_2_combined' && this.metricType() === 'intensity_tco2e_per_mnah') {
+    this.selectedPresetLabel.set(null);
+    if (scope !== '1_2_combined' && this.metricType() !== 'absolute_tco2e') {
       this.metricType.set('absolute_tco2e');
     }
     if (scope === '1') {

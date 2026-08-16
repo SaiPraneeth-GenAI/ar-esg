@@ -87,6 +87,9 @@
             @if (t.status === 'active') {
               <button type="button" class="link-btn danger-link" (click)="archiveTarget(t)">Archive</button>
             }
+            @if (t.status === 'archived') {
+              <button type="button" class="link-btn" (click)="restoreTarget(t)">Restore as draft</button>
+            }
           </div>
 
           @if (expandedId() === t.id) {
