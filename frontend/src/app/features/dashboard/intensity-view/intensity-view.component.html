@@ -45,23 +45,13 @@
       }
     </div>
 
-    <div class="trend-chart">
-      <h3>GHG intensity -- last {{ trendPoints().length }} months</h3>
-      @if (trendLoading()) {
-        <p class="muted">Loading…</p>
-      } @else {
-        <div class="bar-chart">
-          @for (point of trendPoints(); track point.period) {
-            <div class="bar-column">
-              <span class="bar-value">{{ point.ghg !== null ? (point.ghg | number: '1.2-3') : '—' }}</span>
-              <div class="bar-track">
-                <div class="bar" [style.height.%]="barHeightPct(point.ghg)" [class.bar-empty]="point.ghg === null"></div>
-              </div>
-              <span class="bar-label">{{ point.label }}</span>
-            </div>
-          }
-        </div>
-      }
-    </div>
+    <app-rich-trend-chart
+      title="Trend -- last {{ trendPoints().length }} months"
+      [series]="chartSeries()"
+      [points]="trendPoints()"
+      defaultSeriesKey="ghg"
+      [loading]="trendLoading()"
+      [decimals]="3"
+    ></app-rich-trend-chart>
   }
 </div>

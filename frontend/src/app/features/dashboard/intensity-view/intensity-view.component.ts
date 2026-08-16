@@ -1,6 +1,7 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, Input, OnChanges, inject, signal } from '@angular/core';
 import { IntensityApiService, IntensityOverview } from '../../../core/intensity-api.service';
+import { ChartPoint, ChartSeriesDef, RichTrendChartComponent } from '../../../shared/rich-trend-chart/rich-trend-chart.component';
 
 interface IntensityMetric {
   label: string;
@@ -10,18 +11,12 @@ interface IntensityMetric {
   unit: string;
 }
 
-interface TrendPoint {
-  period: string;
-  label: string;
-  ghg: number | null;
-}
-
 const TREND_MONTHS = 6;
 
 @Component({
   selector: 'app-intensity-view',
   standalone: true,
-  imports: [DecimalPipe],
+  imports: [DecimalPipe, RichTrendChartComponent],
   templateUrl: './intensity-view.component.html',
   styleUrl: './intensity-view.component.css'
 })
@@ -35,8 +30,18 @@ export class IntensityViewComponent implements OnChanges {
   loading = signal(true);
   errorMessage = signal('');
   overview = signal<IntensityOverview | null>(null);
-  trendPoints = signal<TrendPoint[]>([]);
+  trendPoints = signal<ChartPoint[]>([]);
   trendLoading = signal(true);
+
+  chartSeries(): ChartSeriesDef[] {
+    const denomUnit = this.mode === 'production' ? 'Mn Ah' : 'INR Cr';
+    return [
+      { key: 'ghg', label: 'GHG emissions', unit: `tCO2e/${denomUnit}`, tracked: true },
+      { key: 'energy', label: 'Energy consumption', unit: `GJ/${denomUnit}`, tracked: true },
+      { key: 'water', label: 'Water withdrawal', unit: `KL/${denomUnit}`, tracked: true },
+      { key: 'waste', label: 'Waste generated', unit: `MT/${denomUnit}`, tracked: true }
+    ];
+  }
 
   async ngOnChanges(): Promise<void> {
     await Promise.all([this.load(), this.loadTrend()]);
@@ -124,11 +129,17 @@ export class IntensityViewComponent implements OnChanges {
     this.trendLoading.set(true);
     try {
       const points = await this.api.getTrend(`${this.period}-01`, TREND_MONTHS, this.locationId ?? undefined);
+      const suffix = this.mode === 'production' ? '_per_production' : '_per_revenue';
       this.trendPoints.set(
         points.map((p) => ({
           period: p.period,
           label: new Date(`${p.period}T00:00:00`).toLocaleDateString('en-US', { month: 'short' }),
-          ghg: this.mode === 'production' ? p.ghg_per_production : p.ghg_per_revenue
+          valuesBySeries: {
+            ghg: (p as any)[`ghg${suffix}`],
+            energy: (p as any)[`energy${suffix}`],
+            water: (p as any)[`water${suffix}`],
+            waste: (p as any)[`waste${suffix}`]
+          }
         }))
       );
     } catch {
@@ -136,12 +147,5 @@ export class IntensityViewComponent implements OnChanges {
     } finally {
       this.trendLoading.set(false);
     }
-  }
-
-  barHeightPct(value: number | null): number {
-    if (value === null) return 0;
-    const series = this.trendPoints().map((p) => p.ghg);
-    const max = Math.max(...series.filter((v): v is number => v !== null), 0.0001);
-    return Math.max((value / max) * 100, 2);
   }
 }

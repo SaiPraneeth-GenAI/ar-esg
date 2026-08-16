@@ -14,3 +14,8 @@ class SafetyMetricOut(BaseModel):
 class SafetyOverviewOut(BaseModel):
     period: date
     metrics: list[SafetyMetricOut]
+
+
+class SafetyTrendPoint(BaseModel):
+    period: date
+    values: dict[str, float | None]  # metric name -> value for that month

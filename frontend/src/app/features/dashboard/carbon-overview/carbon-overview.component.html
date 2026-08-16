@@ -117,45 +117,14 @@
       <p class="insight">{{ overview()!.insight }}</p>
     }
 
-    <div class="trend-charts">
-      <div class="trend-chart">
-        <h3>Scope 1+2 (location-based) -- last {{ trendPoints().length }} months</h3>
-        @if (trendLoading()) {
-          <p class="muted">Loading…</p>
-        } @else {
-          <div class="bar-chart">
-            @for (point of trendPoints(); track point.period) {
-              <div class="bar-column">
-                <span class="bar-value">{{ point.scope12 !== null ? (point.scope12 | number: '1.0-1') : '—' }}</span>
-                <div class="bar-track">
-                  <div class="bar" [style.height.%]="barHeightPct(point.scope12, scope12Series())" [class.bar-empty]="point.scope12 === null"></div>
-                </div>
-                <span class="bar-label">{{ point.label }}</span>
-              </div>
-            }
-          </div>
-        }
-      </div>
-
-      <div class="trend-chart">
-        <h3>Specific GHG emissions (tCO2e/MnAh) -- last {{ trendPoints().length }} months</h3>
-        @if (trendLoading()) {
-          <p class="muted">Loading…</p>
-        } @else {
-          <div class="bar-chart">
-            @for (point of trendPoints(); track point.period) {
-              <div class="bar-column">
-                <span class="bar-value">{{ point.intensity !== null ? (point.intensity | number: '1.2-3') : '—' }}</span>
-                <div class="bar-track">
-                  <div class="bar bar-intensity" [style.height.%]="barHeightPct(point.intensity, intensitySeries())" [class.bar-empty]="point.intensity === null"></div>
-                </div>
-                <span class="bar-label">{{ point.label }}</span>
-              </div>
-            }
-          </div>
-        }
-      </div>
-    </div>
+    <app-rich-trend-chart
+      title="GHG trend -- last {{ trendPoints().length }} months"
+      [series]="ghgSeries"
+      [points]="trendPoints()"
+      defaultSeriesKey="scope1_2"
+      [loading]="trendLoading()"
+      [decimals]="2"
+    ></app-rich-trend-chart>
 
     @if (showUnresolved()) {
       <div class="unresolved-panel">

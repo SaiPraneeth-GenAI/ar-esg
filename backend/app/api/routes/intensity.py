@@ -104,7 +104,13 @@ def intensity_trend(
         IntensityTrendPoint(
             period=p,
             ghg_per_production=by_period[p].ghg_per_production,
+            energy_per_production=by_period[p].energy_per_production,
+            water_per_production=by_period[p].water_per_production,
+            waste_per_production=by_period[p].waste_per_production,
             ghg_per_revenue=by_period[p].ghg_per_revenue,
+            energy_per_revenue=by_period[p].energy_per_revenue,
+            water_per_revenue=by_period[p].water_per_revenue,
+            waste_per_revenue=by_period[p].waste_per_revenue,
         )
         for p in trailing
     ]

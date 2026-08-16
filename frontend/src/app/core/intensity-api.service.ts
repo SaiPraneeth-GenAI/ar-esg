@@ -53,7 +53,13 @@ export interface IntensityOverview {
 export interface IntensityTrendPoint {
   period: string;
   ghg_per_production: number | null;
+  energy_per_production: number | null;
+  water_per_production: number | null;
+  waste_per_production: number | null;
   ghg_per_revenue: number | null;
+  energy_per_revenue: number | null;
+  water_per_revenue: number | null;
+  waste_per_revenue: number | null;
 }
 
 @Injectable({ providedIn: 'root' })

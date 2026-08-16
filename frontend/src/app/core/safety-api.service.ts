@@ -17,6 +17,11 @@ export interface SafetyOverview {
   metrics: SafetyMetric[];
 }
 
+export interface SafetyTrendPoint {
+  period: string;
+  values: Record<string, number | null>;
+}
+
 @Injectable({ providedIn: 'root' })
 export class SafetyApiService {
   private http = inject(HttpClient);
@@ -32,5 +37,12 @@ export class SafetyApiService {
     const params: Record<string, string> = { period };
     if (locationId) params['location_id'] = locationId;
     return firstValueFrom(this.http.get<SafetyOverview>(`${environment.apiBaseUrl}/safety/overview`, { headers, params }));
+  }
+
+  async getTrend(period: string, months = 6, locationId?: string): Promise<SafetyTrendPoint[]> {
+    const headers = await this.authHeaders();
+    const params: Record<string, string> = { period, months: String(months) };
+    if (locationId) params['location_id'] = locationId;
+    return firstValueFrom(this.http.get<SafetyTrendPoint[]>(`${environment.apiBaseUrl}/safety/trend`, { headers, params }));
   }
 }

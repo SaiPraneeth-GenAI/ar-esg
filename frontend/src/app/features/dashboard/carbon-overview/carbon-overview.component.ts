@@ -2,25 +2,27 @@ import { DecimalPipe } from '@angular/common';
 import { Component, Input, OnChanges, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CarbonApiService, CarbonOverview, CarbonOverviewSource, EmissionCalculationOut } from '../../../core/carbon-api.service';
+import { ChartPoint, ChartSeriesDef, RichTrendChartComponent } from '../../../shared/rich-trend-chart/rich-trend-chart.component';
 import { EntryHistoryComponent } from '../../data-entry/entry-history/entry-history.component';
 
 function sourceKey(s: CarbonOverviewSource): string {
   return `${s.data_point_name}:${s.scope}:${s.calculation_method ?? ''}`;
 }
 
-export interface TrendPoint {
-  period: string;
-  label: string;
-  scope12: number | null;
-  intensity: number | null;
-}
-
 const TREND_MONTHS = 6;
+
+const GHG_SERIES: ChartSeriesDef[] = [
+  { key: 'scope1_2', label: 'Scope 1+2 (location-based)', unit: 'tCO2e', tracked: true },
+  { key: 'scope1', label: 'Scope 1', unit: 'tCO2e', tracked: true },
+  { key: 'scope2', label: 'Scope 2 (location-based)', unit: 'tCO2e', tracked: true },
+  { key: 'scope3', label: 'Scope 3', unit: 'tCO2e', tracked: false },
+  { key: 'intensity', label: 'Specific GHG emissions', unit: 'tCO2e/MnAh', tracked: true }
+];
 
 @Component({
   selector: 'app-carbon-overview',
   standalone: true,
-  imports: [DecimalPipe, RouterLink, EntryHistoryComponent],
+  imports: [DecimalPipe, RouterLink, EntryHistoryComponent, RichTrendChartComponent],
   templateUrl: './carbon-overview.component.html',
   styleUrl: './carbon-overview.component.css'
 })
@@ -43,8 +45,9 @@ export class CarbonOverviewComponent implements OnChanges {
   unresolvedItems = signal<EmissionCalculationOut[]>([]);
   unresolvedLoading = signal(false);
 
-  trendPoints = signal<TrendPoint[]>([]);
+  trendPoints = signal<ChartPoint[]>([]);
   trendLoading = signal(true);
+  ghgSeries = GHG_SERIES;
 
   sourceKey = sourceKey;
 
@@ -78,8 +81,13 @@ export class CarbonOverviewComponent implements OnChanges {
         points.map((p) => ({
           period: p.period,
           label: new Date(`${p.period}T00:00:00`).toLocaleDateString('en-US', { month: 'short' }),
-          scope12: p.scope1_2_location_based_tco2e,
-          intensity: p.intensity_tco2e_per_mnah
+          valuesBySeries: {
+            scope1_2: p.scope1_2_location_based_tco2e,
+            scope1: p.scope1_tco2e,
+            scope2: p.scope2_location_based_tco2e,
+            scope3: p.scope3_tco2e,
+            intensity: p.intensity_tco2e_per_mnah
+          }
         }))
       );
     } catch {
@@ -87,20 +95,6 @@ export class CarbonOverviewComponent implements OnChanges {
     } finally {
       this.trendLoading.set(false);
     }
-  }
-
-  barHeightPct(value: number | null, series: (number | null)[]): number {
-    if (value === null) return 0;
-    const max = Math.max(...series.filter((v): v is number => v !== null), 0.0001);
-    return Math.max((value / max) * 100, 2);
-  }
-
-  scope12Series(): (number | null)[] {
-    return this.trendPoints().map((p) => p.scope12);
-  }
-
-  intensitySeries(): (number | null)[] {
-    return this.trendPoints().map((p) => p.intensity);
   }
 
   async toggleSource(source: CarbonOverviewSource): Promise<void> {

@@ -286,7 +286,10 @@ def carbon_trend(
     return [
         CarbonTrendPoint(
             period=p,
+            scope1_tco2e=totals_by_period[p]["scope1_tco2e"],
+            scope2_location_based_tco2e=totals_by_period[p]["scope2_loc_tco2e"],
             scope1_2_location_based_tco2e=totals_by_period[p]["scope1_2_loc_tco2e"],
+            scope3_tco2e=None,
             intensity_tco2e_per_mnah=totals_by_period[p]["intensity"],
         )
         for p in trailing

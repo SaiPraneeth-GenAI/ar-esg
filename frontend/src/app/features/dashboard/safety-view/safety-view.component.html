@@ -34,5 +34,14 @@
         </div>
       }
     </div>
+
+    <app-rich-trend-chart
+      title="Trend -- last {{ trendPoints().length }} months"
+      [series]="chartSeries()"
+      [points]="trendPoints()"
+      defaultSeriesKey="LTIFR"
+      [loading]="trendLoading()"
+      [decimals]="2"
+    ></app-rich-trend-chart>
   }
 </div>

@@ -63,7 +63,14 @@ class EmissionCalculationOut(BaseModel):
 
 class CarbonTrendPoint(BaseModel):
     period: date
+    scope1_tco2e: float | None
+    scope2_location_based_tco2e: float | None
     scope1_2_location_based_tco2e: float | None
+    # Always None -- no Scope 3 calculation exists in this platform yet.
+    # Exposed as an explicit, honestly-empty field (not omitted) so the
+    # dashboard can offer it as a real, clearly-labeled "not tracked yet"
+    # option instead of silently pretending it doesn't exist.
+    scope3_tco2e: float | None
     intensity_tco2e_per_mnah: float | None
 
 

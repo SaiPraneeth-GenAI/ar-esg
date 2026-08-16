@@ -42,7 +42,10 @@ export interface CarbonOverview {
 
 export interface CarbonTrendPoint {
   period: string;
+  scope1_tco2e: number | null;
+  scope2_location_based_tco2e: number | null;
   scope1_2_location_based_tco2e: number | null;
+  scope3_tco2e: number | null;
   intensity_tco2e_per_mnah: number | null;
 }
 

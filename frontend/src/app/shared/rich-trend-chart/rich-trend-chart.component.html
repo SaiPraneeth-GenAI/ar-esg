@@ -1,0 +1,75 @@
+<div class="chart-card">
+  <div class="chart-header">
+    <h3>{{ title }}</h3>
+    <div class="chart-controls">
+      <select class="series-select" [ngModel]="selectedKey()" (ngModelChange)="selectSeries($event)">
+        @for (s of series; track s.key) {
+          <option [value]="s.key">{{ s.label }}{{ s.tracked ? '' : ' (not tracked yet)' }}</option>
+        }
+      </select>
+      <div class="kind-toggle">
+        <button type="button" [class.active]="chartKind() === 'bar'" (click)="setChartKind('bar')" aria-label="Bar chart">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M4 16V9M10 16V4M16 16v-6" />
+          </svg>
+        </button>
+        <button type="button" [class.active]="chartKind() === 'line'" (click)="setChartKind('line')" aria-label="Line chart">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 14 8 8l4 4 5-7" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  @if (loading) {
+    <p class="muted">Loading…</p>
+  } @else if (currentSeries() && !currentSeries()!.tracked) {
+    <div class="not-tracked">
+      <p>{{ currentSeries()!.label }} isn't calculated anywhere in this platform yet -- no entries, no factors, no numbers to chart.</p>
+    </div>
+  } @else if (chartKind() === 'bar') {
+    <div class="bar-chart">
+      @for (point of points; track point.period; let i = $index) {
+        <div class="bar-column">
+          <span class="bar-value">
+            {{ point.valuesBySeries[selectedKey()] !== null ? (point.valuesBySeries[selectedKey()] | number: '1.0-' + decimals) : '—' }}
+          </span>
+          <div class="bar-track">
+            <div
+              class="bar"
+              [style.height.%]="barHeightPct(point.valuesBySeries[selectedKey()])"
+              [class.bar-empty]="point.valuesBySeries[selectedKey()] === null"
+            ></div>
+          </div>
+          <span class="bar-label">{{ point.label }}</span>
+        </div>
+      }
+    </div>
+  } @else {
+    <div class="line-chart">
+      <svg [attr.viewBox]="'0 0 ' + viewW + ' ' + viewH" preserveAspectRatio="none" class="line-svg">
+        <defs>
+          <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#0e2c21" stop-opacity="0.18" />
+            <stop offset="100%" stop-color="#0e2c21" stop-opacity="0" />
+          </linearGradient>
+        </defs>
+        @if (areaPath()) {
+          <path [attr.d]="areaPath()" fill="url(#areaFill)" stroke="none" />
+        }
+        @for (seg of linePathSegments(); track $index) {
+          <path [attr.d]="seg.d" fill="none" stroke="#0e2c21" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+        }
+        @for (dot of dotPoints(); track dot.x) {
+          <circle [attr.cx]="dot.x" [attr.cy]="dot.y" r="3.5" fill="#0e2c21" />
+        }
+      </svg>
+      <div class="line-labels">
+        @for (point of points; track point.period) {
+          <span class="line-label">{{ point.label }}</span>
+        }
+      </div>
+    </div>
+  }
+</div>

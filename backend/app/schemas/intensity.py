@@ -52,4 +52,10 @@ class IntensityOverviewOut(BaseModel):
 class IntensityTrendPoint(BaseModel):
     period: date
     ghg_per_production: float | None
+    energy_per_production: float | None
+    water_per_production: float | None
+    waste_per_production: float | None
     ghg_per_revenue: float | None
+    energy_per_revenue: float | None
+    water_per_revenue: float | None
+    waste_per_revenue: float | None

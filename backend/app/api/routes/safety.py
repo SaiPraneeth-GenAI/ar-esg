@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import CurrentUser, require_roles
 from app.db.models import Category, DataPoint, Entry
 from app.db.session import get_db
-from app.schemas.safety import SafetyMetricOut, SafetyOverviewOut
+from app.schemas.safety import SafetyMetricOut, SafetyOverviewOut, SafetyTrendPoint
 from app.services.carbon_calculation import prior_month, prior_year, to_decimal
 from app.services.rollups import month_start
 
@@ -85,3 +85,31 @@ def safety_overview(
         )
 
     return SafetyOverviewOut(period=period, metrics=metrics)
+
+
+def _trailing_months(period: date, count: int) -> list[date]:
+    months = []
+    cursor = period
+    for _ in range(count):
+        months.append(cursor)
+        year = cursor.year - (1 if cursor.month == 1 else 0)
+        month = 12 if cursor.month == 1 else cursor.month - 1
+        cursor = cursor.replace(year=year, month=month)
+    return list(reversed(months))
+
+
+@router.get("/trend", response_model=list[SafetyTrendPoint])
+def safety_trend(
+    period: date,
+    months: int = 6,
+    location_id: uuid.UUID | None = None,
+    current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
+    db: Session = Depends(get_db),
+):
+    period = month_start(period)
+    trailing = _trailing_months(period, min(max(months, 1), 24))
+    values = _metric_values_batch(db, current.tenant_id, location_id, trailing)
+    return [
+        SafetyTrendPoint(period=p, values={name: values[name][p][0] for name in METRIC_NAMES})
+        for p in trailing
+    ]
