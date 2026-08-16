@@ -70,15 +70,19 @@
           (keydown.enter)="selectNode(node)"
         >
           <rect [attr.width]="node.w" [attr.height]="node.h" rx="10" class="node-box" />
-          <text class="node-label" [attr.x]="node.w / 2" [attr.y]="nodeValueLabel(node) ? node.h / 2 - 6 : node.h / 2 + 4" text-anchor="middle">
+          <text class="node-label" [attr.x]="node.w / 2" [attr.y]="labelY(node)" text-anchor="middle">
             {{ node.label }}
           </text>
-          @if (nodeValueLabel(node)) {
-            <text class="node-value" [attr.x]="node.w / 2" [attr.y]="node.h / 2 + 16" text-anchor="middle">
-              {{ nodeValueLabel(node) }}
+          @for (line of nodeLines(node); track $index) {
+            <text
+              class="node-value"
+              [class.planned-text]="!node.live"
+              [attr.x]="node.w / 2"
+              [attr.y]="lineY(node, $index)"
+              text-anchor="middle"
+            >
+              {{ line }}
             </text>
-          } @else if (!node.live) {
-            <text class="node-value planned-text" [attr.x]="node.w / 2" [attr.y]="node.h / 2 + 16" text-anchor="middle">planned</text>
           }
         </g>
       }

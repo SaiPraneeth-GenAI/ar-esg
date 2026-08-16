@@ -2,8 +2,8 @@ import { DecimalPipe } from '@angular/common';
 import { Component, ElementRef, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { CarbonApiService, EmissionCalculationOut } from '../../../core/carbon-api.service';
 import { IntensityApiService } from '../../../core/intensity-api.service';
-import { SafetyApiService, SafetyMetric } from '../../../core/safety-api.service';
-import { TargetApiService, TargetOut } from '../../../core/target-api.service';
+import { SafetyApiService } from '../../../core/safety-api.service';
+import { TargetApiService } from '../../../core/target-api.service';
 
 export type NodeKind = 'input' | 'process' | 'aggregate' | 'sum' | 'divide' | 'output' | 'warning';
 
@@ -37,7 +37,7 @@ const NODES: FlowNode[] = [
   { id: 'waste-sources', x: 20, y: 516, w: 190, h: 60, label: 'Waste generated (2 categories)', kind: 'input', live: true },
   { id: 'production-input', x: 20, y: 632, w: 190, h: 60, label: 'Battery Production Volume', kind: 'input', live: true },
   { id: 'revenue-input', x: 20, y: 708, w: 190, h: 60, label: 'Revenue', kind: 'input', live: true },
-  { id: 'safety-input', x: 20, y: 800, w: 190, h: 60, label: 'Safety metrics (5)', kind: 'input', live: true },
+  { id: 'safety-input', x: 20, y: 800, w: 190, h: 172, label: 'Safety metrics (5)', kind: 'input', live: true },
 
   // Per-source formula application -- GHG and energy read the same fuel /
   // electricity activity but apply different formulas to it.
@@ -58,12 +58,13 @@ const NODES: FlowNode[] = [
   // The sum
   { id: 'total-ghg', x: 900, y: 250, w: 190, h: 72, label: 'Total GHG Emissions', kind: 'sum', live: true },
 
-  // Intensity -- grouped exactly as the two dashboard tabs group them.
-  { id: 'intensity-production', x: 1200, y: 300, w: 220, h: 72, label: 'Intensity by Production', kind: 'divide', live: true },
-  { id: 'intensity-revenue', x: 1200, y: 560, w: 220, h: 72, label: 'Intensity by Revenue', kind: 'divide', live: true },
+  // Intensity -- grouped exactly as the two dashboard tabs group them, all
+  // four metrics shown directly, not hidden behind a click.
+  { id: 'intensity-production', x: 1200, y: 300, w: 230, h: 172, label: 'Intensity by Production', kind: 'divide', live: true },
+  { id: 'intensity-revenue', x: 1200, y: 560, w: 230, h: 172, label: 'Intensity by Revenue', kind: 'divide', live: true },
 
   // Targets and terminal
-  { id: 'target-comparison', x: 1500, y: 220, w: 200, h: 64, label: 'Target Comparison', kind: 'output', live: true },
+  { id: 'target-comparison', x: 1500, y: 210, w: 210, h: 100, label: 'Target Comparison', kind: 'output', live: true },
   { id: 'dashboard', x: 1780, y: 380, w: 200, h: 76, label: 'ESG Dashboard', kind: 'output', live: true },
 
   // Warning branch
@@ -166,7 +167,7 @@ export class FlowDiagramComponent implements OnInit {
   loading = signal(true);
   period = signal(currentPeriod());
 
-  viewBox = signal({ x: 0, y: 0, w: 2020, h: 1000 });
+  viewBox = signal({ x: 0, y: 0, w: 2020, h: 1010 });
   private panStart: { x: number; y: number; vb: { x: number; y: number; w: number; h: number } } | null = null;
 
   selectedNode = signal<FlowNode | null>(null);
@@ -176,64 +177,112 @@ export class FlowDiagramComponent implements OnInit {
   activeNodeIds = signal<Set<string>>(new Set());
   activeEdgeKeys = signal<Set<string>>(new Set());
 
-  private values: Record<string, { value: number | null; unit: string; extra?: string[] }> = {};
-  private safetyMetrics: SafetyMetric[] = [];
-  private activeTargets: TargetOut[] = [];
+  /** Every node's on-canvas display -- 1-5 short lines, always real numbers
+   * (or an explicit "data required"/"planned"), never blank unless a node
+   * has genuinely nothing to show. */
+  private lines: Record<string, string[]> = {};
+  private extraLines: Record<string, string[]> = {};
 
   async ngOnInit(): Promise<void> {
     this.loading.set(true);
     try {
-      const [carbon, intensity, safety, targets] = await Promise.all([
+      const [carbon, intensity, safety, targets, allCalcs] = await Promise.all([
         this.carbonApi.getOverview(this.period()),
         this.intensityApi.getOverview(this.period()),
         this.safetyApi.getOverview(this.period()),
-        this.targetApi.list('active')
+        this.targetApi.list('active'),
+        this.carbonApi.getCalculations(this.period(), {})
       ]);
-      this.safetyMetrics = safety.metrics;
-      this.activeTargets = targets;
 
-      this.values = {
-        'scope1-total': { value: carbon.scope1_tco2e, unit: 'tCO2e' },
-        'scope2-total': { value: carbon.scope2_location_based_tco2e, unit: 'tCO2e' },
-        'scope3-total': { value: null, unit: 'tCO2e' },
-        'energy-total': { value: intensity.energy_gj, unit: 'GJ' },
-        'water-total': { value: intensity.water_kl, unit: 'KL' },
-        'waste-total': { value: intensity.waste_mt, unit: 'MT' },
-        'total-ghg': { value: carbon.scope1_2_location_based_tco2e, unit: 'tCO2e' },
-        'production-input': { value: intensity.production_mnah, unit: 'Mn Ah' },
-        'revenue-input': { value: intensity.revenue_inr_cr, unit: 'INR Cr' },
-        'intensity-production': {
-          value: carbon.intensity_tco2e_per_mnah,
-          unit: 'tCO2e/MnAh',
-          extra: [
-            intensity.energy_per_production !== null ? `${intensity.energy_per_production.toFixed(2)} GJ/MnAh` : 'Energy: data required',
-            intensity.water_per_production !== null ? `${intensity.water_per_production.toFixed(1)} KL/MnAh` : 'Water: data required',
-            intensity.waste_per_production !== null ? `${intensity.waste_per_production.toFixed(2)} MT/MnAh` : 'Waste: data required'
-          ]
-        },
-        'intensity-revenue': {
-          value: intensity.ghg_per_revenue,
-          unit: 'tCO2e/Cr',
-          extra: [
-            intensity.energy_per_revenue !== null ? `${intensity.energy_per_revenue.toFixed(2)} GJ/Cr` : 'Energy: data required',
-            intensity.water_per_revenue !== null ? `${intensity.water_per_revenue.toFixed(1)} KL/Cr` : 'Water: data required',
-            intensity.waste_per_revenue !== null ? `${intensity.waste_per_revenue.toFixed(2)} MT/Cr` : 'Waste: data required'
-          ]
-        },
-        'target-comparison': {
-          value: targets.length,
-          unit: targets.length === 1 ? 'active target' : 'active targets',
-          extra: targets.map((t) => `${t.metric_type === 'intensity_tco2e_per_mnah' ? 'Intensity' : 'Absolute'}: ${t.current_status_label ?? 'Not enough data'}`)
-        },
-        'safety-input': {
-          value: safety.metrics.length,
-          unit: 'metrics tracked',
-          extra: safety.metrics.map((m) => `${m.name}: ${m.value !== null ? m.value + ' ' + m.unit : 'not yet entered'}`)
-        },
-        'dashboard': { value: null, unit: '' }
+      const byName = (name: string) => allCalcs.filter((c) => c.data_point_name === name);
+      const sumTco2e = (rows: EmissionCalculationOut[]): number | null =>
+        rows.length === 0 ? null : rows.reduce((s, r) => s + (r.emissions_tco2e ?? 0), 0);
+      const activityLine = (rows: EmissionCalculationOut[]): string | null => {
+        if (rows.length === 0) return null;
+        const total = rows.reduce((s, r) => s + r.activity_value, 0);
+        return `${total.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${rows[0].activity_unit}`;
       };
+      const tco2eLine = (v: number | null): string => (v !== null ? `${v.toFixed(2)} tCO2e` : 'No approved calculation');
+      const numLine = (v: number | null, unit: string, decimals = 1): string =>
+        v !== null ? `${v.toFixed(decimals)} ${unit}` : `${unit}: data required`;
+
+      const diesel = byName('Diesel Consumed');
+      const petrol = byName('Petrol Consumed');
+      const lpg = byName('LPG Consumed');
+      const refrigerant = byName('Refrigerant Leakage — R-134a');
+      const electricity = byName('Grid Electricity Consumed');
+
+      const fuelGhg = [...diesel, ...petrol, ...lpg];
+      const fuelGhgTotal = sumTco2e(fuelGhg);
+      const fugitiveTotal = sumTco2e(refrigerant);
+      const gridGhgTotal = sumTco2e(electricity);
+
+      // Energy: grid's MJ contribution is computed exactly the way the
+      // backend does (kWh x 3.6, /1000 for GJ); fuel's share is the
+      // remainder of the real Total Energy figure, so both numbers stay
+      // consistent with the actual reported total rather than an
+      // independent (and possibly drifting) re-derivation.
+      const electricityKwh = electricity.reduce((s, r) => s + r.activity_value, 0);
+      const gridEnergyGj = electricity.length > 0 ? (electricityKwh * 3.6) / 1000 : null;
+      const fuelEnergyGj =
+        intensity.energy_gj !== null && gridEnergyGj !== null ? intensity.energy_gj - gridEnergyGj : intensity.energy_gj;
+
+      const unresolvedCount = carbon.unresolved_count;
+
+      this.lines = {
+        diesel: [activityLine(diesel) ?? 'No approved entry', tco2eLine(sumTco2e(diesel))],
+        petrol: [activityLine(petrol) ?? 'No approved entry', tco2eLine(sumTco2e(petrol))],
+        lpg: [activityLine(lpg) ?? 'No approved entry', tco2eLine(sumTco2e(lpg))],
+        refrigerant: [activityLine(refrigerant) ?? 'No approved entry', tco2eLine(fugitiveTotal)],
+        electricity: [activityLine(electricity) ?? 'No approved entry', tco2eLine(gridGhgTotal)],
+        'water-sources': [numLine(intensity.water_kl, 'KL')],
+        'waste-sources': [numLine(intensity.waste_mt, 'MT', 2)],
+        'production-input': [numLine(intensity.production_mnah, 'Mn Ah', 2)],
+        'revenue-input': [numLine(intensity.revenue_inr_cr, 'INR Cr', 2)],
+        'safety-input': safety.metrics.map((m) => `${m.name}: ${m.value !== null ? m.value + ' ' + m.unit : 'not entered'}`),
+
+        'fuel-ghg-calc': [tco2eLine(fuelGhgTotal)],
+        'fuel-energy-calc': [numLine(fuelEnergyGj, 'GJ', 2)],
+        'fugitive-calc': [tco2eLine(fugitiveTotal)],
+        'grid-ghg-calc': [tco2eLine(gridGhgTotal)],
+        'grid-energy-calc': [numLine(gridEnergyGj, 'GJ', 2)],
+
+        'scope1-total': [numLine(carbon.scope1_tco2e, 'tCO2e', 2)],
+        'scope2-total': [numLine(carbon.scope2_location_based_tco2e, 'tCO2e', 2)],
+        'scope3-total': ['Not calculated yet'],
+        'energy-total': [numLine(intensity.energy_gj, 'GJ', 1)],
+        'water-total': [numLine(intensity.water_kl, 'KL', 0)],
+        'waste-total': [numLine(intensity.waste_mt, 'MT', 1)],
+
+        'total-ghg': [numLine(carbon.scope1_2_location_based_tco2e, 'tCO2e', 2)],
+
+        'intensity-production': [
+          numLine(carbon.intensity_tco2e_per_mnah, 'tCO2e/MnAh', 3),
+          numLine(intensity.energy_per_production, 'GJ/MnAh', 2),
+          numLine(intensity.water_per_production, 'KL/MnAh', 1),
+          numLine(intensity.waste_per_production, 'MT/MnAh', 2)
+        ],
+        'intensity-revenue': [
+          numLine(intensity.ghg_per_revenue, 'tCO2e/Cr', 3),
+          numLine(intensity.energy_per_revenue, 'GJ/Cr', 2),
+          numLine(intensity.water_per_revenue, 'KL/Cr', 1),
+          numLine(intensity.waste_per_revenue, 'MT/Cr', 2)
+        ],
+
+        'target-comparison':
+          targets.length > 0
+            ? targets.map((t) => `${t.metric_type === 'intensity_tco2e_per_mnah' ? 'Intensity' : 'Absolute'}: ${t.current_status_label ?? 'Not enough data'}`)
+            : ['No active targets'],
+
+        'unresolved-queue': [`${unresolvedCount} ${unresolvedCount === 1 ? 'entry' : 'entries'} pending`],
+        'missing-factor': unresolvedCount > 0 ? ['Currently active'] : ['None this period'],
+
+        dashboard: []
+      };
+
+      this.extraLines = {};
     } catch {
-      this.values = {};
+      this.lines = {};
     } finally {
       this.loading.set(false);
     }
@@ -243,14 +292,24 @@ export class FlowDiagramComponent implements OnInit {
     return new Date(`${this.period()}T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   }
 
-  nodeValueLabel(node: FlowNode): string | null {
-    const v = this.values[node.id];
-    if (!v || v.value === null) return null;
-    if (node.id === 'target-comparison' || node.id === 'safety-input') {
-      return `${v.value} ${v.unit}`;
-    }
-    const decimals = Math.abs(v.value) < 1 ? 3 : 1;
-    return `${v.value.toFixed(decimals)} ${v.unit}`;
+  nodeLines(node: FlowNode): string[] {
+    return this.lines[node.id] ?? [];
+  }
+
+  private static readonly LINE_HEIGHT = 13;
+
+  private contentTop(node: FlowNode): number {
+    const n = this.nodeLines(node).length;
+    const totalH = (n + 1) * FlowDiagramComponent.LINE_HEIGHT;
+    return (node.h - totalH) / 2;
+  }
+
+  labelY(node: FlowNode): number {
+    return this.contentTop(node) + FlowDiagramComponent.LINE_HEIGHT - 2;
+  }
+
+  lineY(node: FlowNode, index: number): number {
+    return this.contentTop(node) + (index + 2) * FlowDiagramComponent.LINE_HEIGHT - 2;
   }
 
   // -- Pan / zoom -----------------------------------------------------
@@ -284,7 +343,7 @@ export class FlowDiagramComponent implements OnInit {
   }
 
   fitToView(): void {
-    this.viewBox.set({ x: 0, y: 0, w: 2020, h: 1000 });
+    this.viewBox.set({ x: 0, y: 0, w: 2020, h: 1010 });
   }
 
   onPointerDown(event: PointerEvent): void {
@@ -311,12 +370,12 @@ export class FlowDiagramComponent implements OnInit {
 
   async selectNode(node: FlowNode): Promise<void> {
     this.selectedNode.set(node);
-    const v = this.values[node.id];
+    const nodeLines = this.lines[node.id] ?? [];
     this.detail.set({
       title: node.label,
       live: node.live,
-      value: v && v.value !== null ? `${v.value} ${v.unit}` : null,
-      extraValues: v?.extra ?? [],
+      value: nodeLines[0] ?? null,
+      extraValues: nodeLines.slice(1),
       formula: this.formulaFor(node),
       note: this.noteFor(node),
       loading: !!node.sourceName,
