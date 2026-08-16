@@ -92,10 +92,17 @@ class BulkImportRowIn(BaseModel):
     value_raw: str
     unit_raw: str | None = None
     note: str | None = None
+    # Only meaningful when BulkImportRequest.category is None (the "all
+    # categories" upload) -- some field names exist in more than one
+    # category (e.g. "Total Treated Effluent Generated" under both
+    # ETP-Water and STP-Water), so name alone can be ambiguous.
+    category: str | None = None
 
 
 class BulkImportRequest(BaseModel):
-    category: str
+    # None means "all categories" -- rows are matched by (row.category,
+    # data_point_name) instead of being pre-scoped to one category.
+    category: str | None = None
     location_id: uuid.UUID
     # Used for any row that doesn't specify its own period -- i.e. a file
     # with no Period column at all, which is the common single-month case.
@@ -119,6 +126,10 @@ class BulkImportRowResult(BaseModel):
     # so the UI (and the annotated file re-download) can suggest it
     # directly instead of just saying "wrong unit".
     suggested_unit: str | None = None
+    # Only set in "all categories" mode -- which category this row's
+    # data point actually belongs to, so the UI can show it even when the
+    # uploaded row didn't specify one.
+    category: str | None = None
 
 
 class BulkImportResponse(BaseModel):

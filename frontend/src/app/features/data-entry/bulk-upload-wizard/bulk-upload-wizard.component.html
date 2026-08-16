@@ -137,6 +137,9 @@
               <tr>
                 <th></th>
                 <th>Row</th>
+                @if (isAllCategories()) {
+                  <th>Category</th>
+                }
                 <th>Data point</th>
                 <th>Period</th>
                 <th>Value</th>
@@ -155,14 +158,34 @@
                     }
                   </td>
                   <td>{{ row.row_index }}</td>
+                  @if (isAllCategories()) {
+                    <td>
+                      <select [ngModel]="row.category" (ngModelChange)="updateRow(row.row_index, { category: $event || null })">
+                        <option [value]="null">(any category)</option>
+                        @for (cat of allCategories; track cat.id) {
+                          <option [value]="cat.name">{{ cat.name }}</option>
+                        }
+                      </select>
+                    </td>
+                  }
                   <td>
                     <select
                       [ngModel]="row.data_point_name"
                       (ngModelChange)="updateRow(row.row_index, { data_point_name: $event })"
                     >
                       <option [value]="row.data_point_name" [hidden]="true">{{ row.data_point_name || '(choose a field)' }}</option>
-                      @for (dp of category.data_points; track dp.id) {
-                        <option [value]="dp.name">{{ dp.name }}</option>
+                      @if (isAllCategories()) {
+                        @for (cat of allCategories; track cat.id) {
+                          <optgroup [label]="cat.name">
+                            @for (dp of cat.data_points; track dp.id) {
+                              <option [value]="dp.name">{{ dp.name }}</option>
+                            }
+                          </optgroup>
+                        }
+                      } @else {
+                        @for (dp of category!.data_points; track dp.id) {
+                          <option [value]="dp.name">{{ dp.name }}</option>
+                        }
                       }
                     </select>
                   </td>
@@ -252,8 +275,8 @@
       } @else {
         <p class="wizard-intro summary-headline">{{ summaryLabel() }}</p>
         <p class="wizard-intro">
-          These will be created as <strong>Submitted</strong> entries for {{ category.name }} and land directly in the
-          Approver's queue, exactly like a manually entered field.
+          These will be created as <strong>Submitted</strong> entries{{ category ? ' for ' + category.name : '' }} and land
+          directly in the Approver's queue, exactly like a manually entered field.
         </p>
 
         @if (commitError()) {

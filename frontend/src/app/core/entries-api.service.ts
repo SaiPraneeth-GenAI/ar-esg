@@ -77,6 +77,7 @@ export interface AttachmentRecord {
 
 export interface BulkImportRowIn {
   row_index: number;
+  category?: string | null;
   data_point_name: string;
   period_iso: string;
   value_raw: string;
@@ -94,6 +95,7 @@ export interface BulkImportRowResult {
   entry_id: string | null;
   unit_note: string | null;
   suggested_unit: string | null;
+  category: string | null;
 }
 
 export interface BulkImportResponse {
@@ -189,23 +191,23 @@ export class EntriesApiService {
     );
   }
 
-  async downloadCsvTemplate(category: string): Promise<void> {
+  async downloadCsvTemplate(category: string | null): Promise<void> {
     const { data } = await this.supabase.client.auth.getSession();
-    const response = await fetch(
-      `${environment.apiBaseUrl}/entries/csv-template?${new URLSearchParams({ category })}`,
-      { headers: { Authorization: `Bearer ${data.session?.access_token ?? ''}` } }
-    );
+    const params = category ? `?${new URLSearchParams({ category })}` : '';
+    const response = await fetch(`${environment.apiBaseUrl}/entries/csv-template${params}`, {
+      headers: { Authorization: `Bearer ${data.session?.access_token ?? ''}` }
+    });
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${category.replace(/\s+/g, '_')}_template.csv`;
+    link.download = category ? `${category.replace(/\s+/g, '_')}_template.csv` : 'all_categories_template.csv';
     link.click();
     URL.revokeObjectURL(url);
   }
 
   async bulkImport(
-    category: string,
+    category: string | null,
     locationId: string,
     rows: BulkImportRowIn[],
     commit: boolean,

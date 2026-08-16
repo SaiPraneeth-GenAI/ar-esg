@@ -18,6 +18,7 @@ from app.schemas.entries import (
     AuditLogOut,
     BulkImportRequest,
     BulkImportResponse,
+    BulkImportRowIn,
     BulkImportRowResult,
     CategoryOut,
     DataPointOut,
@@ -442,27 +443,39 @@ def save_mapping_template(
 
 @router.get("/csv-template")
 def csv_template(
-    category: str,
+    category: str | None = None,
     current: CurrentUser = Depends(require_roles("Admin", "Manager")),
     db: Session = Depends(get_db),
 ):
-    data_points = (
-        db.query(DataPoint)
+    """category=None downloads one combined template covering every
+    category at once -- a Category column disambiguates the handful of
+    field names that exist under more than one category (e.g. "Total
+    Treated Effluent Generated" under both ETP-Water and STP-Water)."""
+    q = (
+        db.query(DataPoint, Category.name)
         .join(Category, Category.id == DataPoint.category_id)
-        .filter(Category.tenant_id == current.tenant_id, Category.name == category)
-        .order_by(DataPoint.name)
-        .all()
+        .filter(Category.tenant_id == current.tenant_id)
     )
+    if category is not None:
+        q = q.filter(Category.name == category)
+    rows = q.order_by(Category.display_order, DataPoint.name).all()
+
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     # No Period column by default -- the wizard's own period selector covers
     # the common single-month case. Add one yourself (any header like
     # "Period" or "Month") if you want to backfill several months at once.
-    writer.writerow(["data_point_name", "value", "unit", "note"])
-    for dp in data_points:
-        writer.writerow([dp.name, "", dp.unit or "", ""])
+    if category is None:
+        writer.writerow(["category", "data_point_name", "value", "unit", "note"])
+        for dp, cat_name in rows:
+            writer.writerow([cat_name, dp.name, "", dp.unit or "", ""])
+        filename = "all_categories_template.csv"
+    else:
+        writer.writerow(["data_point_name", "value", "unit", "note"])
+        for dp, _ in rows:
+            writer.writerow([dp.name, "", dp.unit or "", ""])
+        filename = f"{category.replace(' ', '_')}_template.csv"
 
-    filename = f"{category.replace(' ', '_')}_template.csv"
     return Response(
         content=buffer.getvalue(),
         media_type="text/csv",
@@ -480,20 +493,54 @@ def bulk_import(
     frontend has already parsed and column-mapped from an uploaded file.
     Every row is re-validated here regardless -- duplicate-within-file and
     duplicate-against-existing-entries checks need DB truth the client
-    doesn't have."""
-    data_points = (
-        db.query(DataPoint)
-        .join(Category, Category.id == DataPoint.category_id)
-        .filter(Category.tenant_id == current.tenant_id, Category.name == payload.category)
-        .all()
+    doesn't have.
+
+    payload.category is None for the "all categories" upload -- rows are
+    then matched by (row.category, data_point_name) since a handful of
+    field names exist under more than one category (e.g. "Total Treated
+    Effluent Generated" under both ETP-Water and STP-Water); a row with no
+    category that matches more than one is an ambiguity error, not a
+    guess."""
+    q = db.query(DataPoint, Category.name).join(Category, Category.id == DataPoint.category_id).filter(
+        Category.tenant_id == current.tenant_id
     )
-    by_name = {dp.name.strip().lower(): dp for dp in data_points}
+    if payload.category is not None:
+        q = q.filter(Category.name == payload.category)
+    all_rows = q.all()
+
+    by_cat_and_name: dict[tuple[str, str], DataPoint] = {}
+    by_name_only: dict[str, list[tuple[DataPoint, str]]] = {}
+    for dp, cat_name in all_rows:
+        by_cat_and_name[(cat_name.strip().lower(), dp.name.strip().lower())] = dp
+        by_name_only.setdefault(dp.name.strip().lower(), []).append((dp, cat_name))
+
+    def resolve_data_point(row: BulkImportRowIn) -> tuple[DataPoint | None, str | None, str | None]:
+        """Returns (data_point, category_name, error_message)."""
+        name_key = row.data_point_name.strip().lower()
+        if payload.category is not None:
+            dp = by_cat_and_name.get((payload.category.strip().lower(), name_key))
+            return (dp, payload.category, None) if dp else (None, None, f"'{row.data_point_name}' is not a field in {payload.category}")
+
+        if row.category:
+            dp = by_cat_and_name.get((row.category.strip().lower(), name_key))
+            if dp is None:
+                return None, None, f"'{row.data_point_name}' is not a field in '{row.category}'"
+            return dp, row.category, None
+
+        candidates = by_name_only.get(name_key, [])
+        if len(candidates) == 0:
+            return None, None, f"'{row.data_point_name}' does not match any field in this tenant"
+        if len(candidates) > 1:
+            options = ", ".join(sorted({c[1] for c in candidates}))
+            return None, None, f"'{row.data_point_name}' exists in more than one category ({options}) -- add a Category column to specify which"
+        dp, cat_name = candidates[0]
+        return dp, cat_name, None
 
     results: list[BulkImportRowResult] = []
     seen_in_file: set[tuple[uuid.UUID, date]] = set()
 
     for row in payload.rows:
-        dp = by_name.get(row.data_point_name.strip().lower())
+        dp, resolved_category, resolve_error = resolve_data_point(row)
         if dp is None:
             results.append(
                 BulkImportRowResult(
@@ -502,7 +549,7 @@ def bulk_import(
                     data_point_name=row.data_point_name,
                     period=None,
                     value=None,
-                    message=f"'{row.data_point_name}' is not a field in {payload.category}",
+                    message=resolve_error,
                 )
             )
             continue
@@ -615,6 +662,7 @@ def bulk_import(
                     period=period,
                     value=value,
                     unit_note=unit_note,
+                    category=resolved_category,
                 )
             )
             continue
@@ -640,6 +688,7 @@ def bulk_import(
                 value=value,
                 entry_id=entry.id,
                 unit_note=unit_note,
+                category=resolved_category,
             )
         )
 

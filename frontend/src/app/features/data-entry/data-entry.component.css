@@ -4,7 +4,14 @@
   padding: 2.5rem 2rem;
 }
 
-header h1 {
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.page-header h1 {
   margin: 0;
   color: #101828;
 }
@@ -12,6 +19,19 @@ header h1 {
 .subtitle {
   color: #667085;
   margin: 0.25rem 0 1.5rem;
+}
+
+.primary-btn {
+  background: #0e2c21;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
 }
 
 .banner {

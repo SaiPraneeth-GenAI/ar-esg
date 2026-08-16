@@ -4,13 +4,19 @@ import { ApiService } from '../../core/api.service';
 import { EntriesApiService, EntryCategory } from '../../core/entries-api.service';
 import { SupabaseService } from '../../core/supabase.service';
 import { ApprovalQueueComponent } from './approval-queue/approval-queue.component';
+import { BulkUploadWizardComponent } from './bulk-upload-wizard/bulk-upload-wizard.component';
 import { CategoryPickerComponent } from './category-picker/category-picker.component';
 import { EntryFormComponent } from './entry-form/entry-form.component';
+
+function currentMonthValue(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+}
 
 @Component({
   selector: 'app-data-entry',
   standalone: true,
-  imports: [CategoryPickerComponent, EntryFormComponent, ApprovalQueueComponent],
+  imports: [CategoryPickerComponent, EntryFormComponent, ApprovalQueueComponent, BulkUploadWizardComponent],
   templateUrl: './data-entry.component.html',
   styleUrl: './data-entry.component.css'
 })
@@ -33,6 +39,8 @@ export class DataEntryComponent implements OnInit {
   selectedCategory = signal<EntryCategory | null>(null);
   locationId = signal('');
   initialPeriod = signal<string | null>(null);
+  showBulkUploadAll = signal(false);
+  bulkUploadPeriod = signal(currentMonthValue());
 
   async ngOnInit(): Promise<void> {
     this.loading.set(true);
@@ -74,5 +82,13 @@ export class DataEntryComponent implements OnInit {
 
   backToCategories(): void {
     this.selectedCategory.set(null);
+  }
+
+  openBulkUploadAll(): void {
+    this.showBulkUploadAll.set(true);
+  }
+
+  closeBulkUploadAll(): void {
+    this.showBulkUploadAll.set(false);
   }
 }

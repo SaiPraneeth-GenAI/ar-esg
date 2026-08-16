@@ -7,6 +7,12 @@ export interface TargetField {
 
 export const TARGET_FIELDS: TargetField[] = [
   {
+    key: 'category',
+    label: 'Category',
+    required: false,
+    synonyms: ['category', 'section', 'group', 'input group']
+  },
+  {
     key: 'data_point_name',
     label: 'Data point',
     required: true,

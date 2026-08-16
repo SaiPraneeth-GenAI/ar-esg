@@ -22,6 +22,7 @@ interface MappingChoice {
 
 interface EditableRow {
   row_index: number;
+  category: string | null; // only meaningful/shown in "all categories" mode
   data_point_name: string;
   period_iso: string; // "" means "use the wizard's selected period"
   value_raw: string;
@@ -52,12 +53,26 @@ function cellDisplay(value: unknown): string {
 export class BulkUploadWizardComponent {
   private api = inject(EntriesApiService);
 
-  @Input({ required: true }) category!: EntryCategory;
+  /** null = "all categories" mode -- one upload covering every category at
+   * once, matched by (category, data_point_name) since a few field names
+   * repeat across categories. */
+  @Input() category: EntryCategory | null = null;
+  /** Needed only in "all categories" mode, to populate the data-point
+   * dropdown and label each row with its category. */
+  @Input() allCategories: EntryCategory[] = [];
   @Input({ required: true }) locationId!: string;
   /** ISO "YYYY-MM-01" -- the period already selected at the top of the Data
    * Entry screen. Used for any row that doesn't specify its own period. */
   @Input({ required: true }) period!: string;
   @Output() done = new EventEmitter<void>();
+
+  isAllCategories(): boolean {
+    return this.category === null;
+  }
+
+  categoryOptions(): EntryCategory[] {
+    return this.category ? [this.category] : this.allCategories;
+  }
 
   targetFields: TargetField[] = TARGET_FIELDS;
 
@@ -148,7 +163,7 @@ export class BulkUploadWizardComponent {
   }
 
   async downloadTemplate(): Promise<void> {
-    await this.api.downloadCsvTemplate(this.category.name);
+    await this.api.downloadCsvTemplate(this.category?.name ?? null);
   }
 
   backToUpload(): void {
@@ -177,6 +192,7 @@ export class BulkUploadWizardComponent {
   private buildRowsFromFile(): EditableRow[] {
     const mapping = this.mapping();
     const indexOf = (key: string) => mapping.find((m) => m.target === key)?.headerIndex;
+    const categoryIdx = indexOf('category');
     const nameIdx = indexOf('data_point_name');
     const periodIdx = indexOf('period');
     const valueIdx = indexOf('value');
@@ -195,6 +211,7 @@ export class BulkUploadWizardComponent {
       const periodIso = (periodRaw ? parsePeriodToIso(periodRaw) : null) ?? this.period;
       return {
         row_index: i + 2, // +1 for header row, +1 for 1-indexing
+        category: categoryIdx !== undefined ? String(row[categoryIdx] ?? '').trim() || null : null,
         data_point_name: String(row[nameIdx] ?? '').trim(),
         period_iso: periodIso,
         value_raw: String(row[valueIdx] ?? '').trim(),
@@ -243,6 +260,7 @@ export class BulkUploadWizardComponent {
   private toPayloadRows(source: EditableRow[]): BulkImportRowIn[] {
     return source.map((r) => ({
       row_index: r.row_index,
+      category: r.category,
       data_point_name: r.data_point_name,
       period_iso: r.period_iso,
       value_raw: r.value_raw,
@@ -258,12 +276,19 @@ export class BulkUploadWizardComponent {
     }
     this.validating.set(true);
     try {
-      const result = await this.api.bulkImport(this.category.name, this.locationId, this.toPayloadRows(current), false, this.period);
+      const result = await this.api.bulkImport(
+        this.category?.name ?? null,
+        this.locationId,
+        this.toPayloadRows(current),
+        false,
+        this.period
+      );
       const byIndex = new Map(result.rows.map((r) => [r.row_index, r]));
       const merged = current.map((row) => {
         const r = byIndex.get(row.row_index);
         return {
           ...row,
+          category: r?.category ?? row.category,
           status: (r?.status as RowStatus) ?? 'error',
           message: r?.message ?? null,
           included: r ? r.status !== 'error' : false,
@@ -291,7 +316,9 @@ export class BulkUploadWizardComponent {
    * errors inside this wizard. */
   async downloadAnnotatedFile(): Promise<void> {
     const XLSX = await import('xlsx');
+    const all = this.isAllCategories();
     const data = this.rows().map((r) => ({
+      ...(all ? { category: r.category ?? '' } : {}),
       data_point_name: r.data_point_name,
       period: r.period_iso || this.period,
       value: r.value_raw,
@@ -302,10 +329,12 @@ export class BulkUploadWizardComponent {
       suggested_unit: r.suggestedUnit ?? ''
     }));
     const ws = XLSX.utils.json_to_sheet(data);
-    ws['!cols'] = [{ wch: 28 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 14 }, { wch: 40 }, { wch: 14 }];
+    const widths = [{ wch: 28 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 14 }, { wch: 40 }, { wch: 14 }];
+    ws['!cols'] = all ? [{ wch: 18 }, ...widths] : widths;
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Review');
-    XLSX.writeFile(wb, `${this.category.name.replace(/\s+/g, '_')}_review.xlsx`);
+    const filename = this.category ? this.category.name.replace(/\s+/g, '_') : 'all_categories';
+    XLSX.writeFile(wb, `${filename}_review.xlsx`);
   }
 
   goToConfirm(): void {
@@ -317,7 +346,13 @@ export class BulkUploadWizardComponent {
     this.committing.set(true);
     this.commitError.set('');
     try {
-      const result = await this.api.bulkImport(this.category.name, this.locationId, this.toPayloadRows(toCommit), true, this.period);
+      const result = await this.api.bulkImport(
+        this.category?.name ?? null,
+        this.locationId,
+        this.toPayloadRows(toCommit),
+        true,
+        this.period
+      );
       this.commitResult.set({ created: result.created_count, error: result.error_count });
     } catch {
       this.commitError.set('Could not create these entries. Nothing was saved.');

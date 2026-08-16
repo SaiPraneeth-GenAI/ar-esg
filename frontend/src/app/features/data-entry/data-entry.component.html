@@ -1,7 +1,12 @@
 <div class="page">
-  <header>
-    <h1>Data Entry</h1>
-    <p class="subtitle">Log monthly readings, or review what's waiting on your approval</p>
+  <header class="page-header">
+    <div>
+      <h1>Data Entry</h1>
+      <p class="subtitle">Log monthly readings, or review what's waiting on your approval</p>
+    </div>
+    @if (canSubmit() && !selectedCategory() && !showBulkUploadAll() && activeTab() === 'submit') {
+      <button type="button" class="primary-btn" (click)="openBulkUploadAll()">⇪ Bulk upload</button>
+    }
   </header>
 
   @if (errorMessage()) {
@@ -23,7 +28,15 @@
     }
 
     @if (activeTab() === 'submit' && canSubmit()) {
-      @if (selectedCategory()) {
+      @if (showBulkUploadAll()) {
+        <app-bulk-upload-wizard
+          [category]="null"
+          [allCategories]="categories()"
+          [locationId]="locationId()"
+          [period]="bulkUploadPeriod()"
+          (done)="closeBulkUploadAll()"
+        ></app-bulk-upload-wizard>
+      } @else if (selectedCategory()) {
         <app-entry-form
           [category]="selectedCategory()!"
           [locationId]="locationId()"
