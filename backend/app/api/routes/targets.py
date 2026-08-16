@@ -64,7 +64,7 @@ def _target_out(db: Session, target: EmissionTarget) -> TargetOut:
         now = datetime.now(timezone.utc)
         period = month_start(now.date())
         totals = compute_period_totals(db, target.tenant_id, target.location_id, period)
-        actual, _ = extract_metric_value(totals, target.scope, target.calculation_method)
+        actual, _ = extract_metric_value(totals, target.scope, target.calculation_method, target.metric_type)
         num_months = len(months_between(target.target_period_start, target.target_period_end))
         month_target = target_value_for_month(
             target.monthly_phasing, period, float(target.target_value) if target.target_value is not None else None, num_months, target.metric_type
@@ -350,7 +350,7 @@ def target_performance(
     out_months: list[TargetMonthPerformance] = []
     for period in months:
         totals = compute_period_totals(db, current.tenant_id, target.location_id, period)
-        actual, _ = extract_metric_value(totals, target.scope, target.calculation_method)
+        actual, _ = extract_metric_value(totals, target.scope, target.calculation_method, target.metric_type)
         month_target = target_value_for_month(target.monthly_phasing, period, target_value, num_months, target.metric_type)
         variance_pct = None
         if actual is not None and month_target is not None and month_target != 0:

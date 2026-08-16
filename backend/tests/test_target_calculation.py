@@ -73,6 +73,23 @@ def test_extract_metric_value_scope2_market_based():
     assert error is None
 
 
+def test_extract_metric_value_intensity_reads_intensity_not_absolute():
+    # Regression: extract_metric_value used to ignore metric_type entirely
+    # and always return the absolute total, so an intensity target's
+    # "actual" was compared against a target expressed as a rate --
+    # apples to oranges (17.9 tCO2e vs a 0.53 tCO2e/MnAh target).
+    totals = {"scope1_2_loc_tco2e": 17.9, "intensity": 0.511}
+    value, error = extract_metric_value(totals, "1_2_combined", None, "intensity_tco2e_per_mnah")
+    assert value == 0.511
+    assert error is None
+
+
+def test_extract_metric_value_intensity_outside_combined_boundary_errors():
+    value, error = extract_metric_value({}, "1", None, "intensity_tco2e_per_mnah")
+    assert value is None
+    assert error is not None
+
+
 def test_extract_metric_value_scope2_location_based_is_default():
     totals = {"scope1_2_loc_tco2e": 42.5, "scope1_tco2e": 10.0, "scope2_loc_tco2e": 32.5, "scope2_mkt_tco2e": 30.0}
     value, error = extract_metric_value(totals, "2", None)

@@ -67,11 +67,22 @@ def validate_metric_scope(scope: str, metric_type: str) -> str | None:
     return None
 
 
-def extract_metric_value(totals: dict, scope: str, calculation_method: str | None) -> tuple[float | None, str | None]:
+def extract_metric_value(
+    totals: dict, scope: str, calculation_method: str | None, metric_type: str = "absolute_tco2e"
+) -> tuple[float | None, str | None]:
     """Reads the one number a target boundary/metric combination refers to
     out of a compute_period_totals() result. Returns (value, error) --
     error is set when the boundary/metric combination has no defined
-    meaning (e.g. intensity for scope 1 alone)."""
+    meaning (e.g. intensity for scope 1 alone). metric_type must be
+    checked first and independently of scope: an intensity target reads a
+    completely different number (a rate) than an absolute target reads
+    (a total) even for the identical scope/method boundary, so falling
+    through to the scope branches below for an intensity target would
+    silently return the absolute total instead."""
+    if metric_type == "intensity_tco2e_per_mnah":
+        if scope != "1_2_combined":
+            return None, "Intensity is only defined for the Scope 1+2 combined boundary."
+        return totals["intensity"], None
     if scope == "1_2_combined":
         return totals["scope1_2_loc_tco2e"], None
     if scope == "1":
@@ -134,7 +145,7 @@ def compute_baseline(
 
     for m in months:
         totals = compute_period_totals(db, tenant_id, location_id, m)
-        value, error = extract_metric_value(totals, scope, calculation_method)
+        value, error = extract_metric_value(totals, scope, calculation_method, metric_type)
         completeness = totals["completeness_pct"]
         calc_ids = [r.id for r in totals["rows"]]
 
