@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
+import { PeriodMode } from './intensity-api.service';
 import { SupabaseService } from './supabase.service';
 
 export interface CarbonOverviewSource {
@@ -20,6 +21,9 @@ export interface TargetComparison {
 
 export interface CarbonOverview {
   period: string | null;
+  period_mode: PeriodMode;
+  period_start: string | null;
+  period_end: string | null;
   scope1_tco2e: number | null;
   scope2_location_based_tco2e: number | null;
   scope2_market_based_tco2e: number | null;
@@ -88,9 +92,9 @@ export class CarbonApiService {
     return { Authorization: `Bearer ${data.session?.access_token ?? ''}` };
   }
 
-  async getOverview(period: string, locationId?: string): Promise<CarbonOverview> {
+  async getOverview(period: string, locationId?: string, periodMode: PeriodMode = 'month'): Promise<CarbonOverview> {
     const headers = await this.authHeaders();
-    const params: Record<string, string> = { period };
+    const params: Record<string, string> = { period, period_mode: periodMode };
     if (locationId) params['location_id'] = locationId;
     return firstValueFrom(this.http.get<CarbonOverview>(`${environment.apiBaseUrl}/carbon/overview`, { headers, params }));
   }

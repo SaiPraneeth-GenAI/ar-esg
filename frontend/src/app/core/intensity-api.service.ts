@@ -4,8 +4,13 @@ import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { SupabaseService } from './supabase.service';
 
+export type PeriodMode = 'month' | 'quarter' | 'ytd';
+
 export interface IntensityOverview {
   period: string;
+  period_mode: PeriodMode;
+  period_start: string | null;
+  period_end: string | null;
   energy_gj: number | null;
   ghg_tco2e: number | null;
   water_kl: number | null;
@@ -72,9 +77,9 @@ export class IntensityApiService {
     return { Authorization: `Bearer ${data.session?.access_token ?? ''}` };
   }
 
-  async getOverview(period: string, locationId?: string): Promise<IntensityOverview> {
+  async getOverview(period: string, locationId?: string, periodMode: PeriodMode = 'month'): Promise<IntensityOverview> {
     const headers = await this.authHeaders();
-    const params: Record<string, string> = { period };
+    const params: Record<string, string> = { period, period_mode: periodMode };
     if (locationId) params['location_id'] = locationId;
     return firstValueFrom(this.http.get<IntensityOverview>(`${environment.apiBaseUrl}/intensity/overview`, { headers, params }));
   }

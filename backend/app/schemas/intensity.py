@@ -5,6 +5,9 @@ from pydantic import BaseModel
 
 class IntensityOverviewOut(BaseModel):
     period: date
+    period_mode: str = "month"
+    period_start: date | None = None
+    period_end: date | None = None
     energy_gj: float | None
     ghg_tco2e: float | None
     water_kl: float | None

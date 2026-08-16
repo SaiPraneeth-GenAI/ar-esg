@@ -1,5 +1,6 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, Input, OnChanges, inject, signal } from '@angular/core';
+import { PeriodMode } from '../../../core/intensity-api.service';
 import { SafetyApiService, SafetyMetric } from '../../../core/safety-api.service';
 import { ChartPoint, ChartSeriesDef, RichTrendChartComponent } from '../../../shared/rich-trend-chart/rich-trend-chart.component';
 
@@ -30,6 +31,7 @@ export class SafetyViewComponent implements OnChanges {
 
   @Input({ required: true }) period!: string;
   @Input() locationId: string | null = null;
+  @Input() periodMode: PeriodMode = 'month';
 
   loading = signal(true);
   errorMessage = signal('');
@@ -55,7 +57,7 @@ export class SafetyViewComponent implements OnChanges {
     this.loading.set(true);
     this.errorMessage.set('');
     try {
-      const ov = await this.api.getOverview(`${this.period}-01`, this.locationId ?? undefined);
+      const ov = await this.api.getOverview(`${this.period}-01`, this.locationId ?? undefined, this.periodMode);
       this.metrics.set(ov.metrics);
     } catch {
       this.errorMessage.set('Could not load safety data.');

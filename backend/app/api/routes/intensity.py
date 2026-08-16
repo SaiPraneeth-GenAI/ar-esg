@@ -7,8 +7,15 @@ from sqlalchemy.orm import Session
 from app.core.auth import CurrentUser, require_roles
 from app.db.session import get_db
 from app.schemas.intensity import IntensityOverviewOut, IntensityTrendPoint
-from app.services.carbon_calculation import prior_month, prior_year
-from app.services.intensity_calculation import compute_intensity_overview_batch
+from app.services.carbon_calculation import (
+    months_in_range,
+    prior_month,
+    prior_range_for_mode,
+    prior_year,
+    prior_year_range_for_mode,
+    range_bounds_for_mode,
+)
+from app.services.intensity_calculation import compute_intensity_overview_batch, compute_intensity_overview_range
 from app.services.rollups import month_start
 
 router = APIRouter(prefix="/intensity", tags=["intensity"])
@@ -29,18 +36,30 @@ def _trailing_months(period: date, count: int) -> list[date]:
 def intensity_overview(
     period: date,
     location_id: uuid.UUID | None = None,
+    period_mode: str = "month",
     current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
     db: Session = Depends(get_db),
 ):
+    """period_mode: 'month' (default), 'quarter' (quarter-to-date), or
+    'ytd' (year-to-date) -- mirrors /carbon/overview's range aggregation
+    (sum absolutes, recompute ratios from the sums)."""
     period = month_start(period)
-    periods = [period, prior_month(period), prior_year(period)]
-    by_period = compute_intensity_overview_batch(db, current.tenant_id, location_id, periods)
-    current_ov = by_period[periods[0]]
-    prior_ov = by_period[periods[1]]
-    prior_year_ov = by_period[periods[2]]
+    range_start, range_end = range_bounds_for_mode(period, period_mode)
+    current_months = months_in_range(range_start, range_end)
+    prior_start, prior_end = prior_range_for_mode(range_start, range_end, period_mode)
+    prior_months = months_in_range(prior_start, prior_end)
+    prior_year_start, prior_year_end = prior_year_range_for_mode(range_start, range_end)
+    prior_year_months = months_in_range(prior_year_start, prior_year_end)
+
+    current_ov = compute_intensity_overview_range(db, current.tenant_id, location_id, current_months)
+    prior_ov = compute_intensity_overview_range(db, current.tenant_id, location_id, prior_months)
+    prior_year_ov = compute_intensity_overview_range(db, current.tenant_id, location_id, prior_year_months)
 
     return IntensityOverviewOut(
         period=current_ov.period,
+        period_mode=period_mode,
+        period_start=range_start,
+        period_end=range_end,
         energy_gj=current_ov.energy_gj,
         ghg_tco2e=current_ov.ghg_tco2e,
         water_kl=current_ov.water_kl,

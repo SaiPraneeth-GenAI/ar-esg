@@ -3,10 +3,16 @@
     <div class="header-top">
       <div class="title-block">
         <h1>Amara Raja ESG Dashboard</h1>
-        <p class="subtitle">Showing {{ formatMonth() }}</p>
+        <p class="subtitle">Showing {{ formatPeriodLabel() }}</p>
       </div>
 
       <div class="header-controls">
+        <div class="mode-toggle" role="group" aria-label="Period mode">
+          <button type="button" class="mode-btn" [class.active]="periodMode() === 'month'" (click)="periodMode.set('month')">Monthly</button>
+          <button type="button" class="mode-btn" [class.active]="periodMode() === 'quarter'" (click)="periodMode.set('quarter')">Quarterly</button>
+          <button type="button" class="mode-btn" [class.active]="periodMode() === 'ytd'" (click)="periodMode.set('ytd')">YTD</button>
+        </div>
+
         <label class="control">
           <span class="control-label">Period</span>
           <input
@@ -44,16 +50,16 @@
   <div class="tab-content">
     @switch (activeTab()) {
       @case ('absolute') {
-        <app-absolute-metrics-view [period]="period()" [locationId]="effectiveLocationId()"></app-absolute-metrics-view>
+        <app-absolute-metrics-view [period]="period()" [locationId]="effectiveLocationId()" [periodMode]="periodMode()"></app-absolute-metrics-view>
       }
       @case ('production') {
-        <app-intensity-view mode="production" [period]="period()" [locationId]="effectiveLocationId()"></app-intensity-view>
+        <app-intensity-view mode="production" [period]="period()" [locationId]="effectiveLocationId()" [periodMode]="periodMode()"></app-intensity-view>
       }
       @case ('revenue') {
-        <app-intensity-view mode="revenue" [period]="period()" [locationId]="effectiveLocationId()"></app-intensity-view>
+        <app-intensity-view mode="revenue" [period]="period()" [locationId]="effectiveLocationId()" [periodMode]="periodMode()"></app-intensity-view>
       }
       @case ('safety') {
-        <app-safety-view [period]="period()" [locationId]="effectiveLocationId()"></app-safety-view>
+        <app-safety-view [period]="period()" [locationId]="effectiveLocationId()" [periodMode]="periodMode()"></app-safety-view>
       }
     }
   </div>

@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AdminLocation, ApiService } from '../../core/api.service';
 import { CarbonApiService } from '../../core/carbon-api.service';
+import { PeriodMode } from '../../core/intensity-api.service';
 import { AbsoluteMetricsViewComponent } from './absolute-metrics-view/absolute-metrics-view.component';
 import { IntensityViewComponent } from './intensity-view/intensity-view.component';
 import { SafetyViewComponent } from './safety-view/safety-view.component';
@@ -26,6 +27,7 @@ export class DashboardComponent implements OnInit {
   private carbonApi = inject(CarbonApiService);
 
   period = signal(currentMonthValue());
+  periodMode = signal<PeriodMode>('month');
   locationId = signal<string>(''); // '' = company-wide
   activeTab = signal<TabId>('absolute');
   locations = signal<AdminLocation[]>([]);
@@ -56,6 +58,16 @@ export class DashboardComponent implements OnInit {
   formatMonth(): string {
     const d = new Date(`${this.period()}-01T00:00:00`);
     return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
+
+  formatPeriodLabel(): string {
+    const d = new Date(`${this.period()}-01T00:00:00`);
+    if (this.periodMode() === 'month') return this.formatMonth();
+    if (this.periodMode() === 'quarter') {
+      const quarter = Math.floor(d.getMonth() / 3) + 1;
+      return `Q${quarter} ${d.getFullYear()} to date`;
+    }
+    return `Year to date, ${d.getFullYear()}`;
   }
 
   effectiveLocationId(): string | null {

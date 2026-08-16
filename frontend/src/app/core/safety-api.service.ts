@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
+import { PeriodMode } from './intensity-api.service';
 import { SupabaseService } from './supabase.service';
 
 export interface SafetyMetric {
@@ -14,6 +15,9 @@ export interface SafetyMetric {
 
 export interface SafetyOverview {
   period: string;
+  period_mode: PeriodMode;
+  period_start: string | null;
+  period_end: string | null;
   metrics: SafetyMetric[];
 }
 
@@ -32,9 +36,9 @@ export class SafetyApiService {
     return { Authorization: `Bearer ${data.session?.access_token ?? ''}` };
   }
 
-  async getOverview(period: string, locationId?: string): Promise<SafetyOverview> {
+  async getOverview(period: string, locationId?: string, periodMode: PeriodMode = 'month'): Promise<SafetyOverview> {
     const headers = await this.authHeaders();
-    const params: Record<string, string> = { period };
+    const params: Record<string, string> = { period, period_mode: periodMode };
     if (locationId) params['location_id'] = locationId;
     return firstValueFrom(this.http.get<SafetyOverview>(`${environment.apiBaseUrl}/safety/overview`, { headers, params }));
   }

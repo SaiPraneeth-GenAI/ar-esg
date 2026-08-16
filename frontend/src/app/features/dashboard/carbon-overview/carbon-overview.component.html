@@ -2,7 +2,10 @@
   <div class="carbon-header">
     <div>
       <h2 class="carbon-title">Carbon footprint</h2>
-      <p class="carbon-subtitle">From approved entries and their versioned emission factor -- calculation snapshots only, never a live sum.</p>
+      <p class="carbon-subtitle">
+        From approved entries and their versioned emission factor -- calculation snapshots only, never a live sum.
+        @if (overview()) { <span class="range-badge">{{ formatRangeLabel(overview()!) }}</span> }
+      </p>
     </div>
   </div>
 
@@ -160,7 +163,7 @@
 
     @if (overview()!.sources.length > 0) {
       <div class="source-breakdown">
-        <h3>Source breakdown -- {{ formatMonth(overview()!.period) }}</h3>
+        <h3>Source breakdown -- {{ formatRangeLabel(overview()!) }}</h3>
         <table class="drilldown-table">
           <thead>
             <tr>

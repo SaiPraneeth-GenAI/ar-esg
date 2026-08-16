@@ -28,6 +28,17 @@
   line-height: 1.5;
 }
 
+.range-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #3b5bdb;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
 .month-picker {
   display: flex;
   flex-direction: column;

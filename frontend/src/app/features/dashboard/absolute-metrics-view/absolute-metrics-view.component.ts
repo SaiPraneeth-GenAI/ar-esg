@@ -1,6 +1,6 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, Input, OnChanges, inject, signal } from '@angular/core';
-import { IntensityApiService, IntensityOverview } from '../../../core/intensity-api.service';
+import { IntensityApiService, IntensityOverview, PeriodMode } from '../../../core/intensity-api.service';
 import { CarbonOverviewComponent } from '../carbon-overview/carbon-overview.component';
 
 interface AbsoluteMetric {
@@ -24,6 +24,7 @@ export class AbsoluteMetricsViewComponent implements OnChanges {
 
   @Input({ required: true }) period!: string;
   @Input() locationId: string | null = null;
+  @Input() periodMode: PeriodMode = 'month';
 
   loading = signal(true);
   errorMessage = signal('');
@@ -33,7 +34,7 @@ export class AbsoluteMetricsViewComponent implements OnChanges {
     this.loading.set(true);
     this.errorMessage.set('');
     try {
-      this.overview.set(await this.api.getOverview(`${this.period}-01`, this.locationId ?? undefined));
+      this.overview.set(await this.api.getOverview(`${this.period}-01`, this.locationId ?? undefined, this.periodMode));
     } catch {
       this.errorMessage.set('Could not load absolute totals.');
     } finally {

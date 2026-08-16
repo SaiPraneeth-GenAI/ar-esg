@@ -311,3 +311,44 @@ def compute_intensity_overview_batch(
             waste_per_revenue=ratio(waste_mt, revenue_cr),
         )
     return result
+
+
+def _sum_optional(values: list[float | None]) -> float | None:
+    present = [v for v in values if v is not None]
+    return sum(present) if present else None
+
+
+def compute_intensity_overview_range(
+    db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, months: list[date]
+) -> IntensityOverview:
+    """Aggregates compute_intensity_overview_batch's per-month results
+    across a range (quarter-to-date / year-to-date): every absolute sums
+    across the months present, and every ratio is recomputed from those
+    summed absolutes -- never averaged from the monthly ratios, which
+    would misweight months with different production/revenue volume."""
+    by_month = compute_intensity_overview_batch(db, tenant_id, location_id, months)
+
+    energy_gj = _sum_optional([by_month[m].energy_gj for m in months])
+    ghg_tco2e = _sum_optional([by_month[m].ghg_tco2e for m in months])
+    water_kl = _sum_optional([by_month[m].water_kl for m in months])
+    waste_mt = _sum_optional([by_month[m].waste_mt for m in months])
+    production_mnah = _sum_optional([by_month[m].production_mnah for m in months])
+    revenue_inr_cr = _sum_optional([by_month[m].revenue_inr_cr for m in months])
+
+    return IntensityOverview(
+        period=months[-1],
+        energy_gj=energy_gj,
+        ghg_tco2e=ghg_tco2e,
+        water_kl=water_kl,
+        waste_mt=waste_mt,
+        production_mnah=production_mnah,
+        revenue_inr_cr=revenue_inr_cr,
+        energy_per_production=ratio(energy_gj, production_mnah),
+        ghg_per_production=ratio(ghg_tco2e, production_mnah),
+        water_per_production=ratio(water_kl, production_mnah),
+        waste_per_production=ratio(waste_mt, production_mnah),
+        energy_per_revenue=ratio(energy_gj, revenue_inr_cr),
+        ghg_per_revenue=ratio(ghg_tco2e, revenue_inr_cr),
+        water_per_revenue=ratio(water_kl, revenue_inr_cr),
+        waste_per_revenue=ratio(waste_mt, revenue_inr_cr),
+    )

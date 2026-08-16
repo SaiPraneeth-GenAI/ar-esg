@@ -2,6 +2,7 @@ import { DecimalPipe } from '@angular/common';
 import { Component, Input, OnChanges, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CarbonApiService, CarbonOverview, CarbonOverviewSource, EmissionCalculationOut } from '../../../core/carbon-api.service';
+import { PeriodMode } from '../../../core/intensity-api.service';
 import { ChartPoint, ChartSeriesDef, RichTrendChartComponent } from '../../../shared/rich-trend-chart/rich-trend-chart.component';
 import { EntryHistoryComponent } from '../../data-entry/entry-history/entry-history.component';
 
@@ -31,6 +32,7 @@ export class CarbonOverviewComponent implements OnChanges {
 
   @Input({ required: true }) period!: string;
   @Input() locationId: string | null = null;
+  @Input() periodMode: PeriodMode = 'month';
 
   loading = signal(true);
   errorMessage = signal('');
@@ -65,7 +67,7 @@ export class CarbonOverviewComponent implements OnChanges {
     this.expandedSourceKey.set(null);
     this.showUnresolved.set(false);
     try {
-      this.overview.set(await this.api.getOverview(this.periodIso(), this.locationId ?? undefined));
+      this.overview.set(await this.api.getOverview(this.periodIso(), this.locationId ?? undefined, this.periodMode));
     } catch {
       this.errorMessage.set('Could not load the carbon overview.');
     } finally {
@@ -139,6 +141,16 @@ export class CarbonOverviewComponent implements OnChanges {
   formatMonth(period: string | null): string {
     if (!period) return '';
     return new Date(`${period}T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
+
+  formatRangeLabel(ov: CarbonOverview): string {
+    if (ov.period_mode === 'month' || !ov.period_start || !ov.period_end) return this.formatMonth(ov.period);
+    const start = new Date(`${ov.period_start}T00:00:00`);
+    const end = new Date(`${ov.period_end}T00:00:00`);
+    const startLabel = start.toLocaleDateString('en-US', { month: 'short' });
+    const endLabel = end.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    const prefix = ov.period_mode === 'ytd' ? 'YTD' : 'Quarter-to-date';
+    return `${prefix}: ${startLabel} – ${endLabel}`;
   }
 
   comparisonLabel(current: number | null, prior: number | null, against = 'last month'): string {

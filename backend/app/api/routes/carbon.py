@@ -24,13 +24,18 @@ from app.services.carbon_calculation import (
     calculate_entries_batch,
     compute_period_totals,
     compute_period_totals_batch,
+    compute_range_totals,
+    months_in_range,
     prior_month,
+    prior_range_for_mode,
     prior_year,
+    prior_year_range_for_mode,
+    range_bounds_for_mode,
     run_calculation,
     to_decimal,
 )
 from app.services.rollups import month_start
-from app.services.target_calculation import classify_status, months_between, target_value_for_month
+from app.services.target_calculation import INTENSITY_METRIC_TYPES, classify_status, months_between, target_value_for_month
 
 router = APIRouter(prefix="/carbon", tags=["carbon"])
 
@@ -300,17 +305,26 @@ def carbon_trend(
 def carbon_overview(
     period: date,
     location_id: uuid.UUID | None = None,
+    period_mode: str = "month",
     current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
     db: Session = Depends(get_db),
 ):
     """Approved calculation snapshots only -- never a live sum of raw
-    entries (rule #10)."""
+    entries (rule #10). period_mode selects how far back "current" reaches
+    before period: 'month' (default, unchanged), 'quarter' (quarter-to-
+    date), or 'ytd' (year-to-date). Absolutes sum across the range;
+    intensity is recomputed from those summed totals, never averaged."""
     period = month_start(period)
-    periods = [period, prior_month(period), prior_year(period)]
-    totals_by_period = compute_period_totals_batch(db, current.tenant_id, location_id, periods)
-    current_totals = totals_by_period[periods[0]]
-    prior_totals = totals_by_period[periods[1]]
-    prior_year_totals = totals_by_period[periods[2]]
+    range_start, range_end = range_bounds_for_mode(period, period_mode)
+    current_months = months_in_range(range_start, range_end)
+    prior_start, prior_end = prior_range_for_mode(range_start, range_end, period_mode)
+    prior_months = months_in_range(prior_start, prior_end)
+    prior_year_start, prior_year_end = prior_year_range_for_mode(range_start, range_end)
+    prior_year_months = months_in_range(prior_year_start, prior_year_end)
+
+    current_totals = compute_range_totals(db, current.tenant_id, location_id, current_months)
+    prior_totals = compute_range_totals(db, current.tenant_id, location_id, prior_months)
+    prior_year_totals = compute_range_totals(db, current.tenant_id, location_id, prior_year_months)
     rows = current_totals["rows"]
     unresolved_count = current_totals["unresolved_count"]
     calculated_count = current_totals["calculated_count"]
@@ -339,14 +353,17 @@ def carbon_overview(
     insight = _build_insight(sources, current_totals["scope1_2_loc_tco2e"], prior_totals["scope1_2_loc_tco2e"], unresolved_count)
 
     scope1_2_target = _active_target_comparison(
-        db, current.tenant_id, location_id, "1_2_combined", "absolute_tco2e", period, current_totals["scope1_2_loc_tco2e"]
+        db, current.tenant_id, location_id, "1_2_combined", "absolute_tco2e", current_months, current_totals["scope1_2_loc_tco2e"]
     )
     intensity_target = _active_target_comparison(
-        db, current.tenant_id, location_id, "1_2_combined", "intensity_tco2e_per_mnah", period, current_totals["intensity"]
+        db, current.tenant_id, location_id, "1_2_combined", "intensity_tco2e_per_mnah", current_months, current_totals["intensity"]
     )
 
     return CarbonOverview(
         period=period,
+        period_mode=period_mode,
+        period_start=range_start,
+        period_end=range_end,
         scope1_tco2e=current_totals["scope1_tco2e"],
         scope2_location_based_tco2e=current_totals["scope2_loc_tco2e"],
         scope2_market_based_tco2e=current_totals["scope2_mkt_tco2e"],
@@ -369,12 +386,18 @@ def carbon_overview(
 
 
 def _active_target_comparison(
-    db: Session, tenant_id, location_id, scope: str, metric_type: str, period: date, actual: float | None
+    db: Session, tenant_id, location_id, scope: str, metric_type: str, months: list[date], actual: float | None
 ) -> TargetComparison | None:
     """Only ever reads an active target for the exact same boundary this
     card already shows -- never substitutes a different location/scope
     target, and never fabricates a comparison when none has been
-    declared (rule: targets are never auto-created)."""
+    declared (rule: targets are never auto-created). `months` is the same
+    range the actual figure was aggregated over (one month, or a
+    quarter-to-date/year-to-date range): an absolute target's budget is
+    summed across exactly those months so it's comparable to a multi-month
+    actual; an intensity target's value is a rate and stays constant
+    regardless of range length."""
+    anchor_period = months[-1]
     target = (
         db.query(EmissionTarget)
         .filter(
@@ -383,18 +406,29 @@ def _active_target_comparison(
             EmissionTarget.scope == scope,
             EmissionTarget.metric_type == metric_type,
             EmissionTarget.status == "active",
-            EmissionTarget.target_period_start <= period,
-            EmissionTarget.target_period_end >= period,
+            EmissionTarget.target_period_start <= anchor_period,
+            EmissionTarget.target_period_end >= anchor_period,
         )
         .first()
     )
     if target is None or target.target_value is None:
         return None
     num_months = len(months_between(target.target_period_start, target.target_period_end))
-    month_target = target_value_for_month(target.monthly_phasing, period, float(target.target_value), num_months, target.metric_type)
-    if month_target is None:
+    if metric_type in INTENSITY_METRIC_TYPES:
+        range_target = target_value_for_month(
+            target.monthly_phasing, anchor_period, float(target.target_value), num_months, target.metric_type
+        )
+    else:
+        relevant = [m for m in months if target.target_period_start <= m <= target.target_period_end]
+        monthly_targets = [
+            target_value_for_month(target.monthly_phasing, m, float(target.target_value), num_months, target.metric_type)
+            for m in relevant
+        ]
+        monthly_targets = [t for t in monthly_targets if t is not None]
+        range_target = sum(monthly_targets) if monthly_targets else None
+    if range_target is None:
         return None
-    return TargetComparison(target_id=target.id, target_value=month_target, status=classify_status(actual, month_target))
+    return TargetComparison(target_id=target.id, target_value=range_target, status=classify_status(actual, range_target))
 
 
 def _build_insight(sources: list[CarbonOverviewSource], current_total: float | None, prior_total: float | None, unresolved_count: int) -> str | None:

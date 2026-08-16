@@ -376,6 +376,50 @@ def prior_year(d: date) -> date:
     return d.replace(year=d.year - 1)
 
 
+def shift_months(d: date, delta: int) -> date:
+    """d, moved by delta calendar months (either direction), clamped to the
+    1st -- the single place every range-mode date arithmetic in this module
+    goes through, so "3 months back" always means the same thing."""
+    total = d.year * 12 + (d.month - 1) + delta
+    return date(total // 12, total % 12 + 1, 1)
+
+
+def months_in_range(start: date, end: date) -> list[date]:
+    months = []
+    cursor = start
+    while cursor <= end:
+        months.append(cursor)
+        cursor = shift_months(cursor, 1)
+    return months
+
+
+def range_bounds_for_mode(period: date, mode: str) -> tuple[date, date]:
+    """The [start, end] of months a period_mode covers, ending at period.
+    'month' is just period itself; 'quarter'/'ytd' are quarter-to-date /
+    year-to-date -- the same "bucket start through the selected month"
+    shape, differing only in how far back the bucket starts."""
+    period = period.replace(day=1)
+    if mode == "quarter":
+        quarter_start_month = ((period.month - 1) // 3) * 3 + 1
+        return period.replace(month=quarter_start_month), period
+    if mode == "ytd":
+        return period.replace(month=1), period
+    return period, period
+
+
+def prior_range_for_mode(start: date, end: date, mode: str) -> tuple[date, date]:
+    """The immediately-preceding range of the same shape -- prior month,
+    prior quarter-to-date, or (for ytd, where "immediately preceding" isn't
+    meaningful) the same year-to-date range one year back, which is what
+    prior_year_range_for_mode also computes."""
+    delta = {"quarter": -3, "ytd": -12}.get(mode, -1)
+    return shift_months(start, delta), shift_months(end, delta)
+
+
+def prior_year_range_for_mode(start: date, end: date) -> tuple[date, date]:
+    return shift_months(start, -12), shift_months(end, -12)
+
+
 def compute_period_totals(db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, period: date) -> dict:
     """Approved-calculation-snapshot totals for one reporting month. Thin
     wrapper over compute_period_totals_batch -- kept as the single-period
@@ -512,3 +556,58 @@ def compute_period_totals_batch(
             "completeness_pct": completeness_pct,
         }
     return result
+
+
+def _sum_optional(values: list[float | None]) -> float | None:
+    present = [v for v in values if v is not None]
+    return sum(present) if present else None
+
+
+def compute_range_totals(db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, months: list[date]) -> dict:
+    """Same result shape as one compute_period_totals_batch entry, but
+    aggregated across a range of months (quarter-to-date / year-to-date).
+    Absolute figures (scope1/scope2/production/revenue/unresolved/
+    calculated) sum across the months present; intensity ratios are
+    recomputed from those summed totals -- never averaged across months,
+    since a rate's numerator and denominator can each vary month to month
+    and averaging the ratios would silently misweight them."""
+    by_month = compute_period_totals_batch(db, tenant_id, location_id, months)
+
+    scope1 = _sum_optional([by_month[m]["scope1_tco2e"] for m in months])
+    scope2_loc = _sum_optional([by_month[m]["scope2_loc_tco2e"] for m in months])
+    scope2_mkt = _sum_optional([by_month[m]["scope2_mkt_tco2e"] for m in months])
+    scope1_2 = None if (scope1 is None and scope2_loc is None) else (scope1 or 0.0) + (scope2_loc or 0.0)
+
+    production_value = _sum_optional([by_month[m]["production_value"] for m in months])
+    revenue_value = _sum_optional([by_month[m]["revenue_value"] for m in months])
+
+    intensity = None
+    if scope1_2 is not None and production_value and production_value > 0:
+        intensity = scope1_2 / production_value
+
+    intensity_revenue = None
+    if scope1_2 is not None and revenue_value and revenue_value > 0:
+        intensity_revenue = scope1_2 / revenue_value
+
+    unresolved_count = sum(by_month[m]["unresolved_count"] for m in months)
+    calculated_count = sum(by_month[m]["calculated_count"] for m in months)
+    total_attempts = calculated_count + unresolved_count
+    completeness_pct = (calculated_count / total_attempts * 100) if total_attempts > 0 else None
+
+    anchor = by_month[months[0]]
+    return {
+        "rows": [r for m in months for r in by_month[m]["rows"]],
+        "scope1_tco2e": scope1,
+        "scope2_loc_tco2e": scope2_loc,
+        "scope2_mkt_tco2e": scope2_mkt,
+        "scope1_2_loc_tco2e": scope1_2,
+        "production_value": production_value,
+        "production_unit": anchor["production_unit"],
+        "intensity": intensity,
+        "revenue_value": revenue_value,
+        "revenue_unit": anchor["revenue_unit"],
+        "intensity_revenue": intensity_revenue,
+        "unresolved_count": unresolved_count,
+        "calculated_count": calculated_count,
+        "completeness_pct": completeness_pct,
+    }

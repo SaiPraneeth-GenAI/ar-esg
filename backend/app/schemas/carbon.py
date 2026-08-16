@@ -97,6 +97,9 @@ class TargetComparison(BaseModel):
 
 class CarbonOverview(BaseModel):
     period: date | None
+    period_mode: str = "month"
+    period_start: date | None = None
+    period_end: date | None = None
     scope1_tco2e: float | None
     scope2_location_based_tco2e: float | None
     scope2_market_based_tco2e: float | None

@@ -9,7 +9,15 @@ from app.core.auth import CurrentUser, require_roles
 from app.db.models import Category, DataPoint, Entry
 from app.db.session import get_db
 from app.schemas.safety import SafetyMetricOut, SafetyOverviewOut, SafetyTrendPoint
-from app.services.carbon_calculation import prior_month, prior_year, to_decimal
+from app.services.carbon_calculation import (
+    months_in_range,
+    prior_month,
+    prior_range_for_mode,
+    prior_year,
+    prior_year_range_for_mode,
+    range_bounds_for_mode,
+    to_decimal,
+)
 from app.services.rollups import month_start
 
 router = APIRouter(prefix="/safety", tags=["safety"])
@@ -21,6 +29,16 @@ CATEGORY_NAME = "Safety"
 # Water's four sub-sources correctly are -- each is read and shown on its
 # own, one Entry per data point per period (not a Rollup category sum).
 METRIC_NAMES = ["Fatality", "LTIFR", "Defensive Driving Training", "Unsafe Conditions", "Near Miss"]
+
+# How each metric aggregates across a multi-month range (quarter-to-date /
+# year-to-date): counts sum, but LTIFR (a rate) and Defensive Driving
+# Training (a %) are neither additive -- the platform only has the
+# pre-computed monthly figure on file, not the decomposed inputs (LTIFR's
+# incidents/hours, training's trained/total headcount), so summing either
+# across months is meaningless (three months of "68% trained" isn't "204%
+# trained"). Averaging the monthly figures is the standard, defensible
+# approximation when the decomposed inputs aren't available.
+METRIC_RANGE_AGGREGATION = {"LTIFR": "average", "Defensive Driving Training": "average"}
 
 
 def _metric_values_batch(
@@ -64,27 +82,50 @@ def _metric_values_batch(
     return result
 
 
+def _aggregate_metric_range(
+    name: str, per_period: dict[date, tuple[float | None, str]], months: list[date]
+) -> tuple[float | None, str]:
+    vals = [per_period[m][0] for m in months if per_period[m][0] is not None]
+    unit = next((per_period[m][1] for m in months if per_period[m][1]), "")
+    if not vals:
+        return None, unit
+    if METRIC_RANGE_AGGREGATION.get(name) == "average":
+        return sum(vals) / len(vals), unit
+    return sum(vals), unit
+
+
 @router.get("/overview", response_model=SafetyOverviewOut)
 def safety_overview(
     period: date,
     location_id: uuid.UUID | None = None,
+    period_mode: str = "month",
     current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
     db: Session = Depends(get_db),
 ):
+    """period_mode: 'month' (default), 'quarter' (quarter-to-date), or
+    'ytd' (year-to-date). Counted metrics sum across the range; LTIFR (a
+    rate) averages across the months present -- see METRIC_RANGE_AGGREGATION."""
     period = month_start(period)
-    periods = [period, prior_month(period), prior_year(period)]
-    values = _metric_values_batch(db, current.tenant_id, location_id, periods)
+    range_start, range_end = range_bounds_for_mode(period, period_mode)
+    current_months = months_in_range(range_start, range_end)
+    prior_start, prior_end = prior_range_for_mode(range_start, range_end, period_mode)
+    prior_months = months_in_range(prior_start, prior_end)
+    prior_year_start, prior_year_end = prior_year_range_for_mode(range_start, range_end)
+    prior_year_months = months_in_range(prior_year_start, prior_year_end)
+
+    all_months = sorted(set(current_months) | set(prior_months) | set(prior_year_months))
+    values = _metric_values_batch(db, current.tenant_id, location_id, all_months)
 
     metrics = []
     for name in METRIC_NAMES:
-        value, unit = values[name][periods[0]]
-        prior_value, _ = values[name][periods[1]]
-        prior_year_value, _ = values[name][periods[2]]
+        value, unit = _aggregate_metric_range(name, values[name], current_months)
+        prior_value, _ = _aggregate_metric_range(name, values[name], prior_months)
+        prior_year_value, _ = _aggregate_metric_range(name, values[name], prior_year_months)
         metrics.append(
             SafetyMetricOut(name=name, value=value, unit=unit, prior_value=prior_value, prior_year_value=prior_year_value)
         )
 
-    return SafetyOverviewOut(period=period, metrics=metrics)
+    return SafetyOverviewOut(period=period, period_mode=period_mode, period_start=range_start, period_end=range_end, metrics=metrics)
 
 
 def _trailing_months(period: date, count: int) -> list[date]:

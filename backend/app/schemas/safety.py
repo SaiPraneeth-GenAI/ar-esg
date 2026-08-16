@@ -13,6 +13,9 @@ class SafetyMetricOut(BaseModel):
 
 class SafetyOverviewOut(BaseModel):
     period: date
+    period_mode: str = "month"
+    period_start: date | None = None
+    period_end: date | None = None
     metrics: list[SafetyMetricOut]
 
 
