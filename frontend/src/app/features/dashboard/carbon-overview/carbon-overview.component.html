@@ -1,0 +1,211 @@
+<section class="carbon-section">
+  <div class="carbon-header">
+    <div>
+      <h2 class="carbon-title">Carbon footprint</h2>
+      <p class="carbon-subtitle">From approved entries and their versioned emission factor -- calculation snapshots only, never a live sum.</p>
+    </div>
+    <label class="month-picker">
+      <span>Period</span>
+      <input type="month" [ngModel]="monthValue()" (ngModelChange)="monthValue.set($event); onMonthChange()" />
+    </label>
+  </div>
+
+  @if (errorMessage()) {
+    <div class="banner error">{{ errorMessage() }}</div>
+  }
+
+  @if (loading()) {
+    <div class="skeleton-cards">
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+    </div>
+  } @else if (overview()) {
+    <div class="carbon-cards">
+      <div class="carbon-card">
+        <div class="card-top">
+          <span class="card-label">Scope 1+2 (location-based)</span>
+          <span class="status-dot" [class]="'status-' + comparisonStatus(overview()!.scope1_2_location_based_tco2e, overview()!.prior_scope1_2_location_based_tco2e)"></span>
+        </div>
+        @if (overview()!.scope1_2_location_based_tco2e !== null) {
+          <div class="card-value">{{ overview()!.scope1_2_location_based_tco2e | number: '1.1-2' }}<span class="card-unit">tCO2e</span></div>
+          <div class="card-comparison" [class]="'comparison-' + comparisonStatus(overview()!.scope1_2_location_based_tco2e, overview()!.prior_scope1_2_location_based_tco2e)">
+            {{ comparisonLabel(overview()!.scope1_2_location_based_tco2e, overview()!.prior_scope1_2_location_based_tco2e) }}
+          </div>
+        } @else {
+          <div class="card-empty">No approved calculation yet</div>
+        }
+      </div>
+
+      <div class="carbon-card">
+        <div class="card-top">
+          <span class="card-label">Specific GHG emissions</span>
+          <span class="status-dot" [class]="'status-' + comparisonStatus(overview()!.intensity_tco2e_per_mnah, overview()!.prior_intensity_tco2e_per_mnah)"></span>
+        </div>
+        @if (overview()!.intensity_tco2e_per_mnah !== null) {
+          <div class="card-value">{{ overview()!.intensity_tco2e_per_mnah | number: '1.3-3' }}<span class="card-unit">tCO2e/MnAh</span></div>
+          <div class="card-comparison" [class]="'comparison-' + comparisonStatus(overview()!.intensity_tco2e_per_mnah, overview()!.prior_intensity_tco2e_per_mnah)">
+            {{ comparisonLabel(overview()!.intensity_tco2e_per_mnah, overview()!.prior_intensity_tco2e_per_mnah) }}
+          </div>
+        } @else {
+          <div class="card-empty">Missing approved battery production -- add it to see intensity</div>
+        }
+      </div>
+
+      <div class="carbon-card">
+        <div class="card-top">
+          <span class="card-label">Scope 1</span>
+        </div>
+        @if (overview()!.scope1_tco2e !== null) {
+          <div class="card-value">{{ overview()!.scope1_tco2e | number: '1.1-2' }}<span class="card-unit">tCO2e</span></div>
+        } @else {
+          <div class="card-empty">No approved calculation yet</div>
+        }
+      </div>
+
+      <div class="carbon-card">
+        <div class="card-top">
+          <span class="card-label">Scope 2 (location-based)</span>
+        </div>
+        @if (overview()!.scope2_location_based_tco2e !== null) {
+          <div class="card-value">{{ overview()!.scope2_location_based_tco2e | number: '1.1-2' }}<span class="card-unit">tCO2e</span></div>
+          @if (overview()!.scope2_market_based_tco2e !== null) {
+            <div class="card-comparison comparison-neutral">Market-based: {{ overview()!.scope2_market_based_tco2e | number: '1.1-2' }} tCO2e</div>
+          }
+        } @else {
+          <div class="card-empty">No approved calculation yet</div>
+        }
+      </div>
+
+      <div class="carbon-card">
+        <div class="card-top">
+          <span class="card-label">Data completeness</span>
+          <span class="status-dot" [class]="'status-' + completenessStatus(overview()!.completeness_pct)"></span>
+        </div>
+        @if (overview()!.completeness_pct !== null) {
+          <div class="card-value">{{ overview()!.completeness_pct | number: '1.0-0' }}<span class="card-unit">%</span></div>
+        } @else {
+          <div class="card-empty">No GHG-mapped entries yet this period</div>
+        }
+        <button type="button" class="unresolved-link" (click)="toggleUnresolved()">
+          {{ overview()!.unresolved_count }} unresolved {{ overview()!.unresolved_count === 1 ? 'entry' : 'entries' }}
+        </button>
+      </div>
+    </div>
+
+    @if (overview()!.insight) {
+      <p class="insight">{{ overview()!.insight }}</p>
+    }
+
+    @if (showUnresolved()) {
+      <div class="unresolved-panel">
+        <h3>Unresolved calculations</h3>
+        @if (unresolvedLoading()) {
+          <p class="muted">Loading…</p>
+        } @else if (unresolvedItems().length === 0) {
+          <p class="muted">Nothing unresolved right now.</p>
+        } @else {
+          <table class="drilldown-table">
+            <thead>
+              <tr>
+                <th>Period</th>
+                <th>Data point</th>
+                <th>Location</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (item of unresolvedItems(); track item.id) {
+                <tr>
+                  <td>{{ formatMonth(item.reporting_period) }}</td>
+                  <td>{{ item.data_point_name }}</td>
+                  <td>{{ item.location_name }}</td>
+                  <td class="reason-cell">{{ item.resolution_reason }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </div>
+    }
+
+    @if (overview()!.sources.length > 0) {
+      <div class="source-breakdown">
+        <h3>Source breakdown -- {{ formatMonth(overview()!.period) }}</h3>
+        <table class="drilldown-table">
+          <thead>
+            <tr>
+              <th>Source</th>
+              <th>Scope</th>
+              <th>Method</th>
+              <th>tCO2e</th>
+              <th>Entries</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (source of overview()!.sources; track sourceKey(source)) {
+              <tr class="source-row" [class.expanded]="expandedSourceKey() === sourceKey(source)" (click)="toggleSource(source)">
+                <td>{{ source.data_point_name }}</td>
+                <td>Scope {{ source.scope }}</td>
+                <td>{{ source.calculation_method ?? '—' }}</td>
+                <td>{{ source.emissions_tco2e | number: '1.2-3' }}</td>
+                <td>{{ source.entry_count }}</td>
+                <td class="chevron-cell">{{ expandedSourceKey() === sourceKey(source) ? '▾' : '▸' }}</td>
+              </tr>
+              @if (expandedSourceKey() === sourceKey(source)) {
+                <tr class="drilldown-row">
+                  <td colspan="6">
+                    @if (sourceLoading()) {
+                      <p class="muted">Loading calculation evidence…</p>
+                    } @else {
+                      <table class="evidence-table">
+                        <thead>
+                          <tr>
+                            <th>Location</th>
+                            <th>Activity</th>
+                            <th>Normalized</th>
+                            <th>Factor</th>
+                            <th>Formula</th>
+                            <th>tCO2e</th>
+                            <th></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (calc of sourceCalculations(); track calc.id) {
+                            <tr>
+                              <td>{{ calc.location_name }}</td>
+                              <td>{{ calc.activity_value }} {{ calc.activity_unit }}</td>
+                              <td>{{ calc.normalized_activity_value }} {{ calc.normalized_activity_unit }}</td>
+                              <td [title]="calc.factor_source ?? ''">{{ calc.factor_value }} {{ calc.factor_unit }} ({{ calc.factor_version }})</td>
+                              <td class="formula-cell">{{ calc.formula }}</td>
+                              <td>{{ calc.emissions_tco2e | number: '1.2-3' }}</td>
+                              <td>
+                                <button type="button" class="link-btn" (click)="toggleEntryHistory(calc.entry_id)">
+                                  {{ expandedEntryId() === calc.entry_id ? 'Hide history' : 'History' }}
+                                </button>
+                              </td>
+                            </tr>
+                            @if (expandedEntryId() === calc.entry_id) {
+                              <tr class="history-row">
+                                <td colspan="7">
+                                  <app-entry-history [entryId]="calc.entry_id"></app-entry-history>
+                                </td>
+                              </tr>
+                            }
+                          }
+                        </tbody>
+                      </table>
+                    }
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  }
+</section>

@@ -1,5 +1,6 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ApiService, DashboardCard, DrilldownResponse } from '../../core/api.service';
+import { CarbonOverviewComponent } from './carbon-overview/carbon-overview.component';
 
 interface CardGroup {
   category: string;
@@ -9,6 +10,7 @@ interface CardGroup {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
+  imports: [CarbonOverviewComponent],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.css'
 })

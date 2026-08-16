@@ -82,8 +82,13 @@ class CarbonOverview(BaseModel):
     scope2_location_based_tco2e: float | None
     scope2_market_based_tco2e: float | None
     scope1_2_location_based_tco2e: float | None
+    prior_scope1_2_location_based_tco2e: float | None
+    prior_intensity_tco2e_per_mnah: float | None
     production_value: float | None
     production_unit: str | None
     intensity_tco2e_per_mnah: float | None
     unresolved_count: int
+    calculated_count: int
+    completeness_pct: float | None
     sources: list[CarbonOverviewSource]
+    insight: str | None

@@ -210,18 +210,15 @@ def unresolved_queue(
     return [_calc_out(db, r) for r in rows]
 
 
-@router.get("/overview", response_model=CarbonOverview)
-def carbon_overview(
-    period: date,
-    location_id: uuid.UUID | None = None,
-    current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
-    db: Session = Depends(get_db),
-):
-    """Approved calculation snapshots only -- never a live sum of raw
-    entries (rule #10)."""
-    period = month_start(period)
+def _prior_month(d: date) -> date:
+    if d.month == 1:
+        return d.replace(year=d.year - 1, month=12)
+    return d.replace(month=d.month - 1)
+
+
+def _period_totals(db: Session, tenant_id, location_id, period: date) -> dict:
     q = db.query(EmissionCalculation).filter(
-        EmissionCalculation.tenant_id == current.tenant_id,
+        EmissionCalculation.tenant_id == tenant_id,
         EmissionCalculation.reporting_period == period,
         EmissionCalculation.status == "calculated",
     )
@@ -237,8 +234,97 @@ def carbon_overview(
         (r.emissions_kgco2e for r in rows if r.scope == 2 and r.calculation_method == "market_based"), Decimal("0")
     )
     has_scope2_mkt = any(r.scope == 2 and r.calculation_method == "market_based" for r in rows)
-
     scope1_2_loc = scope1 + scope2_loc
+
+    from app.db.models import ProductionVolumeMapping
+
+    prod_mapping_q = db.query(ProductionVolumeMapping).filter(
+        ProductionVolumeMapping.tenant_id == tenant_id, ProductionVolumeMapping.is_active.is_(True)
+    )
+    if location_id is not None:
+        prod_mapping_q = prod_mapping_q.filter(
+            (ProductionVolumeMapping.location_id == location_id) | (ProductionVolumeMapping.location_id.is_(None))
+        )
+    prod_mapping = prod_mapping_q.first()
+
+    production_value = None
+    production_unit = None
+    intensity = None
+    if prod_mapping is not None:
+        entry_q = db.query(Entry).filter(
+            Entry.data_point_id == prod_mapping.data_point_id, Entry.status == "Approved", Entry.period == period
+        )
+        if location_id is not None:
+            entry_q = entry_q.filter(Entry.location_id == location_id)
+        production_entries = entry_q.all()
+        if production_entries:
+            total_native = sum((to_decimal(e.value) for e in production_entries if e.value is not None), Decimal("0"))
+            production_value = float(total_native * to_decimal(prod_mapping.conversion_multiplier))
+            production_unit = prod_mapping.canonical_unit
+            if production_value and production_value > 0:
+                intensity = float(scope1_2_loc / 1000) / production_value
+
+    return {
+        "rows": rows,
+        "scope1_tco2e": float(scope1 / 1000),
+        "scope2_loc_tco2e": float(scope2_loc / 1000),
+        "scope2_mkt_tco2e": (float(scope2_mkt / 1000) if has_scope2_mkt else None),
+        "scope1_2_loc_tco2e": float(scope1_2_loc / 1000),
+        "production_value": production_value,
+        "production_unit": production_unit,
+        "intensity": intensity,
+    }
+
+
+@router.get("/calculations", response_model=list[EmissionCalculationOut])
+def list_calculations(
+    period: date,
+    scope: int | None = None,
+    calculation_method: str | None = None,
+    data_point_name: str | None = None,
+    location_id: uuid.UUID | None = None,
+    current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
+    db: Session = Depends(get_db),
+):
+    """Drill-down evidence for one card/source: every current calculation
+    row (calculated or unresolved) contributing to it, each carrying its
+    own factor snapshot and a link back to the entry for full audit
+    history."""
+    period = month_start(period)
+    q = db.query(EmissionCalculation).filter(
+        EmissionCalculation.tenant_id == current.tenant_id,
+        EmissionCalculation.reporting_period == period,
+        EmissionCalculation.status.in_(["calculated", "unresolved"]),
+    )
+    if scope is not None:
+        q = q.filter(EmissionCalculation.scope == scope)
+    if calculation_method is not None:
+        q = q.filter(EmissionCalculation.calculation_method == calculation_method)
+    if location_id is not None:
+        q = q.filter(EmissionCalculation.location_id == location_id)
+    rows = q.all()
+
+    if data_point_name is not None:
+        dp_ids = {dp.id for dp in db.query(DataPoint).filter(DataPoint.name == data_point_name).all()}
+        rows = [r for r in rows if r.data_point_id in dp_ids]
+
+    rows.sort(key=lambda r: r.calculated_at, reverse=True)
+    return [_calc_out(db, r) for r in rows]
+
+
+@router.get("/overview", response_model=CarbonOverview)
+def carbon_overview(
+    period: date,
+    location_id: uuid.UUID | None = None,
+    current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
+    db: Session = Depends(get_db),
+):
+    """Approved calculation snapshots only -- never a live sum of raw
+    entries (rule #10)."""
+    period = month_start(period)
+    current_totals = _period_totals(db, current.tenant_id, location_id, period)
+    prior_totals = _period_totals(db, current.tenant_id, location_id, _prior_month(period))
+    rows = current_totals["rows"]
 
     unresolved_q = db.query(EmissionCalculation).filter(
         EmissionCalculation.tenant_id == current.tenant_id,
@@ -248,6 +334,9 @@ def carbon_overview(
     if location_id is not None:
         unresolved_q = unresolved_q.filter(EmissionCalculation.location_id == location_id)
     unresolved_count = unresolved_q.count()
+    calculated_count = len(rows)
+    total_attempts = calculated_count + unresolved_count
+    completeness_pct = (calculated_count / total_attempts * 100) if total_attempts > 0 else None
 
     by_source: dict[tuple[str, int, str | None], list] = {}
     dp_names: dict[uuid.UUID, str] = {}
@@ -269,45 +358,41 @@ def carbon_overview(
         for (name, scope, method), group in sorted(by_source.items())
     ]
 
-    production_value = None
-    production_unit = None
-    intensity = None
-    from app.db.models import ProductionVolumeMapping
-
-    prod_mapping_q = db.query(ProductionVolumeMapping).filter(
-        ProductionVolumeMapping.tenant_id == current.tenant_id, ProductionVolumeMapping.is_active.is_(True)
-    )
-    if location_id is not None:
-        prod_mapping_q = prod_mapping_q.filter(
-            (ProductionVolumeMapping.location_id == location_id) | (ProductionVolumeMapping.location_id.is_(None))
-        )
-    prod_mapping = prod_mapping_q.first()
-
-    if prod_mapping is not None:
-        entry_q = db.query(Entry).filter(
-            Entry.data_point_id == prod_mapping.data_point_id,
-            Entry.status == "Approved",
-            Entry.period == period,
-        )
-        if location_id is not None:
-            entry_q = entry_q.filter(Entry.location_id == location_id)
-        production_entries = entry_q.all()
-        if production_entries:
-            total_native = sum((to_decimal(e.value) for e in production_entries if e.value is not None), Decimal("0"))
-            production_value = float(total_native * to_decimal(prod_mapping.conversion_multiplier))
-            production_unit = prod_mapping.canonical_unit
-            if production_value and production_value > 0:
-                intensity = float(scope1_2_loc / 1000) / production_value
+    insight = _build_insight(sources, current_totals["scope1_2_loc_tco2e"], prior_totals["scope1_2_loc_tco2e"], unresolved_count)
 
     return CarbonOverview(
         period=period,
-        scope1_tco2e=float(scope1 / 1000),
-        scope2_location_based_tco2e=float(scope2_loc / 1000),
-        scope2_market_based_tco2e=(float(scope2_mkt / 1000) if has_scope2_mkt else None),
-        scope1_2_location_based_tco2e=float(scope1_2_loc / 1000),
-        production_value=production_value,
-        production_unit=production_unit,
-        intensity_tco2e_per_mnah=intensity,
+        scope1_tco2e=current_totals["scope1_tco2e"],
+        scope2_location_based_tco2e=current_totals["scope2_loc_tco2e"],
+        scope2_market_based_tco2e=current_totals["scope2_mkt_tco2e"],
+        scope1_2_location_based_tco2e=current_totals["scope1_2_loc_tco2e"],
+        prior_scope1_2_location_based_tco2e=prior_totals["scope1_2_loc_tco2e"],
+        prior_intensity_tco2e_per_mnah=prior_totals["intensity"],
+        production_value=current_totals["production_value"],
+        production_unit=current_totals["production_unit"],
+        intensity_tco2e_per_mnah=current_totals["intensity"],
         unresolved_count=unresolved_count,
+        calculated_count=calculated_count,
+        completeness_pct=completeness_pct,
         sources=sources,
+        insight=insight,
     )
+
+
+def _build_insight(sources: list[CarbonOverviewSource], current_total: float, prior_total: float | None, unresolved_count: int) -> str | None:
+    """Short, deterministic observation from the actual numbers -- largest
+    source and period-over-period variance. No causal claims (rule in
+    Prompt 4's dashboard section)."""
+    parts = []
+    if sources:
+        largest = max(sources, key=lambda s: s.emissions_tco2e)
+        if current_total and current_total > 0:
+            share = largest.emissions_tco2e / current_total * 100
+            parts.append(f"{largest.data_point_name} is the largest source this period, at {share:.0f}% of Scope 1+2 location-based emissions.")
+    if prior_total is not None and prior_total > 0 and current_total is not None:
+        delta_pct = (current_total - prior_total) / prior_total * 100
+        direction = "up" if delta_pct > 0 else "down"
+        parts.append(f"Total Scope 1+2 emissions are {direction} {abs(delta_pct):.0f}% versus the prior month.")
+    if unresolved_count > 0:
+        parts.append(f"{unresolved_count} entr{'y is' if unresolved_count == 1 else 'ies are'} not yet reflected -- see the unresolved queue.")
+    return " ".join(parts) if parts else None
