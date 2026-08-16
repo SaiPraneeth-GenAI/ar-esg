@@ -1,0 +1,147 @@
+<div class="page">
+  <header>
+    <h1>How your carbon numbers are calculated</h1>
+    <p class="subtitle">
+      Every figure on the carbon dashboard traces back to an approved entry, a specific emission factor version, and a
+      formula you can inspect. This page shows that path end to end.
+    </p>
+    <a class="cta-link" routerLink="/admin/dashboard">View live calculations on the dashboard →</a>
+  </header>
+
+  <section class="legend">
+    <span class="legend-item"><span class="swatch swatch-live"></span>Live — calculated in the platform today</span>
+    <span class="legend-item"><span class="swatch swatch-planned"></span>Planned — not calculated yet</span>
+  </section>
+
+  <section class="flow-section">
+    <h2>From an entry to an approved calculation</h2>
+    <div class="flow-row">
+      @for (node of mainFlow; track node.title; let last = $last) {
+        <div class="flow-node" [class.planned]="!node.live">
+          <span class="node-pill" [class.pill-live]="node.live" [class.pill-planned]="!node.live">{{ node.live ? 'Live' : 'Planned' }}</span>
+          <h3>{{ node.title }}</h3>
+          <p>{{ node.detail }}</p>
+        </div>
+        @if (!last) {
+          <div class="arrow">→</div>
+        }
+      }
+    </div>
+  </section>
+
+  <section class="flow-section">
+    <h2>From totals to intensity and targets</h2>
+    <div class="branch-grid">
+      <div class="branch-col">
+        <h4>Production intensity</h4>
+        <div class="flow-row flow-row-vertical">
+          @for (node of branchFlow; track node.title; let last = $last) {
+            <div class="flow-node" [class.planned]="!node.live">
+              <span class="node-pill" [class.pill-live]="node.live" [class.pill-planned]="!node.live">{{ node.live ? 'Live' : 'Planned' }}</span>
+              <h3>{{ node.title }}</h3>
+              <p>{{ node.detail }}</p>
+            </div>
+            @if (!last) {
+              <div class="arrow arrow-vertical">↓</div>
+            }
+          }
+        </div>
+      </div>
+
+      <div class="branch-col">
+        <h4>Revenue intensity</h4>
+        <div class="flow-row flow-row-vertical">
+          @for (node of revenueBranch; track node.title; let last = $last) {
+            <div class="flow-node" [class.planned]="!node.live">
+              <span class="node-pill" [class.pill-live]="node.live" [class.pill-planned]="!node.live">{{ node.live ? 'Live' : 'Planned' }}</span>
+              <h3>{{ node.title }}</h3>
+              <p>{{ node.detail }}</p>
+            </div>
+            @if (!last) {
+              <div class="arrow arrow-vertical">↓</div>
+            }
+          }
+        </div>
+      </div>
+
+      <div class="branch-col">
+        <h4>Targets and dashboard</h4>
+        <div class="flow-row flow-row-vertical">
+          @for (node of targetFlow; track node.title; let last = $last) {
+            <div class="flow-node" [class.planned]="!node.live">
+              <span class="node-pill" [class.pill-live]="node.live" [class.pill-planned]="!node.live">{{ node.live ? 'Live' : 'Planned' }}</span>
+              <h3>{{ node.title }}</h3>
+              <p>{{ node.detail }}</p>
+            </div>
+            @if (!last) {
+              <div class="arrow arrow-vertical">↓</div>
+            }
+          }
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="flow-section">
+    <h2>When something can't be calculated</h2>
+    <p class="section-note">
+      The platform never estimates a missing value. If a factor can't be resolved cleanly, the entry is set aside and
+      excluded from every total until a human fixes the underlying data.
+    </p>
+    <div class="flow-row">
+      @for (node of unresolvedFlow; track node.title; let last = $last) {
+        <div class="flow-node flow-node-warning">
+          <span class="node-pill pill-live">Live</span>
+          <h3>{{ node.title }}</h3>
+          <p>{{ node.detail }}</p>
+        </div>
+        @if (!last) {
+          <div class="arrow">→</div>
+        }
+      }
+    </div>
+  </section>
+
+  <section class="table-section">
+    <h2>Scope boundaries</h2>
+    <table class="scope-table">
+      <thead>
+        <tr>
+          <th>Scope</th>
+          <th>Source</th>
+          <th>Method</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of scopeRows; track row.source) {
+          <tr>
+            <td class="scope-cell">{{ row.scope }}</td>
+            <td>{{ row.source }}</td>
+            <td>
+              {{ row.method }}
+              @if (row.note) {
+                <div class="row-note">{{ row.note }}</div>
+              }
+            </td>
+            <td class="status-cell">
+              <span class="node-pill" [class.pill-live]="row.live" [class.pill-planned]="!row.live">{{ row.live ? 'Live' : 'Planned' }}</span>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </section>
+
+  <section class="rules-section">
+    <h2>Rules that never change</h2>
+    <div class="rules-grid">
+      @for (rule of rules; track rule.title) {
+        <div class="rule-card">
+          <h3>{{ rule.title }}</h3>
+          <p>{{ rule.body }}</p>
+        </div>
+      }
+    </div>
+  </section>
+</div>

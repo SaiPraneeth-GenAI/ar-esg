@@ -28,6 +28,10 @@ export const routes: Routes = [
         loadComponent: () => import('./features/data-entry/data-entry.component').then((m) => m.DataEntryComponent)
       },
       {
+        path: 'methodology',
+        loadComponent: () => import('./features/methodology/methodology.component').then((m) => m.MethodologyComponent)
+      },
+      {
         path: 'emission-factors',
         canActivate: [adminGuard],
         loadComponent: () =>

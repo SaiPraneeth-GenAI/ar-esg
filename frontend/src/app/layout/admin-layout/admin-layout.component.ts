@@ -22,8 +22,10 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
   isSettingsRoute = computed(() => this.currentUrl().startsWith('/admin/settings'));
   isDataEntryRoute = computed(() => this.currentUrl().startsWith('/admin/data-entry'));
   isEmissionFactorsRoute = computed(() => this.currentUrl().startsWith('/admin/emission-factors'));
+  isMethodologyRoute = computed(() => this.currentUrl().startsWith('/admin/methodology'));
   isDashboardRoute = computed(
-    () => !this.isSettingsRoute() && !this.isDataEntryRoute() && !this.isEmissionFactorsRoute()
+    () =>
+      !this.isSettingsRoute() && !this.isDataEntryRoute() && !this.isEmissionFactorsRoute() && !this.isMethodologyRoute()
   );
   canAccessDataEntry = computed(() => {
     const r = this.roles();
@@ -67,6 +69,11 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
   goToEmissionFactors(): void {
     this.settingsOpen.set(false);
     this.router.navigateByUrl('/admin/emission-factors');
+  }
+
+  goToMethodology(): void {
+    this.settingsOpen.set(false);
+    this.router.navigateByUrl('/admin/methodology');
   }
 
   openSettings(): void {
