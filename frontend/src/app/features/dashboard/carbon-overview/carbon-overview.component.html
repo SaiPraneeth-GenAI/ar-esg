@@ -30,6 +30,9 @@
           <div class="card-comparison" [class]="'comparison-' + comparisonStatus(overview()!.scope1_2_location_based_tco2e, overview()!.prior_scope1_2_location_based_tco2e)">
             {{ comparisonLabel(overview()!.scope1_2_location_based_tco2e, overview()!.prior_scope1_2_location_based_tco2e) }}
           </div>
+          <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(overview()!.scope1_2_location_based_tco2e, overview()!.prior_year_scope1_2_location_based_tco2e)">
+            {{ comparisonLabel(overview()!.scope1_2_location_based_tco2e, overview()!.prior_year_scope1_2_location_based_tco2e, 'last year') }}
+          </div>
           @if (overview()!.scope1_2_target) {
             <div class="target-comparison">
               <span class="status-pill" [class]="targetStatusClass(overview()!.scope1_2_target!.status)">{{ overview()!.scope1_2_target!.status }}</span>
@@ -52,6 +55,9 @@
           <div class="card-value">{{ overview()!.intensity_tco2e_per_mnah | number: '1.3-3' }}<span class="card-unit">tCO2e/MnAh</span></div>
           <div class="card-comparison" [class]="'comparison-' + comparisonStatus(overview()!.intensity_tco2e_per_mnah, overview()!.prior_intensity_tco2e_per_mnah)">
             {{ comparisonLabel(overview()!.intensity_tco2e_per_mnah, overview()!.prior_intensity_tco2e_per_mnah) }}
+          </div>
+          <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(overview()!.intensity_tco2e_per_mnah, overview()!.prior_year_intensity_tco2e_per_mnah)">
+            {{ comparisonLabel(overview()!.intensity_tco2e_per_mnah, overview()!.prior_year_intensity_tco2e_per_mnah, 'last year') }}
           </div>
           @if (overview()!.intensity_target) {
             <div class="target-comparison">

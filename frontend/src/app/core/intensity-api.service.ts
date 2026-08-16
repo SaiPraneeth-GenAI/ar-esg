@@ -34,6 +34,26 @@ export interface IntensityOverview {
   prior_waste_mt: number | null;
   prior_production_mnah: number | null;
   prior_revenue_inr_cr: number | null;
+  prior_year_energy_per_production: number | null;
+  prior_year_ghg_per_production: number | null;
+  prior_year_water_per_production: number | null;
+  prior_year_waste_per_production: number | null;
+  prior_year_energy_per_revenue: number | null;
+  prior_year_ghg_per_revenue: number | null;
+  prior_year_water_per_revenue: number | null;
+  prior_year_waste_per_revenue: number | null;
+  prior_year_energy_gj: number | null;
+  prior_year_ghg_tco2e: number | null;
+  prior_year_water_kl: number | null;
+  prior_year_waste_mt: number | null;
+  prior_year_production_mnah: number | null;
+  prior_year_revenue_inr_cr: number | null;
+}
+
+export interface IntensityTrendPoint {
+  period: string;
+  ghg_per_production: number | null;
+  ghg_per_revenue: number | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -51,5 +71,12 @@ export class IntensityApiService {
     const params: Record<string, string> = { period };
     if (locationId) params['location_id'] = locationId;
     return firstValueFrom(this.http.get<IntensityOverview>(`${environment.apiBaseUrl}/intensity/overview`, { headers, params }));
+  }
+
+  async getTrend(period: string, months = 6, locationId?: string): Promise<IntensityTrendPoint[]> {
+    const headers = await this.authHeaders();
+    const params: Record<string, string> = { period, months: String(months) };
+    if (locationId) params['location_id'] = locationId;
+    return firstValueFrom(this.http.get<IntensityTrendPoint[]>(`${environment.apiBaseUrl}/intensity/trend`, { headers, params }));
   }
 }

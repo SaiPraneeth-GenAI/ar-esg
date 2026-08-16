@@ -371,35 +371,41 @@ def prior_month(d: date) -> date:
     return d.replace(month=d.month - 1)
 
 
+def prior_year(d: date) -> date:
+    return d.replace(year=d.year - 1)
+
+
 def compute_period_totals(db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, period: date) -> dict:
-    """Approved-calculation-snapshot totals for one reporting month --
-    scope 1/2 (location- and market-based), the combined location-based
-    figure, and production-based intensity when a mapping and approved
-    production entries exist. Never a live sum of raw entries (rule #10)."""
+    """Approved-calculation-snapshot totals for one reporting month. Thin
+    wrapper over compute_period_totals_batch -- kept as the single-period
+    API every existing caller uses, but routed through the batched query
+    path so a caller that only needs one period doesn't pay a different
+    (worse) query cost than a multi-period caller."""
+    return compute_period_totals_batch(db, tenant_id, location_id, [period])[period]
+
+
+def compute_period_totals_batch(
+    db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, periods: list[date]
+) -> dict[date, dict]:
+    """Same result shape as compute_period_totals, for N periods in 4 fixed
+    queries total (not 4*N) -- one EmissionCalculation IN-query, one
+    ProductionVolumeMapping lookup, one Entry IN-query, one grouped
+    unresolved-count query. Powers both a 6-month trend chart and a
+    current/prior-month/prior-year comparison from a single round trip
+    each, instead of one HTTP call (and one full query set) per period."""
+    if not periods:
+        return {}
+
     q = db.query(EmissionCalculation).filter(
         EmissionCalculation.tenant_id == tenant_id,
-        EmissionCalculation.reporting_period == period,
+        EmissionCalculation.reporting_period.in_(periods),
         EmissionCalculation.status == "calculated",
     )
     if location_id is not None:
         q = q.filter(EmissionCalculation.location_id == location_id)
-    rows = q.all()
-
-    # An empty period (no calculated rows at all) must read as "no data",
-    # not a fabricated zero -- rule against invented numbers. A period with
-    # at least some calculated data legitimately sums a missing component
-    # as zero (e.g. Scope 1 approved, Scope 2 not yet), but a wholly empty
-    # period is a different state entirely and must stay None end to end.
-    has_any_data = len(rows) > 0
-    scope1 = sum((r.emissions_kgco2e for r in rows if r.scope == 1), Decimal("0"))
-    scope2_loc = sum(
-        (r.emissions_kgco2e for r in rows if r.scope == 2 and r.calculation_method == "location_based"), Decimal("0")
-    )
-    scope2_mkt = sum(
-        (r.emissions_kgco2e for r in rows if r.scope == 2 and r.calculation_method == "market_based"), Decimal("0")
-    )
-    has_scope2_mkt = any(r.scope == 2 and r.calculation_method == "market_based" for r in rows)
-    scope1_2_loc = scope1 + scope2_loc
+    rows_by_period: dict[date, list] = {p: [] for p in periods}
+    for r in q.all():
+        rows_by_period.setdefault(r.reporting_period, []).append(r)
 
     prod_mapping_q = db.query(ProductionVolumeMapping).filter(
         ProductionVolumeMapping.tenant_id == tenant_id, ProductionVolumeMapping.is_active.is_(True)
@@ -410,45 +416,67 @@ def compute_period_totals(db: Session, tenant_id: uuid.UUID, location_id: uuid.U
         )
     prod_mapping = prod_mapping_q.first()
 
-    production_value = None
-    production_unit = None
-    intensity = None
+    production_by_period: dict[date, float] = {}
     if prod_mapping is not None:
         entry_q = db.query(Entry).filter(
-            Entry.data_point_id == prod_mapping.data_point_id, Entry.status == "Approved", Entry.period == period
+            Entry.data_point_id == prod_mapping.data_point_id, Entry.status == "Approved", Entry.period.in_(periods)
         )
         if location_id is not None:
             entry_q = entry_q.filter(Entry.location_id == location_id)
-        production_entries = entry_q.all()
-        if production_entries:
-            total_native = sum((to_decimal(e.value) for e in production_entries if e.value is not None), Decimal("0"))
-            production_value = float(total_native * to_decimal(prod_mapping.conversion_multiplier))
-            production_unit = prod_mapping.canonical_unit
-            if production_value and production_value > 0 and has_any_data:
-                intensity = float(scope1_2_loc / 1000) / production_value
+        entries_by_period: dict[date, list] = {}
+        for e in entry_q.all():
+            entries_by_period.setdefault(e.period, []).append(e)
+        for p, entries in entries_by_period.items():
+            total_native = sum((to_decimal(e.value) for e in entries if e.value is not None), Decimal("0"))
+            production_by_period[p] = float(total_native * to_decimal(prod_mapping.conversion_multiplier))
 
-    unresolved_q = db.query(EmissionCalculation).filter(
-        EmissionCalculation.tenant_id == tenant_id,
-        EmissionCalculation.reporting_period == period,
-        EmissionCalculation.status == "unresolved",
+    unresolved_q = (
+        db.query(EmissionCalculation.reporting_period, func.count(EmissionCalculation.id))
+        .filter(
+            EmissionCalculation.tenant_id == tenant_id,
+            EmissionCalculation.reporting_period.in_(periods),
+            EmissionCalculation.status == "unresolved",
+        )
     )
     if location_id is not None:
         unresolved_q = unresolved_q.filter(EmissionCalculation.location_id == location_id)
-    unresolved_count = unresolved_q.count()
-    calculated_count = len(rows)
-    total_attempts = calculated_count + unresolved_count
-    completeness_pct = (calculated_count / total_attempts * 100) if total_attempts > 0 else None
+    unresolved_counts = dict(unresolved_q.group_by(EmissionCalculation.reporting_period).all())
 
-    return {
-        "rows": rows,
-        "scope1_tco2e": (float(scope1 / 1000) if has_any_data else None),
-        "scope2_loc_tco2e": (float(scope2_loc / 1000) if has_any_data else None),
-        "scope2_mkt_tco2e": (float(scope2_mkt / 1000) if has_scope2_mkt else None),
-        "scope1_2_loc_tco2e": (float(scope1_2_loc / 1000) if has_any_data else None),
-        "production_value": production_value,
-        "production_unit": production_unit,
-        "intensity": intensity,
-        "unresolved_count": unresolved_count,
-        "calculated_count": calculated_count,
-        "completeness_pct": completeness_pct,
-    }
+    result: dict[date, dict] = {}
+    for period in periods:
+        rows = rows_by_period.get(period, [])
+        has_any_data = len(rows) > 0
+        scope1 = sum((r.emissions_kgco2e for r in rows if r.scope == 1), Decimal("0"))
+        scope2_loc = sum(
+            (r.emissions_kgco2e for r in rows if r.scope == 2 and r.calculation_method == "location_based"), Decimal("0")
+        )
+        scope2_mkt = sum(
+            (r.emissions_kgco2e for r in rows if r.scope == 2 and r.calculation_method == "market_based"), Decimal("0")
+        )
+        has_scope2_mkt = any(r.scope == 2 and r.calculation_method == "market_based" for r in rows)
+        scope1_2_loc = scope1 + scope2_loc
+
+        production_value = production_by_period.get(period)
+        intensity = None
+        if production_value and production_value > 0 and has_any_data:
+            intensity = float(scope1_2_loc / 1000) / production_value
+
+        unresolved_count = unresolved_counts.get(period, 0)
+        calculated_count = len(rows)
+        total_attempts = calculated_count + unresolved_count
+        completeness_pct = (calculated_count / total_attempts * 100) if total_attempts > 0 else None
+
+        result[period] = {
+            "rows": rows,
+            "scope1_tco2e": (float(scope1 / 1000) if has_any_data else None),
+            "scope2_loc_tco2e": (float(scope2_loc / 1000) if has_any_data else None),
+            "scope2_mkt_tco2e": (float(scope2_mkt / 1000) if has_scope2_mkt else None),
+            "scope1_2_loc_tco2e": (float(scope1_2_loc / 1000) if has_any_data else None),
+            "production_value": production_value,
+            "production_unit": prod_mapping.canonical_unit if prod_mapping else None,
+            "intensity": intensity,
+            "unresolved_count": unresolved_count,
+            "calculated_count": calculated_count,
+            "completeness_pct": completeness_pct,
+        }
+    return result

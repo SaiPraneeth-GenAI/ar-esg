@@ -61,6 +61,12 @@ class EmissionCalculationOut(BaseModel):
     supersedes_calculation_id: uuid.UUID | None
 
 
+class CarbonTrendPoint(BaseModel):
+    period: date
+    scope1_2_location_based_tco2e: float | None
+    intensity_tco2e_per_mnah: float | None
+
+
 class RecalculateResponse(BaseModel):
     calculated_count: int
     unresolved_count: int
@@ -90,6 +96,8 @@ class CarbonOverview(BaseModel):
     scope1_2_location_based_tco2e: float | None
     prior_scope1_2_location_based_tco2e: float | None
     prior_intensity_tco2e_per_mnah: float | None
+    prior_year_scope1_2_location_based_tco2e: float | None = None
+    prior_year_intensity_tco2e_per_mnah: float | None = None
     production_value: float | None
     production_unit: str | None
     intensity_tco2e_per_mnah: float | None

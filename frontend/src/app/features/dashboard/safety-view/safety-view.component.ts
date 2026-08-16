@@ -37,16 +37,18 @@ export class SafetyViewComponent implements OnChanges {
     }
   }
 
-  comparisonLabel(m: SafetyMetric): string {
+  comparisonLabel(m: SafetyMetric, against: 'month' | 'year' = 'month'): string {
+    const prior = against === 'month' ? m.prior_value : m.prior_year_value;
     if (m.value === null) return 'Not yet entered';
-    if (m.prior_value === null || m.prior_value === 0) return 'No prior-period comparison';
-    const pct = ((m.value - m.prior_value) / m.prior_value) * 100;
-    return `${Math.abs(pct).toFixed(0)}% ${pct > 0 ? 'higher' : 'lower'} than last month`;
+    if (prior === null || prior === 0) return `No comparison available`;
+    const pct = ((m.value - prior) / prior) * 100;
+    return `${Math.abs(pct).toFixed(0)}% ${pct > 0 ? 'higher' : 'lower'} than last ${against}`;
   }
 
-  comparisonStatus(m: SafetyMetric): 'green' | 'amber' | 'red' | 'neutral' {
-    if (m.value === null || m.prior_value === null || m.prior_value === 0) return 'neutral';
-    const pct = ((m.value - m.prior_value) / m.prior_value) * 100;
+  comparisonStatus(m: SafetyMetric, against: 'month' | 'year' = 'month'): 'green' | 'amber' | 'red' | 'neutral' {
+    const prior = against === 'month' ? m.prior_value : m.prior_year_value;
+    if (m.value === null || prior === null || prior === 0) return 'neutral';
+    const pct = ((m.value - prior) / prior) * 100;
     const goodDown = GOOD_DOWN.has(m.name);
     const favorable = goodDown ? pct <= 0 : pct >= 0;
     if (favorable) return 'green';

@@ -6,6 +6,7 @@ interface IntensityMetric {
   label: string;
   current: number | null;
   prior: number | null;
+  priorYear: number | null;
   unit: string;
 }
 
@@ -77,34 +78,38 @@ export class IntensityViewComponent implements OnChanges {
         label: 'GHG emissions',
         current: (ov as any)[`ghg_${suffix}`],
         prior: (ov as any)[`prior_ghg_${suffix}`],
+        priorYear: (ov as any)[`prior_year_ghg_${suffix}`],
         unit: `tCO2e/${denomUnit}`
       },
       {
         label: 'Energy consumption',
         current: (ov as any)[`energy_${suffix}`],
         prior: (ov as any)[`prior_energy_${suffix}`],
+        priorYear: (ov as any)[`prior_year_energy_${suffix}`],
         unit: `GJ/${denomUnit}`
       },
       {
         label: 'Water withdrawal',
         current: (ov as any)[`water_${suffix}`],
         prior: (ov as any)[`prior_water_${suffix}`],
+        priorYear: (ov as any)[`prior_year_water_${suffix}`],
         unit: `KL/${denomUnit}`
       },
       {
         label: 'Waste generated',
         current: (ov as any)[`waste_${suffix}`],
         prior: (ov as any)[`prior_waste_${suffix}`],
+        priorYear: (ov as any)[`prior_year_waste_${suffix}`],
         unit: `MT/${denomUnit}`
       }
     ];
   }
 
-  comparisonLabel(current: number | null, prior: number | null): string {
+  comparisonLabel(current: number | null, prior: number | null, against = 'last month'): string {
     if (current === null) return 'Data required';
-    if (prior === null || prior === 0) return 'No prior-period comparison';
+    if (prior === null || prior === 0) return `No comparison available`;
     const pct = ((current - prior) / prior) * 100;
-    return `${Math.abs(pct).toFixed(0)}% ${pct > 0 ? 'higher' : 'lower'} than last month`;
+    return `${Math.abs(pct).toFixed(0)}% ${pct > 0 ? 'higher' : 'lower'} than ${against}`;
   }
 
   comparisonStatus(current: number | null, prior: number | null): 'green' | 'amber' | 'red' | 'neutral' {
@@ -115,29 +120,19 @@ export class IntensityViewComponent implements OnChanges {
     return 'red';
   }
 
-  private trendMonths(): { period: string; label: string }[] {
-    const [year, month] = this.period.split('-').map(Number);
-    const months: { period: string; label: string }[] = [];
-    for (let i = TREND_MONTHS - 1; i >= 0; i--) {
-      const d = new Date(year, month - 1 - i, 1);
-      const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-      const label = d.toLocaleDateString('en-US', { month: 'short' });
-      months.push({ period, label });
-    }
-    return months;
-  }
-
   async loadTrend(): Promise<void> {
     this.trendLoading.set(true);
     try {
-      const months = this.trendMonths();
-      const overviews = await Promise.all(
-        months.map((m) => this.api.getOverview(m.period, this.locationId ?? undefined).catch(() => null))
-      );
-      const field = this.mode === 'production' ? 'ghg_per_production' : 'ghg_per_revenue';
+      const points = await this.api.getTrend(`${this.period}-01`, TREND_MONTHS, this.locationId ?? undefined);
       this.trendPoints.set(
-        months.map((m, i) => ({ period: m.period, label: m.label, ghg: overviews[i] ? (overviews[i] as any)[field] : null }))
+        points.map((p) => ({
+          period: p.period,
+          label: new Date(`${p.period}T00:00:00`).toLocaleDateString('en-US', { month: 'short' }),
+          ghg: this.mode === 'production' ? p.ghg_per_production : p.ghg_per_revenue
+        }))
       );
+    } catch {
+      this.trendPoints.set([]);
     } finally {
       this.trendLoading.set(false);
     }

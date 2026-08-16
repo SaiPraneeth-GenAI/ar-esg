@@ -3,18 +3,8 @@
     <div class="banner error">{{ errorMessage() }}</div>
   }
 
-  <div class="denominator-card">
-    <span class="denominator-label">{{ denominatorLabel() }} this month</span>
-    @if (denominatorValue() !== null) {
-      <span class="denominator-value">{{ denominatorValue() | number: '1.1-2' }} <span class="denominator-unit">{{ denominatorUnit() }}</span></span>
-    } @else {
-      <span class="denominator-empty">
-        Not yet entered -- {{ mode === 'production' ? 'production volume' : 'revenue' }} intensity is unavailable until an approved entry exists for this month.
-      </span>
-    }
-  </div>
-
   @if (loading()) {
+    <div class="skeleton-denominator"></div>
     <div class="skeleton-cards">
       <div class="skeleton-card"></div>
       <div class="skeleton-card"></div>
@@ -22,6 +12,17 @@
       <div class="skeleton-card"></div>
     </div>
   } @else {
+    <div class="denominator-card">
+      <span class="denominator-label">{{ denominatorLabel() }} this month</span>
+      @if (denominatorValue() !== null) {
+        <span class="denominator-value">{{ denominatorValue() | number: '1.1-2' }} <span class="denominator-unit">{{ denominatorUnit() }}</span></span>
+      } @else {
+        <span class="denominator-empty">
+          Not yet entered -- {{ mode === 'production' ? 'production volume' : 'revenue' }} intensity is unavailable until an approved entry exists for this month.
+        </span>
+      }
+    </div>
+
     <div class="metric-cards">
       @for (m of metrics(); track m.label) {
         <div class="metric-card">
@@ -33,6 +34,9 @@
             <div class="card-value">{{ m.current | number: '1.2-4' }}<span class="card-unit">{{ m.unit }}</span></div>
             <div class="card-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.prior)">
               {{ comparisonLabel(m.current, m.prior) }}
+            </div>
+            <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.priorYear)">
+              {{ comparisonLabel(m.current, m.priorYear, 'last year') }}
             </div>
           } @else {
             <div class="card-empty">Data required</div>

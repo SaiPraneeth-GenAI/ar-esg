@@ -33,3 +33,23 @@ class IntensityOverviewOut(BaseModel):
     prior_waste_mt: float | None = None
     prior_production_mnah: float | None = None
     prior_revenue_inr_cr: float | None = None
+    prior_year_energy_per_production: float | None = None
+    prior_year_ghg_per_production: float | None = None
+    prior_year_water_per_production: float | None = None
+    prior_year_waste_per_production: float | None = None
+    prior_year_energy_per_revenue: float | None = None
+    prior_year_ghg_per_revenue: float | None = None
+    prior_year_water_per_revenue: float | None = None
+    prior_year_waste_per_revenue: float | None = None
+    prior_year_energy_gj: float | None = None
+    prior_year_ghg_tco2e: float | None = None
+    prior_year_water_kl: float | None = None
+    prior_year_waste_mt: float | None = None
+    prior_year_production_mnah: float | None = None
+    prior_year_revenue_inr_cr: float | None = None
+
+
+class IntensityTrendPoint(BaseModel):
+    period: date
+    ghg_per_production: float | None
+    ghg_per_revenue: float | None

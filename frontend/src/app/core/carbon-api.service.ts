@@ -26,6 +26,8 @@ export interface CarbonOverview {
   scope1_2_location_based_tco2e: number | null;
   prior_scope1_2_location_based_tco2e: number | null;
   prior_intensity_tco2e_per_mnah: number | null;
+  prior_year_scope1_2_location_based_tco2e: number | null;
+  prior_year_intensity_tco2e_per_mnah: number | null;
   production_value: number | null;
   production_unit: string | null;
   intensity_tco2e_per_mnah: number | null;
@@ -36,6 +38,12 @@ export interface CarbonOverview {
   insight: string | null;
   scope1_2_target: TargetComparison | null;
   intensity_target: TargetComparison | null;
+}
+
+export interface CarbonTrendPoint {
+  period: string;
+  scope1_2_location_based_tco2e: number | null;
+  intensity_tco2e_per_mnah: number | null;
 }
 
 export interface EmissionCalculationOut {
@@ -82,6 +90,13 @@ export class CarbonApiService {
     const params: Record<string, string> = { period };
     if (locationId) params['location_id'] = locationId;
     return firstValueFrom(this.http.get<CarbonOverview>(`${environment.apiBaseUrl}/carbon/overview`, { headers, params }));
+  }
+
+  async getTrend(period: string, months = 6, locationId?: string): Promise<CarbonTrendPoint[]> {
+    const headers = await this.authHeaders();
+    const params: Record<string, string> = { period, months: String(months) };
+    if (locationId) params['location_id'] = locationId;
+    return firstValueFrom(this.http.get<CarbonTrendPoint[]>(`${environment.apiBaseUrl}/carbon/trend`, { headers, params }));
   }
 
   async getCalculations(

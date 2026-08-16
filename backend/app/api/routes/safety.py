@@ -9,7 +9,7 @@ from app.core.auth import CurrentUser, require_roles
 from app.db.models import Category, DataPoint, Entry
 from app.db.session import get_db
 from app.schemas.safety import SafetyMetricOut, SafetyOverviewOut
-from app.services.carbon_calculation import prior_month, to_decimal
+from app.services.carbon_calculation import prior_month, prior_year, to_decimal
 from app.services.rollups import month_start
 
 router = APIRouter(prefix="/safety", tags=["safety"])
@@ -23,25 +23,45 @@ CATEGORY_NAME = "Safety"
 METRIC_NAMES = ["Fatality", "LTIFR", "Defensive Driving Training", "Unsafe Conditions", "Near Miss"]
 
 
-def _metric_value(db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, period: date, dp_name: str) -> tuple[float | None, str]:
-    dp = (
+def _metric_values_batch(
+    db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, periods: list[date]
+) -> dict[str, dict[date, tuple[float | None, str]]]:
+    """{metric_name: {period: (value, unit)}} for every metric and period
+    in one DataPoint query + one Entry query, not one pair per metric per
+    period."""
+    data_points = (
         db.query(DataPoint)
         .join(Category, Category.id == DataPoint.category_id)
-        .filter(Category.tenant_id == tenant_id, Category.name == CATEGORY_NAME, DataPoint.name == dp_name)
-        .first()
+        .filter(Category.tenant_id == tenant_id, Category.name == CATEGORY_NAME, DataPoint.name.in_(METRIC_NAMES))
+        .all()
     )
-    if dp is None:
-        return None, ""
+    dp_by_name = {dp.name: dp for dp in data_points}
 
-    q = db.query(Entry).filter(Entry.data_point_id == dp.id, Entry.status == "Approved", Entry.period == period)
+    entry_q = db.query(Entry).filter(
+        Entry.data_point_id.in_([dp.id for dp in data_points]), Entry.status == "Approved", Entry.period.in_(periods)
+    )
     if location_id is not None:
-        q = q.filter(Entry.location_id == location_id)
-    entries = q.all()
-    if not entries:
-        return None, dp.unit or ""
+        entry_q = entry_q.filter(Entry.location_id == location_id)
+    entries_by_dp_period: dict[tuple, list] = {}
+    for e in entry_q.all():
+        entries_by_dp_period.setdefault((e.data_point_id, e.period), []).append(e)
 
-    total = sum((to_decimal(e.value) for e in entries if e.value is not None), Decimal("0"))
-    return float(total), dp.unit or ""
+    result: dict[str, dict[date, tuple[float | None, str]]] = {}
+    for name in METRIC_NAMES:
+        dp = dp_by_name.get(name)
+        per_period: dict[date, tuple[float | None, str]] = {}
+        for p in periods:
+            if dp is None:
+                per_period[p] = (None, "")
+                continue
+            entries = entries_by_dp_period.get((dp.id, p))
+            if not entries:
+                per_period[p] = (None, dp.unit or "")
+                continue
+            total = sum((to_decimal(e.value) for e in entries if e.value is not None), Decimal("0"))
+            per_period[p] = (float(total), dp.unit or "")
+        result[name] = per_period
+    return result
 
 
 @router.get("/overview", response_model=SafetyOverviewOut)
@@ -52,12 +72,16 @@ def safety_overview(
     db: Session = Depends(get_db),
 ):
     period = month_start(period)
-    prior = prior_month(period)
+    periods = [period, prior_month(period), prior_year(period)]
+    values = _metric_values_batch(db, current.tenant_id, location_id, periods)
 
     metrics = []
     for name in METRIC_NAMES:
-        value, unit = _metric_value(db, current.tenant_id, location_id, period, name)
-        prior_value, _ = _metric_value(db, current.tenant_id, location_id, prior, name)
-        metrics.append(SafetyMetricOut(name=name, value=value, unit=unit, prior_value=prior_value))
+        value, unit = values[name][periods[0]]
+        prior_value, _ = values[name][periods[1]]
+        prior_year_value, _ = values[name][periods[2]]
+        metrics.append(
+            SafetyMetricOut(name=name, value=value, unit=unit, prior_value=prior_value, prior_year_value=prior_year_value)
+        )
 
     return SafetyOverviewOut(period=period, metrics=metrics)

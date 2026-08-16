@@ -155,6 +155,13 @@
   font-weight: 600;
 }
 
+.card-comparison.year-comparison {
+  font-size: 0.73rem;
+  font-weight: 500;
+  opacity: 0.85;
+  margin-top: 0.1rem;
+}
+
 .comparison-green {
   color: #027a48;
 }

@@ -70,33 +70,20 @@ export class CarbonOverviewComponent implements OnChanges {
     }
   }
 
-  private trendMonths(): { period: string; label: string }[] {
-    const [year, month] = this.period.split('-').map(Number);
-    const months: { period: string; label: string }[] = [];
-    for (let i = TREND_MONTHS - 1; i >= 0; i--) {
-      const d = new Date(year, month - 1 - i, 1);
-      const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-      const label = d.toLocaleDateString('en-US', { month: 'short' });
-      months.push({ period, label });
-    }
-    return months;
-  }
-
   async loadTrend(): Promise<void> {
     this.trendLoading.set(true);
     try {
-      const months = this.trendMonths();
-      const overviews = await Promise.all(
-        months.map((m) => this.api.getOverview(m.period, this.locationId ?? undefined).catch(() => null))
-      );
+      const points = await this.api.getTrend(this.periodIso(), TREND_MONTHS, this.locationId ?? undefined);
       this.trendPoints.set(
-        months.map((m, i) => ({
-          period: m.period,
-          label: m.label,
-          scope12: overviews[i]?.scope1_2_location_based_tco2e ?? null,
-          intensity: overviews[i]?.intensity_tco2e_per_mnah ?? null
+        points.map((p) => ({
+          period: p.period,
+          label: new Date(`${p.period}T00:00:00`).toLocaleDateString('en-US', { month: 'short' }),
+          scope12: p.scope1_2_location_based_tco2e,
+          intensity: p.intensity_tco2e_per_mnah
         }))
       );
+    } catch {
+      this.trendPoints.set([]);
     } finally {
       this.trendLoading.set(false);
     }
@@ -160,11 +147,11 @@ export class CarbonOverviewComponent implements OnChanges {
     return new Date(`${period}T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   }
 
-  comparisonLabel(current: number | null, prior: number | null): string {
+  comparisonLabel(current: number | null, prior: number | null, against = 'last month'): string {
     if (current === null) return 'No data yet';
-    if (prior === null || prior === 0) return 'No comparison available';
+    if (prior === null || prior === 0) return `No comparison available`;
     const pct = ((current - prior) / prior) * 100;
-    return `${Math.abs(pct).toFixed(0)}% ${pct > 0 ? 'higher' : 'lower'} than last month`;
+    return `${Math.abs(pct).toFixed(0)}% ${pct > 0 ? 'higher' : 'lower'} than ${against}`;
   }
 
   comparisonStatus(current: number | null, prior: number | null): 'green' | 'amber' | 'red' | 'neutral' {

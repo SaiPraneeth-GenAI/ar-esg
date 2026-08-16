@@ -9,6 +9,7 @@ export interface SafetyMetric {
   value: number | null;
   unit: string;
   prior_value: number | null;
+  prior_year_value: number | null;
 }
 
 export interface SafetyOverview {

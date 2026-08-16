@@ -14,6 +14,7 @@ from app.schemas.carbon import (
     CarbonOverviewSource,
     CarbonPreviewRequest,
     CarbonPreviewResponse,
+    CarbonTrendPoint,
     EmissionCalculationOut,
     RecalculateResponse,
     TargetComparison,
@@ -22,7 +23,9 @@ from app.services.carbon_calculation import (
     CalculationOutcome,
     calculate_entries_batch,
     compute_period_totals,
+    compute_period_totals_batch,
     prior_month,
+    prior_year,
     run_calculation,
     to_decimal,
 )
@@ -255,6 +258,41 @@ def list_calculations(
     return [_calc_out(db, r) for r in rows]
 
 
+def _trailing_months(period: date, count: int) -> list[date]:
+    months = []
+    cursor = period
+    for _ in range(count):
+        months.append(cursor)
+        year = cursor.year - (1 if cursor.month == 1 else 0)
+        month = 12 if cursor.month == 1 else cursor.month - 1
+        cursor = cursor.replace(year=year, month=month)
+    return list(reversed(months))
+
+
+@router.get("/trend", response_model=list[CarbonTrendPoint])
+def carbon_trend(
+    period: date,
+    months: int = 6,
+    location_id: uuid.UUID | None = None,
+    current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
+    db: Session = Depends(get_db),
+):
+    """Scope 1+2 (location-based) and intensity for the trailing N months in
+    one batched query set -- powers the dashboard trend chart without one
+    full /carbon/overview round trip per bar."""
+    period = month_start(period)
+    trailing = _trailing_months(period, min(max(months, 1), 24))
+    totals_by_period = compute_period_totals_batch(db, current.tenant_id, location_id, trailing)
+    return [
+        CarbonTrendPoint(
+            period=p,
+            scope1_2_location_based_tco2e=totals_by_period[p]["scope1_2_loc_tco2e"],
+            intensity_tco2e_per_mnah=totals_by_period[p]["intensity"],
+        )
+        for p in trailing
+    ]
+
+
 @router.get("/overview", response_model=CarbonOverview)
 def carbon_overview(
     period: date,
@@ -265,8 +303,11 @@ def carbon_overview(
     """Approved calculation snapshots only -- never a live sum of raw
     entries (rule #10)."""
     period = month_start(period)
-    current_totals = compute_period_totals(db, current.tenant_id, location_id, period)
-    prior_totals = compute_period_totals(db, current.tenant_id, location_id, prior_month(period))
+    periods = [period, prior_month(period), prior_year(period)]
+    totals_by_period = compute_period_totals_batch(db, current.tenant_id, location_id, periods)
+    current_totals = totals_by_period[periods[0]]
+    prior_totals = totals_by_period[periods[1]]
+    prior_year_totals = totals_by_period[periods[2]]
     rows = current_totals["rows"]
     unresolved_count = current_totals["unresolved_count"]
     calculated_count = current_totals["calculated_count"]
@@ -309,6 +350,8 @@ def carbon_overview(
         scope1_2_location_based_tco2e=current_totals["scope1_2_loc_tco2e"],
         prior_scope1_2_location_based_tco2e=prior_totals["scope1_2_loc_tco2e"],
         prior_intensity_tco2e_per_mnah=prior_totals["intensity"],
+        prior_year_scope1_2_location_based_tco2e=prior_year_totals["scope1_2_loc_tco2e"],
+        prior_year_intensity_tco2e_per_mnah=prior_year_totals["intensity"],
         production_value=current_totals["production_value"],
         production_unit=current_totals["production_unit"],
         intensity_tco2e_per_mnah=current_totals["intensity"],

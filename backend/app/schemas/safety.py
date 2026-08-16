@@ -8,6 +8,7 @@ class SafetyMetricOut(BaseModel):
     value: float | None
     unit: str
     prior_value: float | None
+    prior_year_value: float | None = None
 
 
 class SafetyOverviewOut(BaseModel):
