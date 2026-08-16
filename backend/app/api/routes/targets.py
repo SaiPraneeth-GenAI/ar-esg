@@ -67,7 +67,7 @@ def _target_out(db: Session, target: EmissionTarget) -> TargetOut:
         actual, _ = extract_metric_value(totals, target.scope, target.calculation_method)
         num_months = len(months_between(target.target_period_start, target.target_period_end))
         month_target = target_value_for_month(
-            target.monthly_phasing, period, float(target.target_value) if target.target_value is not None else None, num_months
+            target.monthly_phasing, period, float(target.target_value) if target.target_value is not None else None, num_months, target.metric_type
         )
         status_label = classify_status(actual, month_target)
 
@@ -351,7 +351,7 @@ def target_performance(
     for period in months:
         totals = compute_period_totals(db, current.tenant_id, target.location_id, period)
         actual, _ = extract_metric_value(totals, target.scope, target.calculation_method)
-        month_target = target_value_for_month(target.monthly_phasing, period, target_value, num_months)
+        month_target = target_value_for_month(target.monthly_phasing, period, target_value, num_months, target.metric_type)
         variance_pct = None
         if actual is not None and month_target is not None and month_target != 0:
             variance_pct = (actual - month_target) / month_target * 100

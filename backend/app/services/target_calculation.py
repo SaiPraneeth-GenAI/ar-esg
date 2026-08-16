@@ -234,15 +234,26 @@ def validate_monthly_phasing(monthly_phasing: list[dict], target_value: float, t
     return None
 
 
-def target_value_for_month(monthly_phasing: list[dict], period: date, target_value: float | None, num_months: int) -> float | None:
+def target_value_for_month(
+    monthly_phasing: list[dict], period: date, target_value: float | None, num_months: int, metric_type: str = "absolute_tco2e"
+) -> float | None:
     """The month's target figure -- its explicit phased value if phasing
-    was set, otherwise the annual target spread evenly."""
+    was set, otherwise derived from the annual target. An absolute target
+    is a budget, so it's spread evenly across months by default. An
+    intensity target is a rate (tCO2e/MnAh), not a budget -- dividing it
+    by the month count would compare each month's actual rate against a
+    twelfth of the rate, which is meaningless. Every month is compared
+    against the same annual intensity target instead."""
     if monthly_phasing:
         for entry in monthly_phasing:
             if entry.get("period") == period.isoformat():
                 return float(entry["value"])
         return None
-    if target_value is None or num_months == 0:
+    if target_value is None:
+        return None
+    if metric_type == "intensity_tco2e_per_mnah":
+        return target_value
+    if num_months == 0:
         return None
     return target_value / num_months
 

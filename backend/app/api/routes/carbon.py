@@ -388,7 +388,7 @@ def _active_target_comparison(
     if target is None or target.target_value is None:
         return None
     num_months = len(months_between(target.target_period_start, target.target_period_end))
-    month_target = target_value_for_month(target.monthly_phasing, period, float(target.target_value), num_months)
+    month_target = target_value_for_month(target.monthly_phasing, period, float(target.target_value), num_months, target.metric_type)
     if month_target is None:
         return None
     return TargetComparison(target_id=target.id, target_value=month_target, status=classify_status(actual, month_target))

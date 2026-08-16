@@ -114,8 +114,15 @@ def test_target_value_for_month_uses_phasing_when_present():
     assert target_value_for_month(phasing, date(2026, 1, 1), 120.0, 2) == 60.0
 
 
-def test_target_value_for_month_spreads_evenly_without_phasing():
-    assert target_value_for_month([], date(2026, 1, 1), 120.0, 12) == 10.0
+def test_target_value_for_month_spreads_absolute_target_evenly_without_phasing():
+    assert target_value_for_month([], date(2026, 1, 1), 120.0, 12, "absolute_tco2e") == 10.0
+
+
+def test_target_value_for_month_uses_intensity_target_as_is_not_divided():
+    # An intensity target is a rate, not a budget -- dividing 0.53
+    # tCO2e/MnAh by 12 months would compare each month against a
+    # twelfth of the rate, which is meaningless.
+    assert target_value_for_month([], date(2026, 1, 1), 0.53, 12, "intensity_tco2e_per_mnah") == 0.53
 
 
 def test_classify_status_on_track_when_at_or_below_target():
