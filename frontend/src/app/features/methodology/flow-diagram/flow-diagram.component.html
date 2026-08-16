@@ -1,0 +1,134 @@
+<div class="diagram-shell">
+  <div class="toolbar">
+    <div class="toolbar-group">
+      <button type="button" class="tool-btn" (click)="play()" [disabled]="playing()">
+        {{ playing() ? 'Playing…' : '▶ Play calculation flow' }}
+      </button>
+      <button type="button" class="tool-btn ghost" (click)="resetPlay()" [disabled]="playing()">Reset</button>
+    </div>
+    <div class="toolbar-group">
+      <button type="button" class="tool-btn icon" (click)="zoomButton(0.85)" aria-label="Zoom in">+</button>
+      <button type="button" class="tool-btn icon" (click)="zoomButton(1.18)" aria-label="Zoom out">−</button>
+      <button type="button" class="tool-btn ghost" (click)="fitToView()">Fit to view</button>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="loading-banner">Loading live figures for {{ periodLabel() }}…</div>
+  }
+
+  <div class="canvas-wrap">
+    <svg
+      #svgEl
+      class="canvas"
+      [attr.viewBox]="viewBox().x + ' ' + viewBox().y + ' ' + viewBox().w + ' ' + viewBox().h"
+      (wheel)="onWheel($event)"
+      (pointerdown)="onPointerDown($event)"
+      (pointermove)="onPointerMove($event)"
+      (pointerup)="onPointerUp()"
+      (pointerleave)="onPointerUp()"
+    >
+      <defs>
+        <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+          <path d="M 24 0 L 0 0 0 24" fill="none" stroke="var(--grid-line)" stroke-width="1" />
+        </pattern>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--edge-color)" />
+        </marker>
+        <marker id="arrow-active" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--edge-active)" />
+        </marker>
+      </defs>
+
+      <rect x="-4000" y="-4000" width="8000" height="8000" fill="url(#grid)" />
+
+      <!-- Edges -->
+      @for (edge of edges; track edgeKey(edge)) {
+        <path
+          [attr.d]="edgePath(edge)"
+          class="edge"
+          [class.dashed]="edge.dashed"
+          [class.active]="isEdgeActive(edge)"
+          fill="none"
+          [attr.marker-end]="isEdgeActive(edge) ? 'url(#arrow-active)' : 'url(#arrow)'"
+        />
+      }
+
+      <!-- Nodes -->
+      @for (node of nodes; track node.id) {
+        <g
+          class="node"
+          [class]="'kind-' + node.kind"
+          [class.planned]="!node.live"
+          [class.active]="isNodeActive(node)"
+          [class.selected]="selectedNode()?.id === node.id"
+          [attr.transform]="'translate(' + node.x + ',' + node.y + ')'"
+          (click)="selectNode(node)"
+          tabindex="0"
+          role="button"
+          [attr.aria-label]="node.label"
+          (keydown.enter)="selectNode(node)"
+        >
+          <rect [attr.width]="node.w" [attr.height]="node.h" rx="10" class="node-box" />
+          <text class="node-label" [attr.x]="node.w / 2" [attr.y]="nodeValueLabel(node) ? node.h / 2 - 6 : node.h / 2 + 4" text-anchor="middle">
+            {{ node.label }}
+          </text>
+          @if (nodeValueLabel(node)) {
+            <text class="node-value" [attr.x]="node.w / 2" [attr.y]="node.h / 2 + 16" text-anchor="middle">
+              {{ nodeValueLabel(node) }}
+            </text>
+          } @else if (!node.live) {
+            <text class="node-value planned-text" [attr.x]="node.w / 2" [attr.y]="node.h / 2 + 16" text-anchor="middle">planned</text>
+          }
+        </g>
+      }
+    </svg>
+  </div>
+
+  @if (detail(); as d) {
+    <div class="detail-overlay" (click)="closeDetail()"></div>
+    <aside class="detail-panel">
+      <header class="detail-header">
+        <div>
+          <span class="detail-pill" [class.pill-planned]="!d.live">{{ d.live ? 'Live' : 'Planned' }}</span>
+          <h3>{{ d.title }}</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="closeDetail()" aria-label="Close">✕</button>
+      </header>
+
+      <div class="detail-body">
+        @if (d.value !== null) {
+          <div class="detail-value">{{ d.value }}</div>
+        }
+        <p class="detail-formula">{{ d.formula }}</p>
+        <p class="detail-note">{{ d.note }}</p>
+
+        @if (d.loading) {
+          <p class="muted">Loading evidence…</p>
+        } @else if (d.evidence.length > 0) {
+          <h4>Approved calculations this period</h4>
+          <table class="evidence-table">
+            <thead>
+              <tr>
+                <th>Location</th>
+                <th>Activity</th>
+                <th>Factor</th>
+                <th>tCO2e</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (calc of d.evidence; track calc.id) {
+                <tr>
+                  <td>{{ calc.location_name }}</td>
+                  <td>{{ calc.activity_value }} {{ calc.activity_unit }}</td>
+                  <td [title]="calc.factor_source ?? ''">{{ calc.factor_value }} {{ calc.factor_unit }} ({{ calc.factor_version }})</td>
+                  <td>{{ calc.emissions_tco2e | number: '1.2-3' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </div>
+    </aside>
+  }
+</div>

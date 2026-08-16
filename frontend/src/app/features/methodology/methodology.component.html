@@ -14,92 +14,12 @@
   </section>
 
   <section class="flow-section">
-    <h2>From an entry to an approved calculation</h2>
-    <div class="flow-row">
-      @for (node of mainFlow; track node.title; let last = $last) {
-        <div class="flow-node" [class.planned]="!node.live">
-          <span class="node-pill" [class.pill-live]="node.live" [class.pill-planned]="!node.live">{{ node.live ? 'Live' : 'Planned' }}</span>
-          <h3>{{ node.title }}</h3>
-          <p>{{ node.detail }}</p>
-        </div>
-        @if (!last) {
-          <div class="arrow">→</div>
-        }
-      }
-    </div>
-  </section>
-
-  <section class="flow-section">
-    <h2>From totals to intensity and targets</h2>
-    <div class="branch-grid">
-      <div class="branch-col">
-        <h4>Production intensity</h4>
-        <div class="flow-row flow-row-vertical">
-          @for (node of branchFlow; track node.title; let last = $last) {
-            <div class="flow-node" [class.planned]="!node.live">
-              <span class="node-pill" [class.pill-live]="node.live" [class.pill-planned]="!node.live">{{ node.live ? 'Live' : 'Planned' }}</span>
-              <h3>{{ node.title }}</h3>
-              <p>{{ node.detail }}</p>
-            </div>
-            @if (!last) {
-              <div class="arrow arrow-vertical">↓</div>
-            }
-          }
-        </div>
-      </div>
-
-      <div class="branch-col">
-        <h4>Revenue intensity</h4>
-        <div class="flow-row flow-row-vertical">
-          @for (node of revenueBranch; track node.title; let last = $last) {
-            <div class="flow-node" [class.planned]="!node.live">
-              <span class="node-pill" [class.pill-live]="node.live" [class.pill-planned]="!node.live">{{ node.live ? 'Live' : 'Planned' }}</span>
-              <h3>{{ node.title }}</h3>
-              <p>{{ node.detail }}</p>
-            </div>
-            @if (!last) {
-              <div class="arrow arrow-vertical">↓</div>
-            }
-          }
-        </div>
-      </div>
-
-      <div class="branch-col">
-        <h4>Targets and dashboard</h4>
-        <div class="flow-row flow-row-vertical">
-          @for (node of targetFlow; track node.title; let last = $last) {
-            <div class="flow-node" [class.planned]="!node.live">
-              <span class="node-pill" [class.pill-live]="node.live" [class.pill-planned]="!node.live">{{ node.live ? 'Live' : 'Planned' }}</span>
-              <h3>{{ node.title }}</h3>
-              <p>{{ node.detail }}</p>
-            </div>
-            @if (!last) {
-              <div class="arrow arrow-vertical">↓</div>
-            }
-          }
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="flow-section">
-    <h2>When something can't be calculated</h2>
+    <h2>The calculation, block by block</h2>
     <p class="section-note">
-      The platform never estimates a missing value. If a factor can't be resolved cleanly, the entry is set aside and
-      excluded from every total until a human fixes the underlying data.
+      Drag to pan, scroll to zoom, click any block for its real formula and this period's numbers. Press Play to watch
+      data move from raw activity input through to the dashboard.
     </p>
-    <div class="flow-row">
-      @for (node of unresolvedFlow; track node.title; let last = $last) {
-        <div class="flow-node flow-node-warning">
-          <span class="node-pill pill-live">Live</span>
-          <h3>{{ node.title }}</h3>
-          <p>{{ node.detail }}</p>
-        </div>
-        @if (!last) {
-          <div class="arrow">→</div>
-        }
-      }
-    </div>
+    <app-flow-diagram></app-flow-diagram>
   </section>
 
   <section class="table-section">
