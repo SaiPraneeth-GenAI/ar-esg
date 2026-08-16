@@ -56,6 +56,14 @@ export const routes: Routes = [
           import('./features/settings/mapping-templates/mapping-templates.component').then(
             (m) => m.MappingTemplatesComponent
           )
+      },
+      {
+        path: 'settings/emission-factors',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./features/settings/emission-factors/emission-factors.component').then(
+            (m) => m.EmissionFactorsComponent
+          )
       }
     ]
   },

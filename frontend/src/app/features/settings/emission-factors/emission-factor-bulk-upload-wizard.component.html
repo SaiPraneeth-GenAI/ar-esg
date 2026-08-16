@@ -1,0 +1,255 @@
+<div class="wizard-card">
+  <div class="wizard-steps">
+    <span class="wizard-step" [class.active]="step() === 'upload'" [class.done]="step() !== 'upload'">1. Upload</span>
+    <span class="wizard-step" [class.active]="step() === 'mapping'" [class.done]="step() === 'validate' || step() === 'confirm'">2. Mapping</span>
+    <span class="wizard-step" [class.active]="step() === 'validate'" [class.done]="step() === 'confirm'">3. Validate</span>
+    <span class="wizard-step" [class.active]="step() === 'confirm'">4. Confirm</span>
+  </div>
+
+  @if (step() === 'upload') {
+    <div class="wizard-body">
+      <p class="wizard-intro">
+        Upload the workbook as-is -- Scope-1/2/3 tabs, wide year columns, a factor value written into a sentence in
+        one cell, consumption/output columns sitting next to the factor. Nothing gets created until you review and
+        confirm the preview.
+      </p>
+
+      <div class="toolbar-row">
+        <label class="small-field">
+          <span>Default effective year</span>
+          <input type="number" [ngModel]="defaultEffectiveYear()" (ngModelChange)="defaultEffectiveYear.set($event)" />
+        </label>
+        <label class="small-field">
+          <span>Default Scope 2 method</span>
+          <select [ngModel]="defaultMethod()" (ngModelChange)="defaultMethod.set($event)">
+            <option value="">None</option>
+            <option value="location-based">Location-based</option>
+            <option value="market-based">Market-based</option>
+          </select>
+        </label>
+      </div>
+      <p class="wizard-hint">Used for any row with no year column of its own, or no per-row method column -- both common in the real file.</p>
+
+      <div
+        class="dropzone"
+        [class.active]="dragActive()"
+        (dragover)="onDragOver($event)"
+        (dragleave)="onDragLeave()"
+        (drop)="onDrop($event)"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3v12" />
+          <path d="m7 8 5-5 5 5" />
+          <path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
+        </svg>
+        <p class="dropzone-title">Drag the workbook here or click to browse</p>
+        <p class="dropzone-hint">.xlsx, .xls, or .csv</p>
+        <label class="primary-btn">
+          Browse files
+          <input type="file" hidden accept=".csv,.xlsx,.xls" (change)="onFileInputChange($event)" />
+        </label>
+      </div>
+
+      @if (parseError()) {
+        <div class="banner error">{{ parseError() }}</div>
+      }
+      @if (detecting()) {
+        <p class="wizard-hint">Reading every sheet and matching columns…</p>
+      }
+    </div>
+  }
+
+  @if (step() === 'mapping') {
+    <div class="wizard-body">
+      <p class="wizard-intro"><strong>{{ fileName() }}</strong> -- review how each sheet and column was read. Mark anything that isn't a factor value as Skip.</p>
+
+      @for (sheet of detection(); track sheet.sheet_name + sheet.block_index) {
+        <div class="sheet-card">
+          <div class="sheet-header">
+            <span class="sheet-name">{{ sheet.sheet_name }}{{ sheet.block_index > 0 ? ' (table ' + (sheet.block_index + 1) + ')' : '' }}</span>
+            <span class="scope-chip" [class]="'scope-' + (sheet.scope ?? 0)">
+              {{ sheet.scope ? 'Scope ' + sheet.scope : 'Scope not detected' }}
+            </span>
+            <span class="factor-count">{{ sheet.factor_count }} factor{{ sheet.factor_count === 1 ? '' : 's' }} matched</span>
+          </div>
+
+          <table class="mapping-table">
+            <thead>
+              <tr>
+                <th>Your column</th>
+                <th>Read as</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (col of sheet.columns; track col.index) {
+                <tr>
+                  <td class="mapping-header">{{ col.header || '(blank)' }}</td>
+                  <td>
+                    <select
+                      [ngModel]="overrideFor(sheet.sheet_name, sheet.block_index, col.index) ?? (col.role === 'year_value' ? 'year_value' : col.role)"
+                      (ngModelChange)="setColumnOverride(sheet.sheet_name, sheet.block_index, col.index, $event)"
+                    >
+                      @if (col.role === 'year_value') {
+                        <option value="year_value">{{ 'Factor value for ' + col.year_label }}</option>
+                      }
+                      @for (opt of columnRoleOptions; track opt) {
+                        <option [value]="opt">{{ columnRoleLabel[opt] }}</option>
+                      }
+                    </select>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+
+      <div class="wizard-nav">
+        <button type="button" class="secondary-btn" (click)="startOver()">Choose a different file</button>
+        <div class="wizard-nav-right">
+          <button type="button" class="secondary-btn" [disabled]="detecting()" (click)="runDetect()">Re-detect with these mappings</button>
+          <button type="button" class="primary-btn" [disabled]="detecting()" (click)="applyMappingAndContinue()">Continue to validation</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (step() === 'validate') {
+    <div class="wizard-body">
+      <p class="wizard-intro">
+        {{ readyRows().length + includedValidRows().length }} rows ready, {{ errorRows().length }} flagged out of {{ rows().length }}.
+        Fix a flagged row directly below, then Recheck.
+      </p>
+
+      <div class="table-scroll">
+        <table class="validation-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Sheet</th>
+              <th>Scope</th>
+              <th>Substance / category</th>
+              <th>Unit</th>
+              <th>Value</th>
+              <th>Year</th>
+              <th>Version</th>
+              <th>Source reference</th>
+              <th>IPCC reference</th>
+              <th>Status</th>
+              <th>Detail</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of rows(); track rowKey(row)) {
+              <tr [class.row-error]="row.status === 'error' || row.status === 'missing_source'">
+                <td>
+                  @if (row.status !== 'error') {
+                    <input type="checkbox" [checked]="row.included" (change)="toggleIncluded(rowKey(row))" />
+                  }
+                </td>
+                <td class="nowrap">{{ row.sheet_name }} #{{ row.row_index }}</td>
+                <td>
+                  <select [ngModel]="row.scope" (ngModelChange)="updateRow(rowKey(row), { scope: $event })">
+                    <option [value]="1">Scope 1</option>
+                    <option [value]="2">Scope 2</option>
+                    <option [value]="3">Scope 3</option>
+                  </select>
+                </td>
+                <td>
+                  @if (row.scope === 2) {
+                    <select [ngModel]="row.method" (ngModelChange)="updateRow(rowKey(row), { method: $event })">
+                      <option [ngValue]="null">Choose method</option>
+                      <option value="location-based">Location-based</option>
+                      <option value="market-based">Market-based</option>
+                    </select>
+                  } @else if (row.scope === 3) {
+                    <select [ngModel]="row.scope3_category" (ngModelChange)="updateRow(rowKey(row), { scope3_category: $event })">
+                      <option [ngValue]="null">Choose category</option>
+                      @for (cat of scope3Categories; track cat) {
+                        <option [value]="cat">{{ cat }}</option>
+                      }
+                    </select>
+                  } @else {
+                    <input type="text" class="name-input" [ngModel]="row.gas_type" (ngModelChange)="updateRow(rowKey(row), { gas_type: $event })" />
+                  }
+                </td>
+                <td><input type="text" class="unit-input" [ngModel]="row.unit" (ngModelChange)="updateRow(rowKey(row), { unit: $event })" /></td>
+                <td><input type="number" step="any" class="value-input" [ngModel]="row.factor_value" (ngModelChange)="updateRow(rowKey(row), { factor_value: $event })" /></td>
+                <td><input type="number" class="year-input" [ngModel]="row.effective_year" (ngModelChange)="updateRow(rowKey(row), { effective_year: $event })" /></td>
+                <td class="nowrap">{{ row.version }}</td>
+                <td><input type="text" class="source-input" [ngModel]="row.source_reference" (ngModelChange)="updateRow(rowKey(row), { source_reference: $event })" /></td>
+                <td class="nowrap">
+                  @if (row.ipcc_match) {
+                    <span class="ipcc-match" [title]="row.ipcc_match.publication + ' -- ' + row.ipcc_match.effective_year">
+                      {{ row.ipcc_match.reference_value }} {{ row.ipcc_match.unit }}
+                      @if (row.ipcc_match.delta_pct !== null) {
+                        <span [class.delta-high]="row.ipcc_match.delta_pct !== null && (row.ipcc_match.delta_pct > 10 || row.ipcc_match.delta_pct < -10)">
+                          (Δ {{ row.ipcc_match.delta_pct }}%)
+                        </span>
+                      }
+                    </span>
+                  } @else {
+                    <span class="muted">—</span>
+                  }
+                </td>
+                <td><span class="row-status" [class]="'status-' + row.status">{{ row.status.replace('_', ' ') }}</span></td>
+                <td class="row-message">{{ row.message }}</td>
+                <td><button type="button" class="link-btn" (click)="removeRow(rowKey(row))">Remove</button></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wizard-nav">
+        <button type="button" class="secondary-btn" (click)="step.set('mapping')">Back to mapping</button>
+        <div class="wizard-nav-right">
+          @if (hasUnchecked()) {
+            <button type="button" class="secondary-btn" [disabled]="validating()" (click)="recheck()">
+              {{ validating() ? 'Checking…' : 'Recheck' }}
+            </button>
+          }
+          <button type="button" class="primary-btn" [disabled]="includedValidRows().length === 0 || hasUnchecked()" (click)="goToConfirm()">
+            Continue with {{ includedValidRows().length }} row{{ includedValidRows().length === 1 ? '' : 's' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (step() === 'confirm') {
+    <div class="wizard-body">
+      @if (commitResult()) {
+        <div class="confirm-result">
+          <div class="confirm-icon success">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </div>
+          <p class="confirm-headline">{{ commitResult()!.created }} emission factors created.</p>
+          @if (commitResult()!.error > 0) {
+            <p class="confirm-subline">{{ commitResult()!.error }} row(s) could not be created -- something changed since validation.</p>
+          }
+          <div class="wizard-nav centered">
+            <button type="button" class="primary-btn" (click)="finish()">Done</button>
+          </div>
+        </div>
+      } @else {
+        <p class="wizard-intro summary-headline">{{ includedValidRows().length }} emission factors will be created.</p>
+        <p class="wizard-intro">These land directly in the factor library, versioned by year -- nothing is overwritten.</p>
+
+        @if (commitError()) {
+          <div class="banner error">{{ commitError() }}</div>
+        }
+
+        <div class="wizard-nav">
+          <button type="button" class="secondary-btn" (click)="step.set('validate')">Back</button>
+          <button type="button" class="primary-btn" [disabled]="committing()" (click)="commitImport()">
+            {{ committing() ? 'Creating…' : 'Confirm and create factors' }}
+          </button>
+        </div>
+      }
+    </div>
+  }
+</div>

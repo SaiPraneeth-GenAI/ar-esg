@@ -33,7 +33,7 @@ class MatchResult:
         self.rule = rule
 
 
-def _best_alias_match(norm: str, candidates: dict[str, list[str]], threshold: float) -> MatchResult:
+def best_alias_match(norm: str, candidates: dict[str, list[str]], threshold: float) -> MatchResult:
     for key, aliases in candidates.items():
         if any(normalize(a) == norm for a in [key, *aliases]):
             return MatchResult(key, 1.0, "exact_alias")
@@ -54,14 +54,14 @@ def match_category(candidate: str, category_names: list[str]) -> MatchResult:
     if not norm:
         return MatchResult(None, 0.0, "no_match")
     aliased = {name: CATEGORY_ALIASES.get(name, []) for name in category_names}
-    return _best_alias_match(norm, aliased, CATEGORY_THRESHOLD)
+    return best_alias_match(norm, aliased, CATEGORY_THRESHOLD)
 
 
 def match_metadata_field(header: str) -> MatchResult:
     norm = normalize(header)
     if not norm:
         return MatchResult(None, 0.0, "no_match")
-    return _best_alias_match(norm, METADATA_FIELD_ALIASES, METADATA_THRESHOLD)
+    return best_alias_match(norm, METADATA_FIELD_ALIASES, METADATA_THRESHOLD)
 
 
 def match_data_point(header: str, data_points: list[tuple[str, str]]) -> tuple[MatchResult, str | None]:

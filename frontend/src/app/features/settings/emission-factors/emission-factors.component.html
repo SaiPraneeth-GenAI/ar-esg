@@ -1,0 +1,95 @@
+<div class="page">
+  <header>
+    <h1>Emission factors</h1>
+    <p class="subtitle">The factor library used to convert activity data into GHG emissions -- versioned, so an update never silently rewrites a historical calculation.</p>
+  </header>
+
+  @if (errorMessage()) {
+    <div class="banner error">{{ errorMessage() }}</div>
+  }
+  @if (successMessage()) {
+    <div class="banner success">{{ successMessage() }}</div>
+  }
+
+  <div class="toolbar">
+    <div class="mode-toggle">
+      <button type="button" [class.active]="mode() === 'list'" (click)="mode.set('list')">Factors</button>
+      <button type="button" [class.active]="mode() === 'bulk'" (click)="mode.set('bulk')">Bulk upload</button>
+    </div>
+
+    @if (mode() === 'list') {
+      <button type="button" class="primary-btn" (click)="openPanel()">+ Add factor</button>
+    }
+  </div>
+
+  @if (mode() === 'bulk') {
+    <app-emission-factor-bulk-upload-wizard (done)="onBulkUploadDone()"></app-emission-factor-bulk-upload-wizard>
+  } @else {
+    @if (loading()) {
+      <p class="muted">Loading…</p>
+    } @else if (factors().length === 0) {
+      <div class="empty-state">
+        <p>No emission factors yet. Add one manually or use Bulk upload for a full workbook.</p>
+      </div>
+    } @else {
+      @for (group of [
+        { scope: 1, label: 'Scope 1', rows: scope1Factors() },
+        { scope: 2, label: 'Scope 2', rows: scope2Factors() },
+        { scope: 3, label: 'Scope 3', rows: scope3Factors() }
+      ]; track group.scope) {
+        <section class="scope-section">
+          <div class="scope-section-header">
+            <h2>{{ group.label }}</h2>
+            <span class="count-pill">{{ group.rows.length }}</span>
+          </div>
+
+          @if (group.rows.length === 0) {
+            <p class="empty-row">No {{ group.label }} factors yet.</p>
+          } @else {
+            <table class="factors-table">
+              <thead>
+                <tr>
+                  <th>Substance / method / category</th>
+                  <th class="unit-col">Unit</th>
+                  <th>Value</th>
+                  <th>Effective year</th>
+                  <th>Version</th>
+                  <th>Source</th>
+                  <th>Origin</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (f of group.rows; track f.id) {
+                  <tr>
+                    <td>
+                      {{ displayName(f) }}
+                      @if (f.scope === 3 && f.description) {
+                        <span class="muted-inline"> -- {{ f.description }}</span>
+                      }
+                    </td>
+                    <td class="unit-col"><span class="unit-badge">{{ f.unit }}</span></td>
+                    <td>{{ f.factor_value }}</td>
+                    <td>{{ f.effective_year }}</td>
+                    <td>{{ f.version }}</td>
+                    <td class="source-cell" [title]="f.source_reference ?? ''">{{ f.source_reference ?? '—' }}</td>
+                    <td>
+                      @if (f.ipcc_reference_key) {
+                        <span class="origin-badge ipcc">IPCC-derived</span>
+                      } @else {
+                        <span class="origin-badge custom">Custom</span>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </section>
+      }
+    }
+  }
+
+  @if (showPanel()) {
+    <app-add-factor-panel (closed)="closePanel()" (saved)="onSaved()"></app-add-factor-panel>
+  }
+</div>

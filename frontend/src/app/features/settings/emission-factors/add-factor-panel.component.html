@@ -1,0 +1,200 @@
+<div class="panel-overlay" (click)="close()"></div>
+
+<aside class="slide-panel">
+  <header class="panel-header">
+    <h2>Add factor</h2>
+    <button type="button" class="close-btn" (click)="close()" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+      </svg>
+    </button>
+  </header>
+
+  <div class="panel-body">
+    @if (mode() === 'search') {
+      <label class="field">
+        <span class="field-label">Search IPCC database</span>
+        <input
+          type="text"
+          class="search-input"
+          placeholder="e.g. Diesel, R-134a, Grid Electricity"
+          [ngModel]="searchQuery()"
+          (ngModelChange)="onSearchInput($event)"
+        />
+      </label>
+
+      @if (searchQuery().trim()) {
+        <div class="suggestion-list">
+          @for (r of searchResults(); track r.substance_name) {
+            <button type="button" class="suggestion-item" (click)="selectSubstance(r)">
+              <span class="suggestion-name">{{ r.substance_name }}</span>
+              <span class="scope-chip" [class]="'scope-' + r.scope">Scope {{ r.scope }}</span>
+              <span class="suggestion-year">{{ r.latest_effective_year }}</span>
+            </button>
+          }
+          @if (!searching() && searchResults().length === 0) {
+            <button type="button" class="suggestion-item not-found" (click)="goManual()">
+              Not found in IPCC database — enter manually
+            </button>
+          }
+        </div>
+      }
+
+      <p class="panel-hint">Type a substance, fuel, or method name to search the seeded IPCC / CEA / DEFRA reference table, or</p>
+      <button type="button" class="link-btn" (click)="goManual()">enter a factor manually</button>
+    }
+
+    @if (mode() === 'ipcc-selected') {
+      <button type="button" class="link-btn back-link" (click)="backToSearch()">← Back to search</button>
+
+      <div class="selected-header">
+        <h3>{{ selectedSubstance()?.substance_name }}</h3>
+        <span class="scope-chip" [class]="'scope-' + effectiveScope()">Scope {{ effectiveScope() }}</span>
+      </div>
+
+      <label class="field">
+        <span class="field-label">Publication / year</span>
+        <select [ngModel]="selectedVersionId()" (ngModelChange)="onVersionChange($event)">
+          @for (v of versions(); track v.id) {
+            <option [value]="v.id">{{ v.publication }} — {{ v.derived_factor_value }} {{ v.unit }} (effective {{ v.effective_year }})</option>
+          }
+        </select>
+      </label>
+
+      @if (selectedVersion()) {
+        <p class="source-row">Source: {{ selectedVersion()!.source_reference }}</p>
+      }
+
+      <button type="button" class="secondary-btn" (click)="calculate()">Calculate</button>
+
+      @if (calculated()) {
+        <div class="breakdown-box">
+          @for (line of breakdown(); track line.label) {
+            <div class="breakdown-line">
+              <span>{{ line.label }}</span>
+              <span>{{ line.value }}</span>
+            </div>
+          }
+        </div>
+      }
+
+      <label class="field">
+        <span class="field-label">Emission factor value</span>
+        <input type="number" step="any" [ngModel]="resultValue()" (ngModelChange)="resultValue.set($event)" />
+      </label>
+      @if (resultModified()) {
+        <span class="modified-badge">Modified from IPCC calculation</span>
+      }
+
+      <label class="field">
+        <span class="field-label">Unit</span>
+        <input type="text" [ngModel]="unit()" (ngModelChange)="unit.set($event)" />
+      </label>
+
+      @if (effectiveScope() === 1) {
+        <label class="field">
+          <span class="field-label">Substance / fuel name</span>
+          <input type="text" [ngModel]="gasType()" (ngModelChange)="gasType.set($event)" />
+        </label>
+      }
+
+      <label class="field">
+        <span class="field-label">Source reference <span class="required">*</span></span>
+        <input type="text" [ngModel]="sourceReference()" (ngModelChange)="sourceReference.set($event)" />
+      </label>
+
+      @if (formError()) {
+        <div class="banner error">{{ formError() }}</div>
+      }
+      @if (!canSave() && !formError()) {
+        <p class="validation-hint">Add a source reference to save (e.g. "IPCC AR6 2021" or "DEFRA 2026 conversion factors workbook").</p>
+      }
+
+      <div class="panel-actions">
+        <button type="button" class="primary-btn" [disabled]="!canSave() || submitting()" (click)="save()">
+          {{ submitting() ? 'Saving…' : 'Save factor' }}
+        </button>
+      </div>
+    }
+
+    @if (mode() === 'manual') {
+      <button type="button" class="link-btn back-link" (click)="backToSearch()">← Back to search</button>
+
+      <div class="scope-select">
+        <span class="field-label">Scope</span>
+        <div class="scope-radio">
+          <label [class.active]="manualScope() === 1"><input type="radio" name="manualScope" [checked]="manualScope() === 1" (change)="manualScope.set(1)" /> Scope 1</label>
+          <label [class.active]="manualScope() === 2"><input type="radio" name="manualScope" [checked]="manualScope() === 2" (change)="manualScope.set(2)" /> Scope 2</label>
+          <label [class.active]="manualScope() === 3"><input type="radio" name="manualScope" [checked]="manualScope() === 3" (change)="manualScope.set(3)" /> Scope 3</label>
+        </div>
+      </div>
+
+      @if (manualScope() === 1) {
+        <label class="field">
+          <span class="field-label">Substance / fuel name</span>
+          <input type="text" [ngModel]="gasType()" (ngModelChange)="gasType.set($event)" placeholder="e.g. Diesel, R-134a" />
+        </label>
+      }
+      @if (manualScope() === 2) {
+        <label class="field">
+          <span class="field-label">Method</span>
+          <select [ngModel]="method()" (ngModelChange)="method.set($event)">
+            <option value="">Choose a method</option>
+            <option value="location-based">Location-based</option>
+            <option value="market-based">Market-based</option>
+          </select>
+        </label>
+      }
+      @if (manualScope() === 3) {
+        <label class="field">
+          <span class="field-label">Scope 3 category</span>
+          <select [ngModel]="scope3Category()" (ngModelChange)="scope3Category.set($event)">
+            <option value="">Choose a category</option>
+            @for (cat of scope3Categories; track cat) {
+              <option [value]="cat">{{ cat }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">Description</span>
+          <input type="text" [ngModel]="description()" (ngModelChange)="description.set($event)" placeholder="e.g. Domestic flight, economy class" />
+        </label>
+      }
+
+      <label class="field">
+        <span class="field-label">Unit{{ manualScope() === 3 ? ' (UOM)' : '' }}</span>
+        <input type="text" [ngModel]="unit()" (ngModelChange)="unit.set($event)" placeholder="e.g. kgCO2/L, tCO2e/MWh" />
+      </label>
+      <label class="field">
+        <span class="field-label">Value</span>
+        <input type="number" step="any" [ngModel]="resultValue()" (ngModelChange)="resultValue.set($event)" />
+      </label>
+      <label class="field">
+        <span class="field-label">Effective year</span>
+        <input type="number" [ngModel]="effectiveYear()" (ngModelChange)="effectiveYear.set($event)" />
+      </label>
+      <label class="field">
+        <span class="field-label">Source (optional)</span>
+        <input type="text" [ngModel]="source()" (ngModelChange)="source.set($event)" placeholder="e.g. IPCC, EPA, India GHG Program" />
+      </label>
+      <label class="field">
+        <span class="field-label">Source reference <span class="required">*</span></span>
+        <input type="text" [ngModel]="sourceReference()" (ngModelChange)="sourceReference.set($event)" placeholder="Citation, document name, or URL" />
+      </label>
+
+      @if (formError()) {
+        <div class="banner error">{{ formError() }}</div>
+      }
+      @if (!canSave() && !formError()) {
+        <p class="validation-hint">Add a source reference to save (e.g. "IPCC AR6 2021" or "DEFRA 2026 conversion factors workbook").</p>
+      }
+
+      <div class="panel-actions">
+        <button type="button" class="primary-btn" [disabled]="!canSave() || submitting()" (click)="save()">
+          {{ submitting() ? 'Saving…' : 'Save factor' }}
+        </button>
+      </div>
+    }
+  </div>
+</aside>

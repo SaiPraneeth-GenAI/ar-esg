@@ -7,7 +7,7 @@ from app.db.models.output import (
     ReportRequest,
     Rollup,
 )
-from app.db.models.reference import ComplianceFramework, EmissionFactor, Threshold
+from app.db.models.reference import ComplianceFramework, EmissionFactor, IpccReference, Threshold
 from app.db.models.transactional import (
     Approval,
     Attachment,
@@ -28,6 +28,7 @@ __all__ = [
     "Attachment",
     "DBConnection",
     "EmissionFactor",
+    "IpccReference",
     "ComplianceFramework",
     "Threshold",
     "Rollup",
