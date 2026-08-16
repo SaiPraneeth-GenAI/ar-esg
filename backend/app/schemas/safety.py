@@ -21,4 +21,7 @@ class SafetyOverviewOut(BaseModel):
 
 class SafetyTrendPoint(BaseModel):
     period: date
-    values: dict[str, float | None]  # metric name -> value for that month
+    bucket_start: date | None = None
+    bucket_end: date | None = None
+    values: dict[str, float | None]  # metric name -> value for that bucket
+    prior_year_values: dict[str, float | None] = {}  # same bucket, one year back

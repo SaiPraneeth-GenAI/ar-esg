@@ -319,14 +319,22 @@ def _sum_optional(values: list[float | None]) -> float | None:
 
 
 def compute_intensity_overview_range(
-    db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, months: list[date]
+    db: Session,
+    tenant_id: uuid.UUID,
+    location_id: uuid.UUID | None,
+    months: list[date],
+    by_month: dict[date, "IntensityOverview"] | None = None,
 ) -> IntensityOverview:
     """Aggregates compute_intensity_overview_batch's per-month results
     across a range (quarter-to-date / year-to-date): every absolute sums
     across the months present, and every ratio is recomputed from those
     summed absolutes -- never averaged from the monthly ratios, which
-    would misweight months with different production/revenue volume."""
-    by_month = compute_intensity_overview_batch(db, tenant_id, location_id, months)
+    would misweight months with different production/revenue volume. Pass
+    an already-fetched by_month to skip the internal query, the same way
+    compute_range_totals does -- a trend chart computing several buckets
+    shares one batched fetch instead of one round trip per bucket."""
+    if by_month is None:
+        by_month = compute_intensity_overview_batch(db, tenant_id, location_id, months)
 
     energy_gj = _sum_optional([by_month[m].energy_gj for m in months])
     ghg_tco2e = _sum_optional([by_month[m].ghg_tco2e for m in months])

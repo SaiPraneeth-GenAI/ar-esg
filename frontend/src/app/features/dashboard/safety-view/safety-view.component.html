@@ -26,7 +26,9 @@
           </div>
           @if (m.value !== null) {
             <div class="card-value">{{ m.value | number: '1.0-2' }}<span class="card-unit">{{ m.unit }}</span></div>
-            <div class="card-comparison" [class]="'comparison-' + comparisonStatus(m)">{{ comparisonLabel(m) }}</div>
+            @if (showPrior()) {
+              <div class="card-comparison" [class]="'comparison-' + comparisonStatus(m)">{{ comparisonLabel(m) }}</div>
+            }
             <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(m, 'year')">{{ comparisonLabel(m, 'year') }}</div>
           } @else {
             <div class="card-empty">Not yet entered</div>
@@ -36,7 +38,7 @@
     </div>
 
     <app-rich-trend-chart
-      title="Trend -- last {{ trendPoints().length }} months"
+      title="Trend -- last {{ trendPoints().length }} {{ periodMode === 'quarter' ? 'quarters' : periodMode === 'ytd' ? 'years' : 'months' }}"
       [series]="chartSeries()"
       [points]="trendPoints()"
       defaultSeriesKey="LTIFR"

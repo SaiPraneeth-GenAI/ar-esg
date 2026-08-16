@@ -9,27 +9,15 @@ from app.db.session import get_db
 from app.schemas.intensity import IntensityOverviewOut, IntensityTrendPoint
 from app.services.carbon_calculation import (
     months_in_range,
-    prior_month,
     prior_range_for_mode,
-    prior_year,
     prior_year_range_for_mode,
     range_bounds_for_mode,
+    trailing_buckets_for_mode,
 )
 from app.services.intensity_calculation import compute_intensity_overview_batch, compute_intensity_overview_range
 from app.services.rollups import month_start
 
 router = APIRouter(prefix="/intensity", tags=["intensity"])
-
-
-def _trailing_months(period: date, count: int) -> list[date]:
-    months = []
-    cursor = period
-    for _ in range(count):
-        months.append(cursor)
-        year = cursor.year - (1 if cursor.month == 1 else 0)
-        month = 12 if cursor.month == 1 else cursor.month - 1
-        cursor = cursor.replace(year=year, month=month)
-    return list(reversed(months))
 
 
 @router.get("/overview", response_model=IntensityOverviewOut)
@@ -110,26 +98,56 @@ def intensity_trend(
     period: date,
     months: int = 6,
     location_id: uuid.UUID | None = None,
+    period_mode: str = "month",
     current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
     db: Session = Depends(get_db),
 ):
-    """Trailing N months of intensity ratios in one batched query set --
-    powers the trend charts on the Production/Revenue tabs without one
-    full /intensity/overview round trip per bar."""
+    """Trailing N buckets of intensity ratios, each paired with the same
+    bucket one year earlier, in one batched query set -- powers the trend
+    charts on the Production/Revenue tabs without one round trip per
+    bucket. period_mode picks the bucket granularity: 'month' (default),
+    'quarter', or 'ytd' (year buckets)."""
     period = month_start(period)
-    trailing = _trailing_months(period, min(max(months, 1), 24))
-    by_period = compute_intensity_overview_batch(db, current.tenant_id, location_id, trailing)
-    return [
-        IntensityTrendPoint(
-            period=p,
-            ghg_per_production=by_period[p].ghg_per_production,
-            energy_per_production=by_period[p].energy_per_production,
-            water_per_production=by_period[p].water_per_production,
-            waste_per_production=by_period[p].waste_per_production,
-            ghg_per_revenue=by_period[p].ghg_per_revenue,
-            energy_per_revenue=by_period[p].energy_per_revenue,
-            water_per_revenue=by_period[p].water_per_revenue,
-            waste_per_revenue=by_period[p].waste_per_revenue,
+    count = min(max(months, 1), 24) if period_mode == "month" else min(max(months, 1), 8)
+    buckets = trailing_buckets_for_mode(period, period_mode, count)
+
+    all_months: set[date] = set()
+    prior_year_buckets: list[tuple[date, date]] = []
+    for start, end in buckets:
+        all_months.update(months_in_range(start, end))
+        py_start, py_end = prior_year_range_for_mode(start, end)
+        prior_year_buckets.append((py_start, py_end))
+        all_months.update(months_in_range(py_start, py_end))
+
+    by_month = compute_intensity_overview_batch(db, current.tenant_id, location_id, sorted(all_months))
+
+    points = []
+    for (start, end), (py_start, py_end) in zip(buckets, prior_year_buckets):
+        ov = compute_intensity_overview_range(db, current.tenant_id, location_id, months_in_range(start, end), by_month=by_month)
+        py_ov = compute_intensity_overview_range(
+            db, current.tenant_id, location_id, months_in_range(py_start, py_end), by_month=by_month
         )
-        for p in trailing
-    ]
+        points.append(
+            IntensityTrendPoint(
+                period=end,
+                bucket_start=start,
+                bucket_end=end,
+                ghg_per_production=ov.ghg_per_production,
+                energy_per_production=ov.energy_per_production,
+                water_per_production=ov.water_per_production,
+                waste_per_production=ov.waste_per_production,
+                ghg_per_revenue=ov.ghg_per_revenue,
+                energy_per_revenue=ov.energy_per_revenue,
+                water_per_revenue=ov.water_per_revenue,
+                waste_per_revenue=ov.waste_per_revenue,
+                prior_year_ghg_per_production=py_ov.ghg_per_production,
+                prior_year_energy_per_production=py_ov.energy_per_production,
+                prior_year_water_per_production=py_ov.water_per_production,
+                prior_year_waste_per_production=py_ov.waste_per_production,
+                prior_year_ghg_per_revenue=py_ov.ghg_per_revenue,
+                prior_year_energy_per_revenue=py_ov.energy_per_revenue,
+                prior_year_water_per_revenue=py_ov.water_per_revenue,
+                prior_year_waste_per_revenue=py_ov.waste_per_revenue,
+            )
+        )
+    return points

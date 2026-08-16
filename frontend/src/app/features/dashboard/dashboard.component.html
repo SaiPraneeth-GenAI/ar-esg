@@ -8,18 +8,28 @@
 
       <div class="header-controls">
         <div class="mode-toggle" role="group" aria-label="Period mode">
-          <button type="button" class="mode-btn" [class.active]="periodMode() === 'month'" (click)="periodMode.set('month')">Monthly</button>
-          <button type="button" class="mode-btn" [class.active]="periodMode() === 'quarter'" (click)="periodMode.set('quarter')">Quarterly</button>
-          <button type="button" class="mode-btn" [class.active]="periodMode() === 'ytd'" (click)="periodMode.set('ytd')">YTD</button>
+          <button type="button" class="mode-btn" [class.active]="periodMode() === 'month'" (click)="setPeriodMode('month')">Monthly</button>
+          <button type="button" class="mode-btn" [class.active]="periodMode() === 'quarter'" (click)="setPeriodMode('quarter')">Quarterly</button>
+          <button type="button" class="mode-btn" [class.active]="periodMode() === 'ytd'" (click)="setPeriodMode('ytd')">YTD</button>
         </div>
 
         <label class="control">
-          <span class="control-label">Period</span>
-          <input
-            type="month"
-            [ngModel]="period()"
-            (ngModelChange)="period.set($event)"
-          />
+          <span class="control-label">{{ periodMode() === 'month' ? 'Period' : periodMode() === 'quarter' ? 'Quarter' : 'Year' }}</span>
+          @if (periodMode() === 'month') {
+            <input type="month" [ngModel]="period()" (ngModelChange)="period.set($event)" />
+          } @else if (periodMode() === 'quarter') {
+            <select [ngModel]="period()" (ngModelChange)="period.set($event)">
+              @for (opt of quarterOptions(); track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          } @else {
+            <select [ngModel]="period()" (ngModelChange)="period.set($event)">
+              @for (opt of yearOptions(); track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          }
         </label>
 
         <label class="control">

@@ -16,9 +16,15 @@ export interface ChartPoint {
   period: string;
   label: string;
   valuesBySeries: Record<string, number | null>;
+  /** The same bucket, one year back -- lets the chart draw a
+   * year-over-year comparison alongside the current value. Omitted or
+   * absent for a series/point that has no prior-year figure. */
+  priorYearValuesBySeries?: Record<string, number | null>;
 }
 
 type ChartKind = 'bar' | 'line';
+
+const GRID_STEPS = 4;
 
 @Component({
   selector: 'app-rich-trend-chart',
@@ -37,6 +43,7 @@ export class RichTrendChartComponent implements OnChanges {
 
   chartKind = signal<ChartKind>('bar');
   selectedKey = signal<string>('');
+  compareYoY = signal<boolean>(true);
 
   ngOnChanges(): void {
     if (!this.selectedKey() || !this.series.some((s) => s.key === this.selectedKey())) {
@@ -61,14 +68,41 @@ export class RichTrendChartComponent implements OnChanges {
     return this.points.map((p) => p.valuesBySeries[key] ?? null);
   }
 
+  activePriorYearValues(): (number | null)[] {
+    const key = this.selectedKey();
+    return this.points.map((p) => p.priorYearValuesBySeries?.[key] ?? null);
+  }
+
+  hasYoYData(): boolean {
+    return this.activePriorYearValues().some((v) => v !== null);
+  }
+
+  showYoY(): boolean {
+    return this.compareYoY() && this.hasYoYData();
+  }
+
+  toggleYoY(): void {
+    this.compareYoY.set(!this.compareYoY());
+  }
+
   private maxValue(): number {
-    const vals = this.activeValues().filter((v): v is number => v !== null);
-    return Math.max(...vals, 0.0001);
+    const current = this.activeValues().filter((v): v is number => v !== null);
+    const prior = this.showYoY() ? this.activePriorYearValues().filter((v): v is number => v !== null) : [];
+    return Math.max(...current, ...prior, 0.0001);
   }
 
   barHeightPct(value: number | null): number {
     if (value === null) return 0;
     return Math.max((value / this.maxValue()) * 100, 2);
+  }
+
+  gridLines(): { bottomPct: number; value: number }[] {
+    const max = this.maxValue();
+    const lines = [];
+    for (let i = 0; i <= GRID_STEPS; i++) {
+      lines.push({ bottomPct: (i / GRID_STEPS) * 100, value: (max * i) / GRID_STEPS });
+    }
+    return lines;
   }
 
   // -- Line chart geometry (fixed 600x200 viewBox, percentage-based) ------
@@ -90,8 +124,12 @@ export class RichTrendChartComponent implements OnChanges {
     return this.padTop + usable - (value / max) * usable;
   }
 
-  linePathSegments(): { d: string }[] {
-    const values = this.activeValues();
+  gridLineY(bottomPct: number): number {
+    const usable = this.viewH - this.padTop - this.padBottom;
+    return this.padTop + usable - (bottomPct / 100) * usable;
+  }
+
+  private pathSegments(values: (number | null)[]): { d: string }[] {
     const segments: { d: string }[] = [];
     let current: string | null = null;
     values.forEach((v, i) => {
@@ -110,6 +148,14 @@ export class RichTrendChartComponent implements OnChanges {
       }
     });
     return segments;
+  }
+
+  linePathSegments(): { d: string }[] {
+    return this.pathSegments(this.activeValues());
+  }
+
+  priorYearLinePathSegments(): { d: string }[] {
+    return this.pathSegments(this.activePriorYearValues());
   }
 
   areaPath(): string {
@@ -136,6 +182,13 @@ export class RichTrendChartComponent implements OnChanges {
 
   dotPoints(): { x: number; y: number; value: number; label: string }[] {
     const values = this.activeValues();
+    return values
+      .map((v, i) => (v !== null ? { x: this.plotX(i), y: this.plotY(v), value: v, label: this.points[i].label } : null))
+      .filter((p): p is { x: number; y: number; value: number; label: string } => p !== null);
+  }
+
+  priorYearDotPoints(): { x: number; y: number; value: number; label: string }[] {
+    const values = this.activePriorYearValues();
     return values
       .map((v, i) => (v !== null ? { x: this.plotX(i), y: this.plotY(v), value: v, label: this.points[i].label } : null))
       .filter((p): p is { x: number; y: number; value: number; label: string } => p !== null);

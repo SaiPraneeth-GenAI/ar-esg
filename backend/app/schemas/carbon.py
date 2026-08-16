@@ -63,6 +63,8 @@ class EmissionCalculationOut(BaseModel):
 
 class CarbonTrendPoint(BaseModel):
     period: date
+    bucket_start: date | None = None
+    bucket_end: date | None = None
     scope1_tco2e: float | None
     scope2_location_based_tco2e: float | None
     scope1_2_location_based_tco2e: float | None
@@ -72,6 +74,12 @@ class CarbonTrendPoint(BaseModel):
     # option instead of silently pretending it doesn't exist.
     scope3_tco2e: float | None
     intensity_tco2e_per_mnah: float | None
+    # The same bucket, one year back -- lets the chart draw a same-bucket
+    # year-over-year comparison without a second round trip.
+    prior_year_scope1_tco2e: float | None = None
+    prior_year_scope2_location_based_tco2e: float | None = None
+    prior_year_scope1_2_location_based_tco2e: float | None = None
+    prior_year_intensity_tco2e_per_mnah: float | None = None
 
 
 class RecalculateResponse(BaseModel):

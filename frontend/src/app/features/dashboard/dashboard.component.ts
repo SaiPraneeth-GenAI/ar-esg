@@ -15,6 +15,15 @@ function currentMonthValue(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function monthValue(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+export interface PickerOption {
+  value: string;
+  label: string;
+}
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
@@ -72,5 +81,51 @@ export class DashboardComponent implements OnInit {
 
   effectiveLocationId(): string | null {
     return this.locationId() || null;
+  }
+
+  // -- Mode-aware period picker -------------------------------------------
+  // Quarterly/YTD pick a whole calendar bucket (a quarter, a year), not an
+  // arbitrary day -- the native month input only fits Monthly mode. The
+  // anchor month sent to the API is still derived from the pick (last
+  // month of the quarter / current-or-December for the year), and the
+  // backend naturally truncates to "to date" for a still-in-progress
+  // bucket since months without approved data are excluded, not zeroed.
+
+  quarterOptions(): PickerOption[] {
+    const now = new Date();
+    let year = now.getFullYear();
+    let quarter = Math.floor(now.getMonth() / 3) + 1;
+    const options: PickerOption[] = [];
+    for (let i = 0; i < 8; i++) {
+      options.push({ value: monthValue(year, quarter * 3), label: `Q${quarter} ${year}` });
+      quarter -= 1;
+      if (quarter === 0) {
+        quarter = 4;
+        year -= 1;
+      }
+    }
+    return options;
+  }
+
+  yearOptions(): PickerOption[] {
+    const now = new Date();
+    const options: PickerOption[] = [];
+    for (let i = 0; i < 5; i++) {
+      const year = now.getFullYear() - i;
+      const anchorMonth = year === now.getFullYear() ? now.getMonth() + 1 : 12;
+      options.push({ value: monthValue(year, anchorMonth), label: `${year}` });
+    }
+    return options;
+  }
+
+  setPeriodMode(mode: PeriodMode): void {
+    this.periodMode.set(mode);
+    if (mode === 'quarter') {
+      this.period.set(this.quarterOptions()[0].value);
+    } else if (mode === 'ytd') {
+      this.period.set(this.yearOptions()[0].value);
+    } else {
+      this.period.set(currentMonthValue());
+    }
   }
 }

@@ -26,13 +26,12 @@ from app.services.carbon_calculation import (
     compute_period_totals_batch,
     compute_range_totals,
     months_in_range,
-    prior_month,
     prior_range_for_mode,
-    prior_year,
     prior_year_range_for_mode,
     range_bounds_for_mode,
     run_calculation,
     to_decimal,
+    trailing_buckets_for_mode,
 )
 from app.services.rollups import month_start
 from app.services.target_calculation import INTENSITY_METRIC_TYPES, classify_status, months_between, target_value_for_month
@@ -263,42 +262,58 @@ def list_calculations(
     return [_calc_out(db, r) for r in rows]
 
 
-def _trailing_months(period: date, count: int) -> list[date]:
-    months = []
-    cursor = period
-    for _ in range(count):
-        months.append(cursor)
-        year = cursor.year - (1 if cursor.month == 1 else 0)
-        month = 12 if cursor.month == 1 else cursor.month - 1
-        cursor = cursor.replace(year=year, month=month)
-    return list(reversed(months))
-
-
 @router.get("/trend", response_model=list[CarbonTrendPoint])
 def carbon_trend(
     period: date,
     months: int = 6,
     location_id: uuid.UUID | None = None,
+    period_mode: str = "month",
     current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
     db: Session = Depends(get_db),
 ):
-    """Scope 1+2 (location-based) and intensity for the trailing N months in
-    one batched query set -- powers the dashboard trend chart without one
-    full /carbon/overview round trip per bar."""
+    """Scope 1+2 (location-based) and intensity for the trailing N buckets,
+    each paired with the same bucket one year earlier for a year-over-year
+    comparison -- all in one batched query set (one query covering every
+    month every bucket and its year-ago counterpart touches), not one
+    round trip per bucket. period_mode picks the bucket granularity:
+    'month' (default), 'quarter', or 'ytd' (year buckets)."""
     period = month_start(period)
-    trailing = _trailing_months(period, min(max(months, 1), 24))
-    totals_by_period = compute_period_totals_batch(db, current.tenant_id, location_id, trailing)
-    return [
-        CarbonTrendPoint(
-            period=p,
-            scope1_tco2e=totals_by_period[p]["scope1_tco2e"],
-            scope2_location_based_tco2e=totals_by_period[p]["scope2_loc_tco2e"],
-            scope1_2_location_based_tco2e=totals_by_period[p]["scope1_2_loc_tco2e"],
-            scope3_tco2e=None,
-            intensity_tco2e_per_mnah=totals_by_period[p]["intensity"],
+    count = min(max(months, 1), 24) if period_mode == "month" else min(max(months, 1), 8)
+    buckets = trailing_buckets_for_mode(period, period_mode, count)
+
+    all_months: set[date] = set()
+    prior_year_buckets: list[tuple[date, date]] = []
+    for start, end in buckets:
+        all_months.update(months_in_range(start, end))
+        py_start, py_end = prior_year_range_for_mode(start, end)
+        prior_year_buckets.append((py_start, py_end))
+        all_months.update(months_in_range(py_start, py_end))
+
+    by_month = compute_period_totals_batch(db, current.tenant_id, location_id, sorted(all_months))
+
+    points = []
+    for (start, end), (py_start, py_end) in zip(buckets, prior_year_buckets):
+        totals = compute_range_totals(db, current.tenant_id, location_id, months_in_range(start, end), by_month=by_month)
+        py_totals = compute_range_totals(
+            db, current.tenant_id, location_id, months_in_range(py_start, py_end), by_month=by_month
         )
-        for p in trailing
-    ]
+        points.append(
+            CarbonTrendPoint(
+                period=end,
+                bucket_start=start,
+                bucket_end=end,
+                scope1_tco2e=totals["scope1_tco2e"],
+                scope2_location_based_tco2e=totals["scope2_loc_tco2e"],
+                scope1_2_location_based_tco2e=totals["scope1_2_loc_tco2e"],
+                scope3_tco2e=None,
+                intensity_tco2e_per_mnah=totals["intensity"],
+                prior_year_scope1_tco2e=py_totals["scope1_tco2e"],
+                prior_year_scope2_location_based_tco2e=py_totals["scope2_loc_tco2e"],
+                prior_year_scope1_2_location_based_tco2e=py_totals["scope1_2_loc_tco2e"],
+                prior_year_intensity_tco2e_per_mnah=py_totals["intensity"],
+            )
+        )
+    return points
 
 
 @router.get("/overview", response_model=CarbonOverview)

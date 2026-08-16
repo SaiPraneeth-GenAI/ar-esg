@@ -1,0 +1,46 @@
+<div class="pie-card">
+  <h3>{{ title }}</h3>
+
+  @if (loading) {
+    <p class="muted">Loading…</p>
+  } @else if (!hasData()) {
+    <div class="empty-state">
+      <p>{{ emptyMessage }}</p>
+    </div>
+  } @else {
+    <div class="pie-body">
+      <div class="donut-wrap">
+        <svg viewBox="0 0 100 100" class="donut-svg">
+          <circle cx="50" cy="50" r="40" fill="none" stroke="#f2f4f7" stroke-width="16" />
+          <g transform="rotate(-90 50 50)">
+            @for (slice of rendered(); track slice.label) {
+              <circle
+                cx="50" cy="50" r="40" fill="none"
+                [attr.stroke]="slice.color"
+                stroke-width="16"
+                [attr.stroke-dasharray]="slice.dashArray"
+                [attr.stroke-dashoffset]="slice.dashOffset"
+              >
+                <title>{{ slice.label }}: {{ slice.value | number: '1.0-' + decimals }} {{ unit }} ({{ slice.pct | number: '1.0-0' }}%)</title>
+              </circle>
+            }
+          </g>
+        </svg>
+        <div class="donut-center">
+          <span class="donut-total">{{ total() | number: '1.0-' + decimals }}</span>
+          <span class="donut-unit">{{ unit }}</span>
+        </div>
+      </div>
+
+      <ul class="legend-list">
+        @for (slice of rendered(); track slice.label) {
+          <li>
+            <span class="legend-swatch" [style.background]="slice.color"></span>
+            <span class="legend-label">{{ slice.label }}</span>
+            <span class="legend-value">{{ slice.value | number: '1.0-' + decimals }} <span class="legend-pct">({{ slice.pct | number: '1.0-0' }}%)</span></span>
+          </li>
+        }
+      </ul>
+    </div>
+  }
+</div>

@@ -2,7 +2,8 @@ import { DecimalPipe } from '@angular/common';
 import { Component, Input, OnChanges, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CarbonApiService, CarbonOverview, CarbonOverviewSource, EmissionCalculationOut } from '../../../core/carbon-api.service';
-import { PeriodMode } from '../../../core/intensity-api.service';
+import { PeriodMode, formatBucketLabel, priorPeriodLabel, priorYearLabel, showsPriorPeriod } from '../../../core/intensity-api.service';
+import { PieChartComponent, PieSlice } from '../../../shared/pie-chart/pie-chart.component';
 import { ChartPoint, ChartSeriesDef, RichTrendChartComponent } from '../../../shared/rich-trend-chart/rich-trend-chart.component';
 import { EntryHistoryComponent } from '../../data-entry/entry-history/entry-history.component';
 
@@ -23,7 +24,7 @@ const GHG_SERIES: ChartSeriesDef[] = [
 @Component({
   selector: 'app-carbon-overview',
   standalone: true,
-  imports: [DecimalPipe, RouterLink, EntryHistoryComponent, RichTrendChartComponent],
+  imports: [DecimalPipe, RouterLink, EntryHistoryComponent, RichTrendChartComponent, PieChartComponent],
   templateUrl: './carbon-overview.component.html',
   styleUrl: './carbon-overview.component.css'
 })
@@ -51,6 +52,8 @@ export class CarbonOverviewComponent implements OnChanges {
   trendLoading = signal(true);
   ghgSeries = GHG_SERIES;
 
+  scopeFilter = signal<number>(1);
+
   sourceKey = sourceKey;
 
   async ngOnChanges(): Promise<void> {
@@ -68,6 +71,10 @@ export class CarbonOverviewComponent implements OnChanges {
     this.showUnresolved.set(false);
     try {
       this.overview.set(await this.api.getOverview(this.periodIso(), this.locationId ?? undefined, this.periodMode));
+      const scopes = this.availableScopes();
+      if (scopes.length > 0 && !scopes.includes(this.scopeFilter())) {
+        this.scopeFilter.set(scopes[0]);
+      }
     } catch {
       this.errorMessage.set('Could not load the carbon overview.');
     } finally {
@@ -75,20 +82,63 @@ export class CarbonOverviewComponent implements OnChanges {
     }
   }
 
+  // -- Contributor pies -----------------------------------------------
+  // Both read straight from overview().sources, which already reflects
+  // the selected period_mode range -- no separate fetch, and the pies
+  // update the instant Monthly/Quarterly/YTD or the period changes.
+  // Market-based Scope 2 rows are excluded from both so the slices sum to
+  // the same location-based total the headline cards show.
+
+  private locationBasedSources(): CarbonOverviewSource[] {
+    return (this.overview()?.sources ?? []).filter((s) => s.calculation_method !== 'market_based');
+  }
+
+  private groupByDataPoint(sources: CarbonOverviewSource[]): PieSlice[] {
+    const byName = new Map<string, number>();
+    for (const s of sources) {
+      byName.set(s.data_point_name, (byName.get(s.data_point_name) ?? 0) + s.emissions_tco2e);
+    }
+    return Array.from(byName.entries()).map(([label, value]) => ({ label, value }));
+  }
+
+  totalContributionSlices(): PieSlice[] {
+    return this.groupByDataPoint(this.locationBasedSources());
+  }
+
+  scopeContributionSlices(): PieSlice[] {
+    return this.groupByDataPoint(this.locationBasedSources().filter((s) => s.scope === this.scopeFilter()));
+  }
+
+  availableScopes(): number[] {
+    const scopes = new Set(this.locationBasedSources().map((s) => s.scope));
+    return Array.from(scopes).sort();
+  }
+
+  setScopeFilter(scope: number): void {
+    this.scopeFilter.set(scope);
+  }
+
   async loadTrend(): Promise<void> {
     this.trendLoading.set(true);
     try {
-      const points = await this.api.getTrend(this.periodIso(), TREND_MONTHS, this.locationId ?? undefined);
+      const points = await this.api.getTrend(this.periodIso(), TREND_MONTHS, this.locationId ?? undefined, this.periodMode);
       this.trendPoints.set(
         points.map((p) => ({
           period: p.period,
-          label: new Date(`${p.period}T00:00:00`).toLocaleDateString('en-US', { month: 'short' }),
+          label: formatBucketLabel(p.bucket_start ?? p.period, p.bucket_end ?? p.period, this.periodMode),
           valuesBySeries: {
             scope1_2: p.scope1_2_location_based_tco2e,
             scope1: p.scope1_tco2e,
             scope2: p.scope2_location_based_tco2e,
             scope3: p.scope3_tco2e,
             intensity: p.intensity_tco2e_per_mnah
+          },
+          priorYearValuesBySeries: {
+            scope1_2: p.prior_year_scope1_2_location_based_tco2e,
+            scope1: p.prior_year_scope1_tco2e,
+            scope2: p.prior_year_scope2_location_based_tco2e,
+            scope3: null,
+            intensity: p.prior_year_intensity_tco2e_per_mnah
           }
         }))
       );
@@ -151,6 +201,18 @@ export class CarbonOverviewComponent implements OnChanges {
     const endLabel = end.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
     const prefix = ov.period_mode === 'ytd' ? 'YTD' : 'Quarter-to-date';
     return `${prefix}: ${startLabel} – ${endLabel}`;
+  }
+
+  priorLabel(): string {
+    return priorPeriodLabel(this.periodMode);
+  }
+
+  priorYearLabelText(): string {
+    return priorYearLabel(this.periodMode);
+  }
+
+  showPrior(): boolean {
+    return showsPriorPeriod(this.periodMode);
   }
 
   comparisonLabel(current: number | null, prior: number | null, against = 'last month'): string {

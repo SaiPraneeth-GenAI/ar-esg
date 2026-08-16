@@ -26,8 +26,10 @@
             </div>
             @if (m.current !== null) {
               <div class="card-value">{{ m.current | number: '1.0-1' }}<span class="card-unit">{{ m.unit }}</span></div>
-              <div class="card-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.prior, m.goodDown)">{{ comparisonLabel(m.current, m.prior) }}</div>
-              <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.priorYear, m.goodDown)">{{ comparisonLabel(m.current, m.priorYear, 'last year') }}</div>
+              @if (showPrior()) {
+                <div class="card-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.prior, m.goodDown)">{{ comparisonLabel(m.current, m.prior, priorLabel()) }}</div>
+              }
+              <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.priorYear, m.goodDown)">{{ comparisonLabel(m.current, m.priorYear, priorYearLabelText()) }}</div>
             } @else {
               <div class="card-empty">Not yet entered</div>
             }

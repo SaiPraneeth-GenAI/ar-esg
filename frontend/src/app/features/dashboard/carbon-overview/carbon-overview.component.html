@@ -30,11 +30,13 @@
         </div>
         @if (overview()!.scope1_2_location_based_tco2e !== null) {
           <div class="card-value">{{ overview()!.scope1_2_location_based_tco2e | number: '1.1-2' }}<span class="card-unit">tCO2e</span></div>
-          <div class="card-comparison" [class]="'comparison-' + comparisonStatus(overview()!.scope1_2_location_based_tco2e, overview()!.prior_scope1_2_location_based_tco2e)">
-            {{ comparisonLabel(overview()!.scope1_2_location_based_tco2e, overview()!.prior_scope1_2_location_based_tco2e) }}
-          </div>
+          @if (showPrior()) {
+            <div class="card-comparison" [class]="'comparison-' + comparisonStatus(overview()!.scope1_2_location_based_tco2e, overview()!.prior_scope1_2_location_based_tco2e)">
+              {{ comparisonLabel(overview()!.scope1_2_location_based_tco2e, overview()!.prior_scope1_2_location_based_tco2e, priorLabel()) }}
+            </div>
+          }
           <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(overview()!.scope1_2_location_based_tco2e, overview()!.prior_year_scope1_2_location_based_tco2e)">
-            {{ comparisonLabel(overview()!.scope1_2_location_based_tco2e, overview()!.prior_year_scope1_2_location_based_tco2e, 'last year') }}
+            {{ comparisonLabel(overview()!.scope1_2_location_based_tco2e, overview()!.prior_year_scope1_2_location_based_tco2e, priorYearLabelText()) }}
           </div>
           @if (overview()!.scope1_2_target) {
             <div class="target-comparison">
@@ -56,11 +58,13 @@
         </div>
         @if (overview()!.intensity_tco2e_per_mnah !== null) {
           <div class="card-value">{{ overview()!.intensity_tco2e_per_mnah | number: '1.3-3' }}<span class="card-unit">tCO2e/MnAh</span></div>
-          <div class="card-comparison" [class]="'comparison-' + comparisonStatus(overview()!.intensity_tco2e_per_mnah, overview()!.prior_intensity_tco2e_per_mnah)">
-            {{ comparisonLabel(overview()!.intensity_tco2e_per_mnah, overview()!.prior_intensity_tco2e_per_mnah) }}
-          </div>
+          @if (showPrior()) {
+            <div class="card-comparison" [class]="'comparison-' + comparisonStatus(overview()!.intensity_tco2e_per_mnah, overview()!.prior_intensity_tco2e_per_mnah)">
+              {{ comparisonLabel(overview()!.intensity_tco2e_per_mnah, overview()!.prior_intensity_tco2e_per_mnah, priorLabel()) }}
+            </div>
+          }
           <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(overview()!.intensity_tco2e_per_mnah, overview()!.prior_year_intensity_tco2e_per_mnah)">
-            {{ comparisonLabel(overview()!.intensity_tco2e_per_mnah, overview()!.prior_year_intensity_tco2e_per_mnah, 'last year') }}
+            {{ comparisonLabel(overview()!.intensity_tco2e_per_mnah, overview()!.prior_year_intensity_tco2e_per_mnah, priorYearLabelText()) }}
           </div>
           @if (overview()!.intensity_target) {
             <div class="target-comparison">
@@ -120,8 +124,35 @@
       <p class="insight">{{ overview()!.insight }}</p>
     }
 
+    <div class="pie-row">
+      <app-pie-chart
+        title="Major contributors -- total emissions"
+        [slices]="totalContributionSlices()"
+        unit="tCO2e"
+        [decimals]="1"
+        emptyMessage="No approved GHG-mapped entries for this period yet."
+      ></app-pie-chart>
+
+      <div class="pie-with-toggle">
+        @if (availableScopes().length > 1) {
+          <div class="scope-toggle" role="group" aria-label="Scope">
+            @for (s of availableScopes(); track s) {
+              <button type="button" class="scope-btn" [class.active]="scopeFilter() === s" (click)="setScopeFilter(s)">Scope {{ s }}</button>
+            }
+          </div>
+        }
+        <app-pie-chart
+          title="Major contributors -- within Scope {{ scopeFilter() }}"
+          [slices]="scopeContributionSlices()"
+          unit="tCO2e"
+          [decimals]="1"
+          emptyMessage="No approved entries for this scope this period."
+        ></app-pie-chart>
+      </div>
+    </div>
+
     <app-rich-trend-chart
-      title="GHG trend -- last {{ trendPoints().length }} months"
+      title="GHG trend -- last {{ trendPoints().length }} {{ periodMode === 'quarter' ? 'quarters' : periodMode === 'ytd' ? 'years' : 'months' }}"
       [series]="ghgSeries"
       [points]="trendPoints()"
       defaultSeriesKey="scope1_2"

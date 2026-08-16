@@ -11,12 +11,11 @@ from app.db.session import get_db
 from app.schemas.safety import SafetyMetricOut, SafetyOverviewOut, SafetyTrendPoint
 from app.services.carbon_calculation import (
     months_in_range,
-    prior_month,
     prior_range_for_mode,
-    prior_year,
     prior_year_range_for_mode,
     range_bounds_for_mode,
     to_decimal,
+    trailing_buckets_for_mode,
 )
 from app.services.rollups import month_start
 
@@ -128,29 +127,45 @@ def safety_overview(
     return SafetyOverviewOut(period=period, period_mode=period_mode, period_start=range_start, period_end=range_end, metrics=metrics)
 
 
-def _trailing_months(period: date, count: int) -> list[date]:
-    months = []
-    cursor = period
-    for _ in range(count):
-        months.append(cursor)
-        year = cursor.year - (1 if cursor.month == 1 else 0)
-        month = 12 if cursor.month == 1 else cursor.month - 1
-        cursor = cursor.replace(year=year, month=month)
-    return list(reversed(months))
-
-
 @router.get("/trend", response_model=list[SafetyTrendPoint])
 def safety_trend(
     period: date,
     months: int = 6,
     location_id: uuid.UUID | None = None,
+    period_mode: str = "month",
     current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
     db: Session = Depends(get_db),
 ):
+    """Trailing N buckets, each paired with the same bucket one year
+    earlier. period_mode picks the bucket granularity: 'month' (default),
+    'quarter', or 'ytd' (year buckets). Counted metrics sum across a
+    bucket's months, LTIFR/Defensive Driving Training average -- see
+    METRIC_RANGE_AGGREGATION."""
     period = month_start(period)
-    trailing = _trailing_months(period, min(max(months, 1), 24))
-    values = _metric_values_batch(db, current.tenant_id, location_id, trailing)
-    return [
-        SafetyTrendPoint(period=p, values={name: values[name][p][0] for name in METRIC_NAMES})
-        for p in trailing
-    ]
+    count = min(max(months, 1), 24) if period_mode == "month" else min(max(months, 1), 8)
+    buckets = trailing_buckets_for_mode(period, period_mode, count)
+
+    all_months: set[date] = set()
+    prior_year_buckets: list[tuple[date, date]] = []
+    for start, end in buckets:
+        all_months.update(months_in_range(start, end))
+        py_start, py_end = prior_year_range_for_mode(start, end)
+        prior_year_buckets.append((py_start, py_end))
+        all_months.update(months_in_range(py_start, py_end))
+
+    values = _metric_values_batch(db, current.tenant_id, location_id, sorted(all_months))
+
+    points = []
+    for (start, end), (py_start, py_end) in zip(buckets, prior_year_buckets):
+        bucket_months = months_in_range(start, end)
+        py_months = months_in_range(py_start, py_end)
+        points.append(
+            SafetyTrendPoint(
+                period=end,
+                bucket_start=start,
+                bucket_end=end,
+                values={name: _aggregate_metric_range(name, values[name], bucket_months)[0] for name in METRIC_NAMES},
+                prior_year_values={name: _aggregate_metric_range(name, values[name], py_months)[0] for name in METRIC_NAMES},
+            )
+        )
+    return points

@@ -2,6 +2,12 @@
   <div class="chart-header">
     <h3>{{ title }}</h3>
     <div class="chart-controls">
+      @if (hasYoYData()) {
+        <label class="yoy-toggle">
+          <input type="checkbox" [ngModel]="compareYoY()" (ngModelChange)="toggleYoY()" />
+          <span>vs last year</span>
+        </label>
+      }
       <select class="series-select" [ngModel]="selectedKey()" (ngModelChange)="selectSeries($event)">
         @for (s of series; track s.key) {
           <option [value]="s.key">{{ s.label }}{{ s.tracked ? '' : ' (not tracked yet)' }}</option>
@@ -29,23 +35,50 @@
       <p>{{ currentSeries()!.label }} isn't calculated anywhere in this platform yet -- no entries, no factors, no numbers to chart.</p>
     </div>
   } @else if (chartKind() === 'bar') {
-    <div class="bar-chart">
-      @for (point of points; track point.period; let i = $index) {
-        <div class="bar-column">
-          <span class="bar-value">
-            {{ point.valuesBySeries[selectedKey()] !== null ? (point.valuesBySeries[selectedKey()] | number: '1.0-' + decimals) : '—' }}
-          </span>
-          <div class="bar-track">
-            <div
-              class="bar"
-              [style.height.%]="barHeightPct(point.valuesBySeries[selectedKey()])"
-              [class.bar-empty]="point.valuesBySeries[selectedKey()] === null"
-            ></div>
+    <div class="bar-chart-wrap">
+      <div class="gridlines">
+        @for (line of gridLines(); track line.value) {
+          <div class="gridline" [style.bottom.%]="line.bottomPct">
+            <span class="gridline-value">{{ line.value | number: '1.0-' + decimals }}</span>
           </div>
-          <span class="bar-label">{{ point.label }}</span>
-        </div>
-      }
+        }
+      </div>
+      <div class="bar-chart">
+        @for (point of points; track point.period; let i = $index) {
+          <div class="bar-column">
+            <div class="bar-group">
+              <div class="bar-track" [class.grouped]="showYoY()">
+                <div
+                  class="bar bar-current"
+                  [style.height.%]="barHeightPct(point.valuesBySeries[selectedKey()])"
+                  [class.bar-empty]="point.valuesBySeries[selectedKey()] === null"
+                  [title]="point.label + ': ' + (point.valuesBySeries[selectedKey()] !== null ? (point.valuesBySeries[selectedKey()] | number: '1.0-' + decimals) : 'no data')"
+                >
+                  @if (point.valuesBySeries[selectedKey()] !== null) {
+                    <span class="bar-value">{{ point.valuesBySeries[selectedKey()] | number: '1.0-' + decimals }}</span>
+                  }
+                </div>
+                @if (showYoY()) {
+                  <div
+                    class="bar bar-prior"
+                    [style.height.%]="barHeightPct(point.priorYearValuesBySeries?.[selectedKey()] ?? null)"
+                    [class.bar-empty]="(point.priorYearValuesBySeries?.[selectedKey()] ?? null) === null"
+                    [title]="'Same period last year: ' + ((point.priorYearValuesBySeries?.[selectedKey()] ?? null) !== null ? (point.priorYearValuesBySeries![selectedKey()] | number: '1.0-' + decimals) : 'no data')"
+                  ></div>
+                }
+              </div>
+            </div>
+            <span class="bar-label">{{ point.label }}</span>
+          </div>
+        }
+      </div>
     </div>
+    @if (showYoY()) {
+      <div class="legend">
+        <span class="legend-item"><span class="legend-swatch swatch-current"></span>This period</span>
+        <span class="legend-item"><span class="legend-swatch swatch-prior"></span>Same period last year</span>
+      </div>
+    }
   } @else {
     <div class="line-chart">
       <svg [attr.viewBox]="'0 0 ' + viewW + ' ' + viewH" preserveAspectRatio="none" class="line-svg">
@@ -55,8 +88,23 @@
             <stop offset="100%" stop-color="#0e2c21" stop-opacity="0" />
           </linearGradient>
         </defs>
+        @for (line of gridLines(); track line.value) {
+          <line
+            [attr.x1]="0" [attr.x2]="viewW"
+            [attr.y1]="gridLineY(line.bottomPct)" [attr.y2]="gridLineY(line.bottomPct)"
+            stroke="#eaecf0" stroke-width="1"
+          />
+        }
         @if (areaPath()) {
           <path [attr.d]="areaPath()" fill="url(#areaFill)" stroke="none" />
+        }
+        @if (showYoY()) {
+          @for (seg of priorYearLinePathSegments(); track $index) {
+            <path [attr.d]="seg.d" fill="none" stroke="#98a2b3" stroke-width="2" stroke-dasharray="5 4" stroke-linecap="round" stroke-linejoin="round" />
+          }
+          @for (dot of priorYearDotPoints(); track dot.x) {
+            <circle [attr.cx]="dot.x" [attr.cy]="dot.y" r="3" fill="#98a2b3" />
+          }
         }
         @for (seg of linePathSegments(); track $index) {
           <path [attr.d]="seg.d" fill="none" stroke="#0e2c21" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
@@ -71,5 +119,11 @@
         }
       </div>
     </div>
+    @if (showYoY()) {
+      <div class="legend">
+        <span class="legend-item"><span class="legend-swatch swatch-current"></span>This period</span>
+        <span class="legend-item"><span class="legend-swatch swatch-prior swatch-dashed"></span>Same period last year</span>
+      </div>
+    }
   }
 </div>

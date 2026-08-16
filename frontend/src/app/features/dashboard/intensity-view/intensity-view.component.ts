@@ -1,6 +1,14 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, Input, OnChanges, inject, signal } from '@angular/core';
-import { IntensityApiService, IntensityOverview, PeriodMode } from '../../../core/intensity-api.service';
+import {
+  IntensityApiService,
+  IntensityOverview,
+  PeriodMode,
+  formatBucketLabel,
+  priorPeriodLabel,
+  priorYearLabel,
+  showsPriorPeriod
+} from '../../../core/intensity-api.service';
 import { ChartPoint, ChartSeriesDef, RichTrendChartComponent } from '../../../shared/rich-trend-chart/rich-trend-chart.component';
 
 interface IntensityMetric {
@@ -111,6 +119,18 @@ export class IntensityViewComponent implements OnChanges {
     ];
   }
 
+  priorLabel(): string {
+    return priorPeriodLabel(this.periodMode);
+  }
+
+  priorYearLabelText(): string {
+    return priorYearLabel(this.periodMode);
+  }
+
+  showPrior(): boolean {
+    return showsPriorPeriod(this.periodMode);
+  }
+
   comparisonLabel(current: number | null, prior: number | null, against = 'last month'): string {
     if (current === null) return 'Data required';
     if (prior === null || prior === 0) return `No comparison available`;
@@ -129,17 +149,23 @@ export class IntensityViewComponent implements OnChanges {
   async loadTrend(): Promise<void> {
     this.trendLoading.set(true);
     try {
-      const points = await this.api.getTrend(`${this.period}-01`, TREND_MONTHS, this.locationId ?? undefined);
+      const points = await this.api.getTrend(`${this.period}-01`, TREND_MONTHS, this.locationId ?? undefined, this.periodMode);
       const suffix = this.mode === 'production' ? '_per_production' : '_per_revenue';
       this.trendPoints.set(
         points.map((p) => ({
           period: p.period,
-          label: new Date(`${p.period}T00:00:00`).toLocaleDateString('en-US', { month: 'short' }),
+          label: formatBucketLabel(p.bucket_start ?? p.period, p.bucket_end ?? p.period, this.periodMode),
           valuesBySeries: {
             ghg: (p as any)[`ghg${suffix}`],
             energy: (p as any)[`energy${suffix}`],
             water: (p as any)[`water${suffix}`],
             waste: (p as any)[`waste${suffix}`]
+          },
+          priorYearValuesBySeries: {
+            ghg: (p as any)[`prior_year_ghg${suffix}`],
+            energy: (p as any)[`prior_year_energy${suffix}`],
+            water: (p as any)[`prior_year_water${suffix}`],
+            waste: (p as any)[`prior_year_waste${suffix}`]
           }
         }))
       );

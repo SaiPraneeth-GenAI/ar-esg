@@ -1,6 +1,6 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, Input, OnChanges, inject, signal } from '@angular/core';
-import { PeriodMode } from '../../../core/intensity-api.service';
+import { PeriodMode, formatBucketLabel, priorPeriodLabel, priorYearLabel, showsPriorPeriod } from '../../../core/intensity-api.service';
 import { SafetyApiService, SafetyMetric } from '../../../core/safety-api.service';
 import { ChartPoint, ChartSeriesDef, RichTrendChartComponent } from '../../../shared/rich-trend-chart/rich-trend-chart.component';
 
@@ -69,12 +69,13 @@ export class SafetyViewComponent implements OnChanges {
   async loadTrend(): Promise<void> {
     this.trendLoading.set(true);
     try {
-      const points = await this.api.getTrend(`${this.period}-01`, TREND_MONTHS, this.locationId ?? undefined);
+      const points = await this.api.getTrend(`${this.period}-01`, TREND_MONTHS, this.locationId ?? undefined, this.periodMode);
       this.trendPoints.set(
         points.map((p) => ({
           period: p.period,
-          label: new Date(`${p.period}T00:00:00`).toLocaleDateString('en-US', { month: 'short' }),
-          valuesBySeries: p.values
+          label: formatBucketLabel(p.bucket_start ?? p.period, p.bucket_end ?? p.period, this.periodMode),
+          valuesBySeries: p.values,
+          priorYearValuesBySeries: p.prior_year_values
         }))
       );
     } catch {
@@ -84,12 +85,17 @@ export class SafetyViewComponent implements OnChanges {
     }
   }
 
+  showPrior(): boolean {
+    return showsPriorPeriod(this.periodMode);
+  }
+
   comparisonLabel(m: SafetyMetric, against: 'month' | 'year' = 'month'): string {
     const prior = against === 'month' ? m.prior_value : m.prior_year_value;
+    const label = against === 'month' ? priorPeriodLabel(this.periodMode) : priorYearLabel(this.periodMode);
     if (m.value === null) return 'Not yet entered';
     if (prior === null || prior === 0) return `No comparison available`;
     const pct = ((m.value - prior) / prior) * 100;
-    return `${Math.abs(pct).toFixed(0)}% ${pct > 0 ? 'higher' : 'lower'} than last ${against}`;
+    return `${Math.abs(pct).toFixed(0)}% ${pct > 0 ? 'higher' : 'lower'} than ${label}`;
   }
 
   comparisonStatus(m: SafetyMetric, against: 'month' | 'year' = 'month'): 'green' | 'amber' | 'red' | 'neutral' {

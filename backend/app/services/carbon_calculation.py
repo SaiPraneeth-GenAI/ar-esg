@@ -420,6 +420,36 @@ def prior_year_range_for_mode(start: date, end: date) -> tuple[date, date]:
     return shift_months(start, -12), shift_months(end, -12)
 
 
+def trailing_buckets_for_mode(period: date, mode: str, count: int) -> list[tuple[date, date]]:
+    """The trailing `count` [start, end] buckets of period_mode's shape,
+    ending at the bucket containing period, oldest first. For 'month' this
+    is just count trailing single months. For 'quarter'/'ytd', only the
+    MOST RECENT bucket (the one matching the live overview's anchor) is
+    "to date" -- every earlier bucket is a COMPLETE quarter/year, since a
+    trend chart's historical bars should show the finished period, not an
+    arbitrarily truncated one to match wherever the anchor happens to sit
+    within the current quarter/year. A missing month inside a complete
+    bucket still contributes nothing to the sum rather than a fabricated
+    number, so requesting the full bucket is always safe."""
+    if mode not in ("quarter", "ytd"):
+        start, end = range_bounds_for_mode(period, mode)
+        buckets: list[tuple[date, date]] = []
+        for _ in range(count):
+            buckets.append((start, end))
+            start, end = shift_months(start, -1), shift_months(end, -1)
+        return list(reversed(buckets))
+
+    latest_start, latest_end = range_bounds_for_mode(period, mode)
+    step = -3 if mode == "quarter" else -12
+    full_width = 2 if mode == "quarter" else 11  # months beyond start for a COMPLETE bucket
+    buckets = [(latest_start, latest_end)]
+    start = shift_months(latest_start, step)
+    for _ in range(count - 1):
+        buckets.append((start, shift_months(start, full_width)))
+        start = shift_months(start, step)
+    return list(reversed(buckets))
+
+
 def compute_period_totals(db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, period: date) -> dict:
     """Approved-calculation-snapshot totals for one reporting month. Thin
     wrapper over compute_period_totals_batch -- kept as the single-period
@@ -563,15 +593,25 @@ def _sum_optional(values: list[float | None]) -> float | None:
     return sum(present) if present else None
 
 
-def compute_range_totals(db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, months: list[date]) -> dict:
+def compute_range_totals(
+    db: Session,
+    tenant_id: uuid.UUID,
+    location_id: uuid.UUID | None,
+    months: list[date],
+    by_month: dict[date, dict] | None = None,
+) -> dict:
     """Same result shape as one compute_period_totals_batch entry, but
     aggregated across a range of months (quarter-to-date / year-to-date).
     Absolute figures (scope1/scope2/production/revenue/unresolved/
     calculated) sum across the months present; intensity ratios are
     recomputed from those summed totals -- never averaged across months,
     since a rate's numerator and denominator can each vary month to month
-    and averaging the ratios would silently misweight them."""
-    by_month = compute_period_totals_batch(db, tenant_id, location_id, months)
+    and averaging the ratios would silently misweight them. Pass an
+    already-fetched by_month (e.g. one batch covering several ranges'
+    months at once) to skip the internal query -- a trend chart computing
+    several buckets shouldn't pay one query round trip per bucket."""
+    if by_month is None:
+        by_month = compute_period_totals_batch(db, tenant_id, location_id, months)
 
     scope1 = _sum_optional([by_month[m]["scope1_tco2e"] for m in months])
     scope2_loc = _sum_optional([by_month[m]["scope2_loc_tco2e"] for m in months])

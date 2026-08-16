@@ -32,11 +32,13 @@
           </div>
           @if (m.current !== null) {
             <div class="card-value">{{ m.current | number: '1.2-4' }}<span class="card-unit">{{ m.unit }}</span></div>
-            <div class="card-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.prior)">
-              {{ comparisonLabel(m.current, m.prior) }}
-            </div>
+            @if (showPrior()) {
+              <div class="card-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.prior)">
+                {{ comparisonLabel(m.current, m.prior, priorLabel()) }}
+              </div>
+            }
             <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.priorYear)">
-              {{ comparisonLabel(m.current, m.priorYear, 'last year') }}
+              {{ comparisonLabel(m.current, m.priorYear, priorYearLabelText()) }}
             </div>
           } @else {
             <div class="card-empty">Data required</div>
@@ -46,7 +48,7 @@
     </div>
 
     <app-rich-trend-chart
-      title="Trend -- last {{ trendPoints().length }} months"
+      title="Trend -- last {{ trendPoints().length }} {{ periodMode === 'quarter' ? 'quarters' : periodMode === 'ytd' ? 'years' : 'months' }}"
       [series]="chartSeries()"
       [points]="trendPoints()"
       defaultSeriesKey="ghg"

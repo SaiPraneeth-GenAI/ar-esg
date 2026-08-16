@@ -1,6 +1,13 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, Input, OnChanges, inject, signal } from '@angular/core';
-import { IntensityApiService, IntensityOverview, PeriodMode } from '../../../core/intensity-api.service';
+import {
+  IntensityApiService,
+  IntensityOverview,
+  PeriodMode,
+  priorPeriodLabel,
+  priorYearLabel,
+  showsPriorPeriod
+} from '../../../core/intensity-api.service';
 import { CarbonOverviewComponent } from '../carbon-overview/carbon-overview.component';
 
 interface AbsoluteMetric {
@@ -52,6 +59,18 @@ export class AbsoluteMetricsViewComponent implements OnChanges {
       { label: 'Battery production', current: ov.production_mnah, prior: ov.prior_production_mnah, priorYear: ov.prior_year_production_mnah, unit: 'Mn Ah', goodDown: false },
       { label: 'Revenue', current: ov.revenue_inr_cr, prior: ov.prior_revenue_inr_cr, priorYear: ov.prior_year_revenue_inr_cr, unit: 'INR Cr', goodDown: false }
     ];
+  }
+
+  priorLabel(): string {
+    return priorPeriodLabel(this.periodMode);
+  }
+
+  priorYearLabelText(): string {
+    return priorYearLabel(this.periodMode);
+  }
+
+  showPrior(): boolean {
+    return showsPriorPeriod(this.periodMode);
   }
 
   comparisonLabel(current: number | null, prior: number | null, against = 'last month'): string {

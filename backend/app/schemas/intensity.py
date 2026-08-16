@@ -54,6 +54,8 @@ class IntensityOverviewOut(BaseModel):
 
 class IntensityTrendPoint(BaseModel):
     period: date
+    bucket_start: date | None = None
+    bucket_end: date | None = None
     ghg_per_production: float | None
     energy_per_production: float | None
     water_per_production: float | None
@@ -62,3 +64,11 @@ class IntensityTrendPoint(BaseModel):
     energy_per_revenue: float | None
     water_per_revenue: float | None
     waste_per_revenue: float | None
+    prior_year_ghg_per_production: float | None = None
+    prior_year_energy_per_production: float | None = None
+    prior_year_water_per_production: float | None = None
+    prior_year_waste_per_production: float | None = None
+    prior_year_ghg_per_revenue: float | None = None
+    prior_year_energy_per_revenue: float | None = None
+    prior_year_water_per_revenue: float | None = None
+    prior_year_waste_per_revenue: float | None = None

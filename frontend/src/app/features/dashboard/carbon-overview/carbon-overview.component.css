@@ -266,6 +266,51 @@
   line-height: 1.5;
 }
 
+.pie-row {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.pie-with-toggle {
+  flex: 1;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pie-with-toggle app-pie-chart {
+  flex: 1;
+}
+
+.scope-toggle {
+  display: flex;
+  align-self: flex-end;
+  gap: 0.15rem;
+  padding: 0.15rem;
+  background: #f2f4f7;
+  border-radius: 8px;
+}
+
+.scope-btn {
+  border: none;
+  background: transparent;
+  padding: 0.28rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #667085;
+  cursor: pointer;
+}
+
+.scope-btn.active {
+  background: #fff;
+  color: #101828;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+
 .trend-charts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
