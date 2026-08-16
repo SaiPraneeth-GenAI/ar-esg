@@ -5,10 +5,22 @@
   padding: 1.1rem 1.2rem;
   flex: 1;
   min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
-.pie-card h3 {
-  margin: 0 0 1rem;
+.pie-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  min-height: 26px;
+}
+
+.pie-card-header h3 {
+  margin: 0;
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -23,6 +35,10 @@
 }
 
 .empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 1.5rem 1rem;
   text-align: center;
 }
@@ -34,6 +50,7 @@
 }
 
 .pie-body {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 1.4rem;

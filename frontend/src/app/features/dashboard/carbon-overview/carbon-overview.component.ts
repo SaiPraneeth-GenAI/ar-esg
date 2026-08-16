@@ -164,7 +164,8 @@ export class CarbonOverviewComponent implements OnChanges {
           scope: source.scope,
           calculationMethod: source.calculation_method ?? undefined,
           dataPointName: source.data_point_name,
-          locationId: this.locationId ?? undefined
+          locationId: this.locationId ?? undefined,
+          periodMode: this.periodMode
         })
       );
     } finally {

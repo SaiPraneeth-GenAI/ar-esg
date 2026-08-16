@@ -229,6 +229,7 @@ def unresolved_queue(
 @router.get("/calculations", response_model=list[EmissionCalculationOut])
 def list_calculations(
     period: date,
+    period_mode: str = "month",
     scope: int | None = None,
     calculation_method: str | None = None,
     data_point_name: str | None = None,
@@ -239,11 +240,16 @@ def list_calculations(
     """Drill-down evidence for one card/source: every current calculation
     row (calculated or unresolved) contributing to it, each carrying its
     own factor snapshot and a link back to the entry for full audit
-    history."""
+    history. period_mode widens the window to a quarter-to-date/
+    year-to-date range the same way the overview cards do; default 'month'
+    keeps the original single-period behavior every existing caller relies
+    on."""
     period = month_start(period)
+    range_start, range_end = range_bounds_for_mode(period, period_mode)
+    periods = months_in_range(range_start, range_end)
     q = db.query(EmissionCalculation).filter(
         EmissionCalculation.tenant_id == current.tenant_id,
-        EmissionCalculation.reporting_period == period,
+        EmissionCalculation.reporting_period.in_(periods),
         EmissionCalculation.status.in_(["calculated", "unresolved"]),
     )
     if scope is not None:

@@ -114,10 +114,10 @@ export class CarbonApiService {
 
   async getCalculations(
     period: string,
-    filters: { scope?: number; calculationMethod?: string; dataPointName?: string; locationId?: string } = {}
+    filters: { scope?: number; calculationMethod?: string; dataPointName?: string; locationId?: string; periodMode?: PeriodMode } = {}
   ): Promise<EmissionCalculationOut[]> {
     const headers = await this.authHeaders();
-    const params: Record<string, string> = { period };
+    const params: Record<string, string> = { period, period_mode: filters.periodMode ?? 'month' };
     if (filters.scope) params['scope'] = String(filters.scope);
     if (filters.calculationMethod) params['calculation_method'] = filters.calculationMethod;
     if (filters.dataPointName) params['data_point_name'] = filters.dataPointName;

@@ -1,5 +1,8 @@
 <div class="pie-card">
-  <h3>{{ title }}</h3>
+  <div class="pie-card-header">
+    <h3>{{ title }}</h3>
+    <ng-content select="[pie-actions]"></ng-content>
+  </div>
 
   @if (loading) {
     <p class="muted">Loading…</p>

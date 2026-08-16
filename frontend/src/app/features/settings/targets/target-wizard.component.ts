@@ -74,14 +74,19 @@ export class TargetWizardComponent implements OnInit {
   @Output() saved = new EventEmitter<void>();
 
   presets = PRESETS;
-  step = signal<1 | 2 | 3>(1);
+  // Just two screens the user actually interacts with: pick a target, then
+  // type its value. Baseline is still computed and locked underneath (the
+  // backend needs it to score performance later), but it's fetched
+  // automatically the instant a preset is picked instead of being a step
+  // the user has to read and understand.
+  step = signal<1 | 2>(1);
   submitting = signal(false);
   errorMessage = signal('');
 
   locations = signal<AdminLocation[]>([]);
   users = signal<AdminUser[]>([]);
 
-  // Step 1
+  // Boundary (step 1)
   locationId = signal<string>('');
   scope = signal<TargetScope>('1_2_combined');
   calculationMethod = signal<string | null>('location_based');
@@ -91,6 +96,7 @@ export class TargetWizardComponent implements OnInit {
   customizeBoundary = signal(false);
   showAdvanced = signal(false);
   showBaselineMonths = signal(false);
+  showReductionHelper = signal(false);
 
   metricUnit(): string {
     if (this.metricType() === 'intensity_tco2e_per_mnah') return 'tCO2e/MnAh';
@@ -98,25 +104,26 @@ export class TargetWizardComponent implements OnInit {
     return 'tCO2e';
   }
 
-  // Step 2
+  // Baseline -- computed silently as soon as a boundary is chosen
   today = new Date();
   baselineEnd = signal<string>(monthStr(new Date(this.today.getFullYear(), this.today.getMonth() - 1, 1)));
   baselineStart = signal<string>(addMonths(monthStr(new Date(this.today.getFullYear(), this.today.getMonth() - 1, 1)), -11));
   baselinePreview = signal<BaselinePreviewResponse | null>(null);
   baselineLoading = signal(false);
 
-  // Step 3
+  // Target (step 2)
   targetStart = signal<string>(monthStr(this.today));
   targetEnd = signal<string>(addMonths(monthStr(this.today), 11));
   reductionPercentage = signal<number | null>(10);
-  targetValueOverride = signal<number | null>(null);
+  targetValue = signal<number | null>(null);
   ownerId = signal<string>('');
   rationale = signal('');
   phaseMonthly = signal(false);
   phasedMonths = signal<MonthlyPhaseEntry[]>([]);
 
-  computedTargetValue = computed<number | null>(() => {
-    if (this.targetValueOverride() !== null) return this.targetValueOverride();
+  /** What the % helper would produce -- shown as a suggestion, only
+   * written into targetValue() when the user explicitly applies it. */
+  suggestedFromReduction = computed<number | null>(() => {
     const baseline = this.baselinePreview()?.baseline_value;
     const pct = this.reductionPercentage();
     if (baseline === null || baseline === undefined || pct === null) return null;
@@ -125,7 +132,7 @@ export class TargetWizardComponent implements OnInit {
 
   phasedTotal = computed(() => this.phasedMonths().reduce((sum, m) => sum + (m.value || 0), 0));
   phasedMismatch = computed(() => {
-    const target = this.computedTargetValue();
+    const target = this.targetValue();
     if (target === null) return false;
     return Math.abs(this.phasedTotal() - target) > 0.01;
   });
@@ -144,8 +151,8 @@ export class TargetWizardComponent implements OnInit {
     this.metricType.set(preset.metricType);
     this.selectedPresetLabel.set(preset.label);
     // A preset already fully specifies the boundary -- jump straight to
-    // the baseline instead of making the user click through a form
-    // they've already answered via the card they just picked.
+    // entering the target value instead of making the user click through
+    // a form they've already answered via the card they just picked.
     await this.goToStep2();
   }
 
@@ -164,6 +171,7 @@ export class TargetWizardComponent implements OnInit {
 
   async goToStep2(): Promise<void> {
     this.step.set(2);
+    this.regeneratePhasing();
     await this.refreshBaseline();
   }
 
@@ -188,13 +196,16 @@ export class TargetWizardComponent implements OnInit {
     }
   }
 
-  goToStep3(): void {
-    this.step.set(3);
-    this.regeneratePhasing();
+  backToStep1(): void {
+    this.step.set(1);
   }
 
-  backToStep(step: 1 | 2): void {
-    this.step.set(step);
+  applySuggestedValue(): void {
+    const suggested = this.suggestedFromReduction();
+    if (suggested !== null) {
+      this.targetValue.set(Math.round(suggested * 1000) / 1000);
+      this.regeneratePhasing();
+    }
   }
 
   togglePhasing(): void {
@@ -214,7 +225,7 @@ export class TargetWizardComponent implements OnInit {
 
   regeneratePhasing(): void {
     const months = this.monthsInTargetPeriod();
-    const target = this.computedTargetValue();
+    const target = this.targetValue();
     const even = target !== null ? target / months.length : 0;
     this.phasedMonths.set(months.map((m) => ({ period: `${m}-01`, value: Math.round(even * 1000) / 1000 })));
   }
@@ -226,8 +237,7 @@ export class TargetWizardComponent implements OnInit {
   }
 
   canActivate(): boolean {
-    const target = this.computedTargetValue();
-    if (target === null || !this.rationale().trim()) return false;
+    if (this.targetValue() === null || !this.rationale().trim()) return false;
     if (this.phaseMonthly() && this.phasedMismatch()) return false;
     return this.baselinePreview()?.ready ?? false;
   }
@@ -243,7 +253,7 @@ export class TargetWizardComponent implements OnInit {
       target_period_start: `${this.targetStart()}-01`,
       target_period_end: `${this.targetEnd()}-01`,
       reduction_percentage: this.reductionPercentage(),
-      target_value: this.computedTargetValue(),
+      target_value: this.targetValue(),
       monthly_phasing: this.phaseMonthly() ? this.phasedMonths() : [],
       owner_id: this.ownerId() || null,
       rationale: this.rationale() || null

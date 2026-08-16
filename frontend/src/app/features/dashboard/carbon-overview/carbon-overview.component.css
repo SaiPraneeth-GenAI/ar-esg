@@ -268,26 +268,20 @@
 
 .pie-row {
   display: flex;
+  align-items: stretch;
   gap: 1rem;
   margin-top: 1.25rem;
   flex-wrap: wrap;
 }
 
-.pie-with-toggle {
+.pie-row app-pie-chart {
   flex: 1;
   min-width: 280px;
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.pie-with-toggle app-pie-chart {
-  flex: 1;
 }
 
 .scope-toggle {
   display: flex;
-  align-self: flex-end;
   gap: 0.15rem;
   padding: 0.15rem;
   background: #f2f4f7;

@@ -13,8 +13,7 @@
 
   <div class="steps">
     <span class="step-dot" [class.active]="step() === 1" [class.done]="step() > 1">1. Pick a target</span>
-    <span class="step-dot" [class.active]="step() === 2" [class.done]="step() > 2">2. Baseline</span>
-    <span class="step-dot" [class.active]="step() === 3">3. Confirm</span>
+    <span class="step-dot" [class.active]="step() === 2">2. Set the value</span>
   </div>
 
   <div class="panel-body">
@@ -23,7 +22,7 @@
     }
 
     @if (step() === 1) {
-      <p class="panel-hint">Pick the target you want to track. Each one computes its baseline automatically.</p>
+      <p class="panel-hint">Pick the target you want to track.</p>
       <div class="preset-list">
         @for (preset of presets; track preset.label) {
           <button type="button" class="preset-btn" (click)="applyPreset(preset)">
@@ -80,34 +79,88 @@
         </label>
 
         <div class="panel-actions">
-          <button type="button" class="primary-btn" (click)="goToStep2()">Next: Baseline →</button>
+          <button type="button" class="primary-btn" (click)="goToStep2()">Next: Set the value →</button>
         </div>
       }
     }
 
     @if (step() === 2) {
       @if (selectedPresetLabel()) {
-        <p class="panel-hint">{{ selectedPresetLabel() }} -- baseline is the latest 12 fully-approved months.</p>
+        <p class="panel-hint">{{ selectedPresetLabel() }}</p>
       }
 
+      <label class="field target-value-field">
+        <span class="field-label">Target value</span>
+        <div class="value-input-row">
+          <input
+            type="number" step="any"
+            [ngModel]="targetValue()"
+            (ngModelChange)="targetValue.set($event); regeneratePhasing()"
+            placeholder="e.g. 0.45"
+          />
+          <span class="value-unit">{{ metricUnit() }}</span>
+        </div>
+      </label>
+
       @if (baselineLoading()) {
-        <p class="muted">Computing baseline…</p>
+        <p class="muted small">Checking your recent data…</p>
+      } @else if (baselinePreview() && baselinePreview()!.baseline_value !== null) {
+        <p class="baseline-context">
+          Your trailing 12 months: <strong>{{ baselinePreview()!.baseline_value | number: '1.2-4' }} {{ metricUnit() }}</strong>
+          @if (baselinePreview()!.completeness_pct !== null) {
+            ({{ baselinePreview()!.completeness_pct | number: '1.0-0' }}% complete)
+          }
+        </p>
       } @else if (baselinePreview()) {
-        <div class="baseline-result" [class.not-ready]="!baselinePreview()!.ready" [class.provisional]="baselinePreview()!.provisional">
-          @if (baselinePreview()!.baseline_value !== null) {
-            <div class="baseline-value">
-              {{ baselinePreview()!.baseline_value | number: '1.2-4' }}
-              <span class="baseline-unit">{{ metricUnit() }}</span>
+        <p class="muted small">{{ baselinePreview()!.message }}</p>
+      }
+
+      @if (!baselinePreview()?.ready) {
+        <p class="warning-text">Not enough approved data yet to activate this target -- you can still save it as a draft.</p>
+      }
+
+      <button type="button" class="link-btn" (click)="showReductionHelper.set(!showReductionHelper())">
+        {{ showReductionHelper() ? 'Hide % reduction calculator' : 'Not sure? Calculate from a % reduction' }}
+      </button>
+
+      @if (showReductionHelper()) {
+        <div class="reduction-helper">
+          <label class="field">
+            <span class="field-label">Reduction vs. baseline (%)</span>
+            <input type="number" min="0" max="100" step="0.1" [ngModel]="reductionPercentage()" (ngModelChange)="reductionPercentage.set($event)" />
+          </label>
+          @if (suggestedFromReduction() !== null) {
+            <div class="suggestion-row">
+              <span>= {{ suggestedFromReduction() | number: '1.2-4' }} {{ metricUnit() }}</span>
+              <button type="button" class="secondary-btn small" (click)="applySuggestedValue()">Use this value</button>
             </div>
           }
-          <p class="baseline-message">{{ baselinePreview()!.message }}</p>
-          @if (baselinePreview()!.completeness_pct !== null) {
-            <p class="baseline-completeness">Average completeness: {{ baselinePreview()!.completeness_pct | number: '1.0-0' }}%</p>
-          }
+        </div>
+      }
+
+      <label class="field">
+        <span class="field-label">Rationale <span class="required">*</span></span>
+        <textarea rows="3" [ngModel]="rationale()" (ngModelChange)="rationale.set($event)" placeholder="Why this target -- required to activate"></textarea>
+      </label>
+
+      <button type="button" class="link-btn" (click)="showAdvanced.set(!showAdvanced())">
+        {{ showAdvanced() ? 'Hide advanced options' : 'Advanced: target period, baseline dates, monthly phasing, owner' }}
+      </button>
+
+      @if (showAdvanced()) {
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Target period start</span>
+            <input type="month" [ngModel]="targetStart()" (ngModelChange)="targetStart.set($event); regeneratePhasing()" />
+          </label>
+          <label class="field">
+            <span class="field-label">Target period end</span>
+            <input type="month" [ngModel]="targetEnd()" (ngModelChange)="targetEnd.set($event); regeneratePhasing()" />
+          </label>
         </div>
 
         <button type="button" class="link-btn" (click)="showBaselineMonths.set(!showBaselineMonths())">
-          {{ showBaselineMonths() ? 'Hide month-by-month' : 'Show month-by-month' }}
+          {{ showBaselineMonths() ? 'Hide baseline dates' : 'Change the baseline date range' }}
         </button>
 
         @if (showBaselineMonths()) {
@@ -123,70 +176,27 @@
           </div>
           <button type="button" class="link-btn" (click)="refreshBaseline()">Recompute baseline</button>
 
-          <table class="month-table">
-            <thead>
-              <tr>
-                <th>Month</th>
-                <th>Value</th>
-                <th>Completeness</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (m of baselinePreview()!.months; track m.period) {
+          @if (baselinePreview()?.months?.length) {
+            <table class="month-table">
+              <thead>
                 <tr>
-                  <td>{{ m.period }}</td>
-                  <td>{{ m.value !== null ? (m.value | number: '1.2-4') : '—' }}</td>
-                  <td>{{ m.completeness_pct !== null ? (m.completeness_pct | number: '1.0-0') + '%' : '—' }}</td>
+                  <th>Month</th>
+                  <th>Value</th>
+                  <th>Completeness</th>
                 </tr>
-              }
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                @for (m of baselinePreview()!.months; track m.period) {
+                  <tr>
+                    <td>{{ m.period }}</td>
+                    <td>{{ m.value !== null ? (m.value | number: '1.2-4') : '—' }}</td>
+                    <td>{{ m.completeness_pct !== null ? (m.completeness_pct | number: '1.0-0') + '%' : '—' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
         }
-      }
-
-      <div class="panel-actions split">
-        <button type="button" class="secondary-btn" (click)="backToStep(1)">← Back</button>
-        <button type="button" class="primary-btn" [disabled]="!baselinePreview()?.ready" (click)="goToStep3()">Next: Set target →</button>
-      </div>
-    }
-
-    @if (step() === 3) {
-      <label class="field">
-        <span class="field-label">Reduction vs. baseline (%)</span>
-        <input type="number" min="0" max="100" step="0.1" [ngModel]="reductionPercentage()" (ngModelChange)="reductionPercentage.set($event); targetValueOverride.set(null); regeneratePhasing()" />
-      </label>
-
-      @if (computedTargetValue() !== null) {
-        <div class="computed-target">
-          Annual target: <strong>{{ computedTargetValue() | number: '1.2-4' }} {{ metricUnit() }}</strong>
-        </div>
-      }
-
-      <label class="field">
-        <span class="field-label">Rationale <span class="required">*</span></span>
-        <textarea rows="3" [ngModel]="rationale()" (ngModelChange)="rationale.set($event)" placeholder="Why this reduction percentage -- required to activate"></textarea>
-      </label>
-
-      <button type="button" class="link-btn" (click)="showAdvanced.set(!showAdvanced())">
-        {{ showAdvanced() ? 'Hide advanced options' : 'Advanced: target period, monthly phasing, owner, exact value' }}
-      </button>
-
-      @if (showAdvanced()) {
-        <div class="field-row">
-          <label class="field">
-            <span class="field-label">Target period start</span>
-            <input type="month" [ngModel]="targetStart()" (ngModelChange)="targetStart.set($event); regeneratePhasing()" />
-          </label>
-          <label class="field">
-            <span class="field-label">Target period end</span>
-            <input type="month" [ngModel]="targetEnd()" (ngModelChange)="targetEnd.set($event); regeneratePhasing()" />
-          </label>
-        </div>
-
-        <label class="field">
-          <span class="field-label">Or set target value directly</span>
-          <input type="number" step="any" [ngModel]="targetValueOverride()" (ngModelChange)="targetValueOverride.set($event); regeneratePhasing()" placeholder="Overrides the reduction % above" />
-        </label>
 
         <label class="active-toggle">
           <input type="checkbox" [ngModel]="phaseMonthly()" (ngModelChange)="togglePhasing()" />
@@ -213,8 +223,8 @@
             </tbody>
           </table>
           <p class="phase-total" [class.mismatch]="phasedMismatch()">
-            Sum: {{ phasedTotal() | number: '1.2-4' }} / {{ computedTargetValue() | number: '1.2-4' }}
-            @if (phasedMismatch()) { -- doesn't match the annual target yet }
+            Sum: {{ phasedTotal() | number: '1.2-4' }} / {{ targetValue() | number: '1.2-4' }}
+            @if (phasedMismatch()) { -- doesn't match the target value yet }
           </p>
         }
 
@@ -230,9 +240,9 @@
       }
 
       <div class="panel-actions split">
-        <button type="button" class="secondary-btn" (click)="backToStep(2)">← Back</button>
+        <button type="button" class="secondary-btn" (click)="backToStep1()">← Back</button>
         <div class="actions-right">
-          <button type="button" class="secondary-btn" [disabled]="submitting()" (click)="saveDraft()">Save as draft</button>
+          <button type="button" class="secondary-btn" [disabled]="submitting() || targetValue() === null" (click)="saveDraft()">Save as draft</button>
           <button type="button" class="primary-btn" [disabled]="!canActivate() || submitting()" (click)="saveAndActivate()">
             {{ submitting() ? 'Saving…' : 'Save & activate' }}
           </button>

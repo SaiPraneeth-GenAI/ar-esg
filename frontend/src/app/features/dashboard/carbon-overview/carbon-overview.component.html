@@ -133,22 +133,21 @@
         emptyMessage="No approved GHG-mapped entries for this period yet."
       ></app-pie-chart>
 
-      <div class="pie-with-toggle">
+      <app-pie-chart
+        title="Major contributors -- within Scope {{ scopeFilter() }}"
+        [slices]="scopeContributionSlices()"
+        unit="tCO2e"
+        [decimals]="1"
+        emptyMessage="No approved entries for this scope this period."
+      >
         @if (availableScopes().length > 1) {
-          <div class="scope-toggle" role="group" aria-label="Scope">
+          <div pie-actions class="scope-toggle" role="group" aria-label="Scope">
             @for (s of availableScopes(); track s) {
               <button type="button" class="scope-btn" [class.active]="scopeFilter() === s" (click)="setScopeFilter(s)">Scope {{ s }}</button>
             }
           </div>
         }
-        <app-pie-chart
-          title="Major contributors -- within Scope {{ scopeFilter() }}"
-          [slices]="scopeContributionSlices()"
-          unit="tCO2e"
-          [decimals]="1"
-          emptyMessage="No approved entries for this scope this period."
-        ></app-pie-chart>
-      </div>
+      </app-pie-chart>
     </div>
 
     <app-rich-trend-chart

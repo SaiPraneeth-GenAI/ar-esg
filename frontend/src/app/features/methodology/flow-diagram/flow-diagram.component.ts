@@ -1,7 +1,8 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, ElementRef, OnInit, ViewChild, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { CarbonApiService, EmissionCalculationOut } from '../../../core/carbon-api.service';
-import { IntensityApiService } from '../../../core/intensity-api.service';
+import { IntensityApiService, PeriodMode } from '../../../core/intensity-api.service';
 import { SafetyApiService } from '../../../core/safety-api.service';
 import { TargetApiService } from '../../../core/target-api.service';
 
@@ -146,10 +147,19 @@ function currentPeriod(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
+function periodValue(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-01`;
+}
+
+interface PeriodOption {
+  value: string;
+  label: string;
+}
+
 @Component({
   selector: 'app-flow-diagram',
   standalone: true,
-  imports: [DecimalPipe],
+  imports: [DecimalPipe, FormsModule],
   templateUrl: './flow-diagram.component.html',
   styleUrl: './flow-diagram.component.css'
 })
@@ -166,6 +176,7 @@ export class FlowDiagramComponent implements OnInit {
 
   loading = signal(true);
   period = signal(currentPeriod());
+  periodMode = signal<PeriodMode>('month');
 
   viewBox = signal({ x: 0, y: 0, w: 2020, h: 1010 });
   private panStart: { x: number; y: number; vb: { x: number; y: number; w: number; h: number } } | null = null;
@@ -184,14 +195,18 @@ export class FlowDiagramComponent implements OnInit {
   private extraLines: Record<string, string[]> = {};
 
   async ngOnInit(): Promise<void> {
+    await this.load();
+  }
+
+  async load(): Promise<void> {
     this.loading.set(true);
     try {
       const [carbon, intensity, safety, targets, allCalcs] = await Promise.all([
-        this.carbonApi.getOverview(this.period()),
-        this.intensityApi.getOverview(this.period()),
-        this.safetyApi.getOverview(this.period()),
+        this.carbonApi.getOverview(this.period(), undefined, this.periodMode()),
+        this.intensityApi.getOverview(this.period(), undefined, this.periodMode()),
+        this.safetyApi.getOverview(this.period(), undefined, this.periodMode()),
         this.targetApi.list('active'),
-        this.carbonApi.getCalculations(this.period(), {})
+        this.carbonApi.getCalculations(this.period(), { periodMode: this.periodMode() })
       ]);
 
       const byName = (name: string) => allCalcs.filter((c) => c.data_point_name === name);
@@ -289,7 +304,64 @@ export class FlowDiagramComponent implements OnInit {
   }
 
   periodLabel(): string {
-    return new Date(`${this.period()}T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const d = new Date(`${this.period()}T00:00:00`);
+    if (this.periodMode() === 'month') return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    if (this.periodMode() === 'quarter') return `Q${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()} to date`;
+    return `Year to date, ${d.getFullYear()}`;
+  }
+
+  // -- Mode-aware period picker (mirrors the dashboard's) ------------------
+
+  quarterOptions(): PeriodOption[] {
+    const now = new Date();
+    let year = now.getFullYear();
+    let quarter = Math.floor(now.getMonth() / 3) + 1;
+    const options: PeriodOption[] = [];
+    for (let i = 0; i < 8; i++) {
+      options.push({ value: periodValue(year, quarter * 3), label: `Q${quarter} ${year}` });
+      quarter -= 1;
+      if (quarter === 0) {
+        quarter = 4;
+        year -= 1;
+      }
+    }
+    return options;
+  }
+
+  yearOptions(): PeriodOption[] {
+    const now = new Date();
+    const options: PeriodOption[] = [];
+    for (let i = 0; i < 5; i++) {
+      const year = now.getFullYear() - i;
+      const anchorMonth = year === now.getFullYear() ? now.getMonth() + 1 : 12;
+      options.push({ value: periodValue(year, anchorMonth), label: `${year}` });
+    }
+    return options;
+  }
+
+  async setPeriodMode(mode: PeriodMode): Promise<void> {
+    this.periodMode.set(mode);
+    if (mode === 'quarter') {
+      this.period.set(this.quarterOptions()[0].value);
+    } else if (mode === 'ytd') {
+      this.period.set(this.yearOptions()[0].value);
+    } else {
+      this.period.set(currentPeriod());
+    }
+    await this.load();
+  }
+
+  async setPeriod(value: string): Promise<void> {
+    this.period.set(value);
+    await this.load();
+  }
+
+  monthInputValue(): string {
+    return this.period().slice(0, 7);
+  }
+
+  async setMonthPeriod(value: string): Promise<void> {
+    await this.setPeriod(`${value}-01`);
   }
 
   nodeLines(node: FlowNode): string[] {
@@ -384,7 +456,7 @@ export class FlowDiagramComponent implements OnInit {
 
     if (node.sourceName) {
       try {
-        const evidence = await this.carbonApi.getCalculations(this.period(), { dataPointName: node.sourceName });
+        const evidence = await this.carbonApi.getCalculations(this.period(), { dataPointName: node.sourceName, periodMode: this.periodMode() });
         this.detail.update((d) => (d ? { ...d, loading: false, evidence } : d));
       } catch {
         this.detail.update((d) => (d ? { ...d, loading: false } : d));

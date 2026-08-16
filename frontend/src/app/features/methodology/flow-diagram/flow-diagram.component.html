@@ -1,6 +1,28 @@
 <div class="diagram-shell">
   <div class="toolbar">
     <div class="toolbar-group">
+      <div class="mode-toggle" role="group" aria-label="Period mode">
+        <button type="button" class="mode-btn" [class.active]="periodMode() === 'month'" (click)="setPeriodMode('month')">Monthly</button>
+        <button type="button" class="mode-btn" [class.active]="periodMode() === 'quarter'" (click)="setPeriodMode('quarter')">Quarterly</button>
+        <button type="button" class="mode-btn" [class.active]="periodMode() === 'ytd'" (click)="setPeriodMode('ytd')">YTD</button>
+      </div>
+      @if (periodMode() === 'month') {
+        <input type="month" class="period-input" [ngModel]="monthInputValue()" (ngModelChange)="setMonthPeriod($event)" />
+      } @else if (periodMode() === 'quarter') {
+        <select class="period-input" [ngModel]="period()" (ngModelChange)="setPeriod($event)">
+          @for (opt of quarterOptions(); track opt.value) {
+            <option [value]="opt.value">{{ opt.label }}</option>
+          }
+        </select>
+      } @else {
+        <select class="period-input" [ngModel]="period()" (ngModelChange)="setPeriod($event)">
+          @for (opt of yearOptions(); track opt.value) {
+            <option [value]="opt.value">{{ opt.label }}</option>
+          }
+        </select>
+      }
+    </div>
+    <div class="toolbar-group">
       <button type="button" class="tool-btn" (click)="play()" [disabled]="playing()">
         {{ playing() ? 'Playing…' : '▶ Play calculation flow' }}
       </button>
