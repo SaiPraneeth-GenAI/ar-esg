@@ -6,6 +6,7 @@ from app.api.routes import (
     admin_locations,
     admin_mapping_templates,
     admin_users,
+    carbon,
     dashboard,
     entries,
     health,
@@ -31,3 +32,4 @@ app.include_router(dashboard.router)
 app.include_router(entries.router)
 app.include_router(admin_mapping_templates.router)
 app.include_router(admin_emission_factors.router)
+app.include_router(carbon.router)

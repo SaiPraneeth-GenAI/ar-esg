@@ -36,6 +36,7 @@ from app.schemas.mapping import (
     SheetDetectionResult,
 )
 from app.services.audit import write_audit
+from app.services.carbon_calculation import calculate_entry
 from app.services.mailing import MailingError, send_email
 from app.services.mapping import header_fingerprint, infer_period, match_category, match_data_point, match_metadata_field
 from app.services.rollups import recompute_rollup_for_entry
@@ -707,6 +708,12 @@ def approve_entry(
     db.commit()
     write_audit(db, entry.id, current.email, "approved", "Submitted", "Approved")
     recompute_rollup_for_entry(db, entry)
+
+    # GHG calculation is a separate concern from the Water/Waste rollup
+    # above -- only runs (and only writes a row) when this data point is a
+    # mapped carbon source (see app/core/carbon_mapping.py).
+    calculate_entry(db, entry, current.tenant_id, current.id)
+    db.commit()
 
     return _entry_out(db, entry)
 
