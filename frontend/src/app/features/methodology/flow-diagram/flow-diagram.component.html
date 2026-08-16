@@ -100,6 +100,13 @@
         @if (d.value !== null) {
           <div class="detail-value">{{ d.value }}</div>
         }
+        @if (d.extraValues.length > 0) {
+          <ul class="extra-values">
+            @for (line of d.extraValues; track line) {
+              <li>{{ line }}</li>
+            }
+          </ul>
+        }
         <p class="detail-formula">{{ d.formula }}</p>
         <p class="detail-note">{{ d.note }}</p>
 

@@ -2,6 +2,8 @@ import { DecimalPipe } from '@angular/common';
 import { Component, ElementRef, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { CarbonApiService, EmissionCalculationOut } from '../../../core/carbon-api.service';
 import { IntensityApiService } from '../../../core/intensity-api.service';
+import { SafetyApiService, SafetyMetric } from '../../../core/safety-api.service';
+import { TargetApiService, TargetOut } from '../../../core/target-api.service';
 
 export type NodeKind = 'input' | 'process' | 'aggregate' | 'sum' | 'divide' | 'output' | 'warning';
 
@@ -25,77 +27,105 @@ export interface FlowEdge {
 }
 
 const NODES: FlowNode[] = [
-  // Column A -- raw activity inputs
-  { id: 'diesel', x: 20, y: 20, w: 190, h: 64, label: 'Diesel Consumed', kind: 'input', live: true, sourceName: 'Diesel Consumed' },
-  { id: 'petrol', x: 20, y: 104, w: 190, h: 64, label: 'Petrol Consumed', kind: 'input', live: true, sourceName: 'Petrol Consumed' },
-  { id: 'lpg', x: 20, y: 188, w: 190, h: 64, label: 'LPG Consumed', kind: 'input', live: true, sourceName: 'LPG Consumed' },
-  { id: 'refrigerant', x: 20, y: 272, w: 190, h: 64, label: 'Refrigerant Leakage', kind: 'input', live: true, sourceName: 'Refrigerant Leakage — R-134a' },
-  { id: 'electricity', x: 20, y: 356, w: 190, h: 64, label: 'Grid Electricity Consumed', kind: 'input', live: true, sourceName: 'Grid Electricity Consumed' },
+  // Inputs -- every approved activity data point this project actually collects.
+  { id: 'diesel', x: 20, y: 20, w: 190, h: 60, label: 'Diesel Consumed', kind: 'input', live: true, sourceName: 'Diesel Consumed' },
+  { id: 'petrol', x: 20, y: 96, w: 190, h: 60, label: 'Petrol Consumed', kind: 'input', live: true, sourceName: 'Petrol Consumed' },
+  { id: 'lpg', x: 20, y: 172, w: 190, h: 60, label: 'LPG Consumed', kind: 'input', live: true, sourceName: 'LPG Consumed' },
+  { id: 'refrigerant', x: 20, y: 248, w: 190, h: 60, label: 'Refrigerant Leakage', kind: 'input', live: true, sourceName: 'Refrigerant Leakage — R-134a' },
+  { id: 'electricity', x: 20, y: 324, w: 190, h: 60, label: 'Grid Electricity Consumed', kind: 'input', live: true, sourceName: 'Grid Electricity Consumed' },
+  { id: 'water-sources', x: 20, y: 440, w: 190, h: 60, label: 'Water withdrawal (4 sources)', kind: 'input', live: true },
+  { id: 'waste-sources', x: 20, y: 516, w: 190, h: 60, label: 'Waste generated (2 categories)', kind: 'input', live: true },
+  { id: 'production-input', x: 20, y: 632, w: 190, h: 60, label: 'Battery Production Volume', kind: 'input', live: true },
+  { id: 'revenue-input', x: 20, y: 708, w: 190, h: 60, label: 'Revenue', kind: 'input', live: true },
+  { id: 'safety-input', x: 20, y: 800, w: 190, h: 60, label: 'Safety metrics (5)', kind: 'input', live: true },
 
-  // Column B -- per-source formula application
-  { id: 'fuel-calc', x: 300, y: 104, w: 200, h: 64, label: 'Fuel × Emission Factor', kind: 'process', live: true },
-  { id: 'fugitive-calc', x: 300, y: 272, w: 200, h: 64, label: 'Leakage × GWP', kind: 'process', live: true },
-  { id: 'grid-calc', x: 300, y: 356, w: 200, h: 64, label: 'Electricity × Grid Factor', kind: 'process', live: true },
+  // Per-source formula application -- GHG and energy read the same fuel /
+  // electricity activity but apply different formulas to it.
+  { id: 'fuel-ghg-calc', x: 300, y: 20, w: 210, h: 60, label: 'Fuel × Emission Factor', kind: 'process', live: true },
+  { id: 'fuel-energy-calc', x: 300, y: 96, w: 210, h: 60, label: 'Fuel × Net Calorific Value', kind: 'process', live: true },
+  { id: 'fugitive-calc', x: 300, y: 248, w: 210, h: 60, label: 'Leaked Mass × GWP-100', kind: 'process', live: true },
+  { id: 'grid-ghg-calc', x: 300, y: 324, w: 210, h: 60, label: 'Electricity × Grid Factor', kind: 'process', live: true },
+  { id: 'grid-energy-calc', x: 300, y: 400, w: 210, h: 60, label: 'Electricity × 3.6 MJ/kWh', kind: 'process', live: true },
 
-  // Column C -- scope totals
-  { id: 'scope1-total', x: 590, y: 188, w: 190, h: 64, label: 'Scope 1 Total', kind: 'aggregate', live: true },
-  { id: 'scope2-total', x: 590, y: 356, w: 190, h: 64, label: 'Scope 2 Total (location-based)', kind: 'aggregate', live: true },
-  { id: 'scope3-total', x: 590, y: 440, w: 190, h: 64, label: 'Scope 3 Total', kind: 'aggregate', live: false },
+  // Domain totals
+  { id: 'scope1-total', x: 600, y: 160, w: 190, h: 60, label: 'Scope 1 Total', kind: 'aggregate', live: true },
+  { id: 'scope2-total', x: 600, y: 324, w: 190, h: 60, label: 'Scope 2 Total (location-based)', kind: 'aggregate', live: true },
+  { id: 'scope3-total', x: 600, y: 400, w: 190, h: 60, label: 'Scope 3 Total', kind: 'aggregate', live: false },
+  { id: 'energy-total', x: 600, y: 58, w: 190, h: 60, label: 'Total Energy', kind: 'aggregate', live: true },
+  { id: 'water-total', x: 300, y: 440, w: 190, h: 60, label: 'Total Water', kind: 'aggregate', live: true },
+  { id: 'waste-total', x: 300, y: 516, w: 190, h: 60, label: 'Total Waste', kind: 'aggregate', live: true },
 
-  // Column D -- the sum
-  { id: 'total-ghg', x: 870, y: 302, w: 190, h: 76, label: 'Total GHG Emissions', kind: 'sum', live: true },
+  // The sum
+  { id: 'total-ghg', x: 900, y: 250, w: 190, h: 72, label: 'Total GHG Emissions', kind: 'sum', live: true },
 
-  // Column E -- denominators
-  { id: 'production', x: 1150, y: 140, w: 190, h: 64, label: 'Production Volume', kind: 'input', live: true },
-  { id: 'revenue', x: 1150, y: 480, w: 190, h: 64, label: 'Revenue', kind: 'input', live: true },
+  // Intensity -- grouped exactly as the two dashboard tabs group them.
+  { id: 'intensity-production', x: 1200, y: 300, w: 220, h: 72, label: 'Intensity by Production', kind: 'divide', live: true },
+  { id: 'intensity-revenue', x: 1200, y: 560, w: 220, h: 72, label: 'Intensity by Revenue', kind: 'divide', live: true },
 
-  // Column F -- intensity outputs
-  { id: 'intensity-production', x: 1430, y: 140, w: 210, h: 64, label: 'Intensity by Production', kind: 'divide', live: true },
-  { id: 'intensity-revenue', x: 1430, y: 480, w: 210, h: 64, label: 'Intensity by Revenue', kind: 'divide', live: true },
-
-  // Column G -- terminal
-  { id: 'dashboard', x: 1730, y: 302, w: 190, h: 76, label: 'Carbon Dashboard', kind: 'output', live: true },
+  // Targets and terminal
+  { id: 'target-comparison', x: 1500, y: 220, w: 200, h: 64, label: 'Target Comparison', kind: 'output', live: true },
+  { id: 'dashboard', x: 1780, y: 380, w: 200, h: 76, label: 'ESG Dashboard', kind: 'output', live: true },
 
   // Warning branch
-  { id: 'missing-factor', x: 300, y: 600, w: 210, h: 64, label: 'Missing / ambiguous factor', kind: 'warning', live: true },
-  { id: 'unresolved-queue', x: 590, y: 600, w: 210, h: 64, label: 'Unresolved queue', kind: 'warning', live: true }
+  { id: 'missing-factor', x: 300, y: 900, w: 210, h: 60, label: 'Missing / ambiguous factor', kind: 'warning', live: true },
+  { id: 'unresolved-queue', x: 600, y: 900, w: 210, h: 60, label: 'Unresolved queue', kind: 'warning', live: true }
 ];
 
 const EDGES: FlowEdge[] = [
-  { from: 'diesel', to: 'fuel-calc' },
-  { from: 'petrol', to: 'fuel-calc' },
-  { from: 'lpg', to: 'fuel-calc' },
+  { from: 'diesel', to: 'fuel-ghg-calc' },
+  { from: 'petrol', to: 'fuel-ghg-calc' },
+  { from: 'lpg', to: 'fuel-ghg-calc' },
+  { from: 'diesel', to: 'fuel-energy-calc' },
+  { from: 'petrol', to: 'fuel-energy-calc' },
+  { from: 'lpg', to: 'fuel-energy-calc' },
   { from: 'refrigerant', to: 'fugitive-calc' },
-  { from: 'electricity', to: 'grid-calc' },
+  { from: 'electricity', to: 'grid-ghg-calc' },
+  { from: 'electricity', to: 'grid-energy-calc' },
 
-  { from: 'fuel-calc', to: 'scope1-total' },
+  { from: 'fuel-ghg-calc', to: 'scope1-total' },
   { from: 'fugitive-calc', to: 'scope1-total' },
-  { from: 'grid-calc', to: 'scope2-total' },
+  { from: 'grid-ghg-calc', to: 'scope2-total' },
+  { from: 'fuel-energy-calc', to: 'energy-total' },
+  { from: 'grid-energy-calc', to: 'energy-total' },
+  { from: 'water-sources', to: 'water-total' },
+  { from: 'waste-sources', to: 'waste-total' },
 
   { from: 'scope1-total', to: 'total-ghg' },
   { from: 'scope2-total', to: 'total-ghg' },
   { from: 'scope3-total', to: 'total-ghg', dashed: true },
 
   { from: 'total-ghg', to: 'intensity-production' },
-  { from: 'production', to: 'intensity-production' },
+  { from: 'energy-total', to: 'intensity-production' },
+  { from: 'water-total', to: 'intensity-production' },
+  { from: 'waste-total', to: 'intensity-production' },
+  { from: 'production-input', to: 'intensity-production' },
+
   { from: 'total-ghg', to: 'intensity-revenue' },
-  { from: 'revenue', to: 'intensity-revenue' },
+  { from: 'energy-total', to: 'intensity-revenue' },
+  { from: 'water-total', to: 'intensity-revenue' },
+  { from: 'waste-total', to: 'intensity-revenue' },
+  { from: 'revenue-input', to: 'intensity-revenue' },
+
+  { from: 'total-ghg', to: 'target-comparison' },
+  { from: 'intensity-production', to: 'target-comparison' },
 
   { from: 'total-ghg', to: 'dashboard' },
   { from: 'intensity-production', to: 'dashboard' },
   { from: 'intensity-revenue', to: 'dashboard' },
+  { from: 'target-comparison', to: 'dashboard' },
+  { from: 'safety-input', to: 'dashboard', dashed: true },
 
   { from: 'diesel', to: 'missing-factor', dashed: true },
   { from: 'missing-factor', to: 'unresolved-queue', dashed: true }
 ];
 
 const ANIMATION_ORDER: string[][] = [
-  ['diesel', 'petrol', 'lpg', 'refrigerant', 'electricity'],
-  ['fuel-calc', 'fugitive-calc', 'grid-calc'],
-  ['scope1-total', 'scope2-total', 'scope3-total'],
+  ['diesel', 'petrol', 'lpg', 'refrigerant', 'electricity', 'water-sources', 'waste-sources', 'production-input', 'revenue-input', 'safety-input'],
+  ['fuel-ghg-calc', 'fuel-energy-calc', 'fugitive-calc', 'grid-ghg-calc', 'grid-energy-calc'],
+  ['scope1-total', 'scope2-total', 'scope3-total', 'energy-total', 'water-total', 'waste-total'],
   ['total-ghg'],
-  ['production', 'revenue'],
   ['intensity-production', 'intensity-revenue'],
+  ['target-comparison'],
   ['dashboard']
 ];
 
@@ -103,6 +133,7 @@ interface NodeDetail {
   title: string;
   live: boolean;
   value: string | null;
+  extraValues: string[];
   formula: string;
   note: string;
   loading: boolean;
@@ -124,6 +155,8 @@ function currentPeriod(): string {
 export class FlowDiagramComponent implements OnInit {
   private carbonApi = inject(CarbonApiService);
   private intensityApi = inject(IntensityApiService);
+  private safetyApi = inject(SafetyApiService);
+  private targetApi = inject(TargetApiService);
 
   @ViewChild('svgEl') svgEl!: ElementRef<SVGSVGElement>;
 
@@ -133,7 +166,7 @@ export class FlowDiagramComponent implements OnInit {
   loading = signal(true);
   period = signal(currentPeriod());
 
-  viewBox = signal({ x: 0, y: 0, w: 1960, h: 720 });
+  viewBox = signal({ x: 0, y: 0, w: 2020, h: 1000 });
   private panStart: { x: number; y: number; vb: { x: number; y: number; w: number; h: number } } | null = null;
 
   selectedNode = signal<FlowNode | null>(null);
@@ -143,25 +176,60 @@ export class FlowDiagramComponent implements OnInit {
   activeNodeIds = signal<Set<string>>(new Set());
   activeEdgeKeys = signal<Set<string>>(new Set());
 
-  // Live values, keyed by node id, filled from real API data.
-  private values: Record<string, { value: number | null; unit: string }> = {};
+  private values: Record<string, { value: number | null; unit: string; extra?: string[] }> = {};
+  private safetyMetrics: SafetyMetric[] = [];
+  private activeTargets: TargetOut[] = [];
 
   async ngOnInit(): Promise<void> {
     this.loading.set(true);
     try {
-      const [carbon, intensity] = await Promise.all([
+      const [carbon, intensity, safety, targets] = await Promise.all([
         this.carbonApi.getOverview(this.period()),
-        this.intensityApi.getOverview(this.period())
+        this.intensityApi.getOverview(this.period()),
+        this.safetyApi.getOverview(this.period()),
+        this.targetApi.list('active')
       ]);
+      this.safetyMetrics = safety.metrics;
+      this.activeTargets = targets;
+
       this.values = {
         'scope1-total': { value: carbon.scope1_tco2e, unit: 'tCO2e' },
         'scope2-total': { value: carbon.scope2_location_based_tco2e, unit: 'tCO2e' },
         'scope3-total': { value: null, unit: 'tCO2e' },
+        'energy-total': { value: intensity.energy_gj, unit: 'GJ' },
+        'water-total': { value: intensity.water_kl, unit: 'KL' },
+        'waste-total': { value: intensity.waste_mt, unit: 'MT' },
         'total-ghg': { value: carbon.scope1_2_location_based_tco2e, unit: 'tCO2e' },
-        'production': { value: intensity.production_mnah, unit: 'Mn Ah' },
-        'revenue': { value: intensity.revenue_inr_cr, unit: 'INR Cr' },
-        'intensity-production': { value: carbon.intensity_tco2e_per_mnah, unit: 'tCO2e/MnAh' },
-        'intensity-revenue': { value: intensity.ghg_per_revenue, unit: 'tCO2e/Cr' },
+        'production-input': { value: intensity.production_mnah, unit: 'Mn Ah' },
+        'revenue-input': { value: intensity.revenue_inr_cr, unit: 'INR Cr' },
+        'intensity-production': {
+          value: carbon.intensity_tco2e_per_mnah,
+          unit: 'tCO2e/MnAh',
+          extra: [
+            intensity.energy_per_production !== null ? `${intensity.energy_per_production.toFixed(2)} GJ/MnAh` : 'Energy: data required',
+            intensity.water_per_production !== null ? `${intensity.water_per_production.toFixed(1)} KL/MnAh` : 'Water: data required',
+            intensity.waste_per_production !== null ? `${intensity.waste_per_production.toFixed(2)} MT/MnAh` : 'Waste: data required'
+          ]
+        },
+        'intensity-revenue': {
+          value: intensity.ghg_per_revenue,
+          unit: 'tCO2e/Cr',
+          extra: [
+            intensity.energy_per_revenue !== null ? `${intensity.energy_per_revenue.toFixed(2)} GJ/Cr` : 'Energy: data required',
+            intensity.water_per_revenue !== null ? `${intensity.water_per_revenue.toFixed(1)} KL/Cr` : 'Water: data required',
+            intensity.waste_per_revenue !== null ? `${intensity.waste_per_revenue.toFixed(2)} MT/Cr` : 'Waste: data required'
+          ]
+        },
+        'target-comparison': {
+          value: targets.length,
+          unit: targets.length === 1 ? 'active target' : 'active targets',
+          extra: targets.map((t) => `${t.metric_type === 'intensity_tco2e_per_mnah' ? 'Intensity' : 'Absolute'}: ${t.current_status_label ?? 'Not enough data'}`)
+        },
+        'safety-input': {
+          value: safety.metrics.length,
+          unit: 'metrics tracked',
+          extra: safety.metrics.map((m) => `${m.name}: ${m.value !== null ? m.value + ' ' + m.unit : 'not yet entered'}`)
+        },
         'dashboard': { value: null, unit: '' }
       };
     } catch {
@@ -178,6 +246,9 @@ export class FlowDiagramComponent implements OnInit {
   nodeValueLabel(node: FlowNode): string | null {
     const v = this.values[node.id];
     if (!v || v.value === null) return null;
+    if (node.id === 'target-comparison' || node.id === 'safety-input') {
+      return `${v.value} ${v.unit}`;
+    }
     const decimals = Math.abs(v.value) < 1 ? 3 : 1;
     return `${v.value.toFixed(decimals)} ${v.unit}`;
   }
@@ -198,7 +269,7 @@ export class FlowDiagramComponent implements OnInit {
     const svgX = vb.x + (pxX / rect.width) * vb.w;
     const svgY = vb.y + (pxY / rect.height) * vb.h;
     const newW = Math.min(Math.max(vb.w * factor, 400), 6000);
-    const newH = Math.min(Math.max(vb.h * factor, 150), 2200);
+    const newH = Math.min(Math.max(vb.h * factor, 150), 3000);
     this.viewBox.set({
       x: svgX - (svgX - vb.x) * (newW / vb.w),
       y: svgY - (svgY - vb.y) * (newH / vb.h),
@@ -213,7 +284,7 @@ export class FlowDiagramComponent implements OnInit {
   }
 
   fitToView(): void {
-    this.viewBox.set({ x: 0, y: 0, w: 1960, h: 720 });
+    this.viewBox.set({ x: 0, y: 0, w: 2020, h: 1000 });
   }
 
   onPointerDown(event: PointerEvent): void {
@@ -244,7 +315,8 @@ export class FlowDiagramComponent implements OnInit {
     this.detail.set({
       title: node.label,
       live: node.live,
-      value: v && v.value !== null ? `${v.value.toFixed(v.value < 1 ? 4 : 2)} ${v.unit}` : null,
+      value: v && v.value !== null ? `${v.value} ${v.unit}` : null,
+      extraValues: v?.extra ?? [],
       formula: this.formulaFor(node),
       note: this.noteFor(node),
       loading: !!node.sourceName,
@@ -268,30 +340,44 @@ export class FlowDiagramComponent implements OnInit {
 
   private formulaFor(node: FlowNode): string {
     switch (node.id) {
-      case 'fuel-calc':
+      case 'fuel-ghg-calc':
         return 'Normalized activity × emission factor = kgCO2e';
+      case 'fuel-energy-calc':
+        return 'Mass (kg) × net calorific value (MJ/kg) = MJ';
       case 'fugitive-calc':
         return 'Leaked mass (kg) × GWP-100 = kgCO2e';
-      case 'grid-calc':
+      case 'grid-ghg-calc':
         return 'Normalized MWh × grid factor (tCO2e/MWh) = tCO2e';
+      case 'grid-energy-calc':
+        return 'kWh × 3.6 = MJ';
       case 'scope1-total':
         return 'Fuel combustion + fugitive emissions';
       case 'scope2-total':
         return 'Sum of approved grid-electricity calculations (location-based)';
       case 'scope3-total':
         return 'Not calculated yet -- deliberately deferred';
+      case 'energy-total':
+        return 'Sum of fuel MJ + electricity MJ, ÷ 1000 = GJ';
+      case 'water-total':
+        return 'Sum of approved entries across all Water data points';
+      case 'waste-total':
+        return 'Sum of approved entries across Hazardous + Non-Hazardous Waste';
       case 'total-ghg':
         return 'Scope 1 + Scope 2 + Scope 3';
       case 'intensity-production':
-        return 'Total GHG (tCO2e) ÷ Production volume (Mn Ah)';
+        return '(GHG, Energy, Water, Waste) ÷ Production volume (Mn Ah)';
       case 'intensity-revenue':
-        return 'Total GHG (tCO2e) ÷ Revenue (INR Cr)';
+        return '(GHG, Energy, Water, Waste) ÷ Revenue (INR Cr)';
+      case 'target-comparison':
+        return 'Actual (this month) vs. declared annual target, evaluated against monthly phasing';
       case 'missing-factor':
         return 'No matching factor, or two factors tie for the same period';
       case 'unresolved-queue':
         return 'Excluded from every total until an Admin resolves it';
+      case 'safety-input':
+        return 'Entered directly, never calculated -- LTIFR is computed by HR before it reaches this platform';
       case 'dashboard':
-        return 'Cards, trend charts and drill-down evidence for every number above';
+        return 'Four tabs: Absolute Metrics, Intensity by Production, Intensity by Revenue, Safety & Trends';
       default:
         return 'Approved activity entry for the current period';
     }
