@@ -13,6 +13,15 @@ function sourceKey(s: CarbonOverviewSource): string {
   return `${s.data_point_name}:${s.scope}:${s.calculation_method ?? ''}`;
 }
 
+export interface TrendPoint {
+  period: string;
+  label: string;
+  scope12: number | null;
+  intensity: number | null;
+}
+
+const TREND_MONTHS = 6;
+
 @Component({
   selector: 'app-carbon-overview',
   standalone: true,
@@ -37,10 +46,13 @@ export class CarbonOverviewComponent implements OnInit {
   unresolvedItems = signal<EmissionCalculationOut[]>([]);
   unresolvedLoading = signal(false);
 
+  trendPoints = signal<TrendPoint[]>([]);
+  trendLoading = signal(true);
+
   sourceKey = sourceKey;
 
   async ngOnInit(): Promise<void> {
-    await this.load();
+    await Promise.all([this.load(), this.loadTrend()]);
   }
 
   private periodIso(): string {
@@ -62,7 +74,51 @@ export class CarbonOverviewComponent implements OnInit {
   }
 
   async onMonthChange(): Promise<void> {
-    await this.load();
+    await Promise.all([this.load(), this.loadTrend()]);
+  }
+
+  private trendMonths(): { period: string; label: string }[] {
+    const [year, month] = this.monthValue().split('-').map(Number);
+    const months: { period: string; label: string }[] = [];
+    for (let i = TREND_MONTHS - 1; i >= 0; i--) {
+      const d = new Date(year, month - 1 - i, 1);
+      const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+      const label = d.toLocaleDateString('en-US', { month: 'short' });
+      months.push({ period, label });
+    }
+    return months;
+  }
+
+  async loadTrend(): Promise<void> {
+    this.trendLoading.set(true);
+    try {
+      const months = this.trendMonths();
+      const overviews = await Promise.all(months.map((m) => this.api.getOverview(m.period).catch(() => null)));
+      this.trendPoints.set(
+        months.map((m, i) => ({
+          period: m.period,
+          label: m.label,
+          scope12: overviews[i]?.scope1_2_location_based_tco2e ?? null,
+          intensity: overviews[i]?.intensity_tco2e_per_mnah ?? null
+        }))
+      );
+    } finally {
+      this.trendLoading.set(false);
+    }
+  }
+
+  barHeightPct(value: number | null, series: (number | null)[]): number {
+    if (value === null) return 0;
+    const max = Math.max(...series.filter((v): v is number => v !== null), 0.0001);
+    return Math.max((value / max) * 100, 2);
+  }
+
+  scope12Series(): (number | null)[] {
+    return this.trendPoints().map((p) => p.scope12);
+  }
+
+  intensitySeries(): (number | null)[] {
+    return this.trendPoints().map((p) => p.intensity);
   }
 
   async toggleSource(source: CarbonOverviewSource): Promise<void> {
