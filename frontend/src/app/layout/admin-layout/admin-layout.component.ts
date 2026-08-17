@@ -46,6 +46,19 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
 
   settingsOpen = signal(this.isSettingsRoute());
 
+  // Drives the topbar's page icon + title -- same icon as the matching
+  // sidebar item, so the two reinforce each other instead of introducing
+  // a second icon set to learn.
+  pageContext = computed<{ icon: string; title: string }>(() => {
+    if (this.isSettingsRoute()) return { icon: 'settings', title: 'Settings' };
+    if (this.isDataEntryRoute()) return { icon: 'data-entry', title: 'Data Entry' };
+    if (this.isEmissionFactorsRoute()) return { icon: 'emission-factors', title: 'Emission Factors' };
+    if (this.isTargetsRoute()) return { icon: 'targets', title: 'Targets' };
+    if (this.isMethodologyRoute()) return { icon: 'methodology', title: 'Calculations' };
+    if (this.isChartsRoute()) return { icon: 'charts', title: 'Charts' };
+    return { icon: 'home', title: 'Dashboard' };
+  });
+
   constructor() {
     this.routerSub = this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {
       this.currentUrl.set(this.router.url);
