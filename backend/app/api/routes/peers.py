@@ -34,7 +34,7 @@ from app.schemas.peers import (
     PeerExtractOut,
     PeerExtractRow,
 )
-from app.services.peer_extraction import extract_metrics_via_ai, select_relevant_pages
+from app.services.peer_extraction import extract_metrics_via_ai, extract_relevant_text
 
 router = APIRouter(prefix="/peers", tags=["peers"])
 
@@ -144,8 +144,8 @@ def _data_out(db: Session, row: PeerData) -> PeerDataOut:
 
 def _run_extraction_job(job_id: str, pdf_bytes: bytes, year: int, company_id: uuid.UUID, company_name: str, filename: str, user: CurrentUser) -> None:
     try:
-        page_images = select_relevant_pages(pdf_bytes)
-        extracted = extract_metrics_via_ai(page_images)
+        text = extract_relevant_text(pdf_bytes)
+        extracted = extract_metrics_via_ai(text)
         db = SessionLocal()
         try:
             rows = [
