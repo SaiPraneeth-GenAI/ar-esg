@@ -27,11 +27,42 @@ class ChartMetricDataOut(BaseModel):
     points: list[ChartMetricPoint]
 
 
+class BreakdownDimensionOut(BaseModel):
+    key: str
+    label: str
+
+
+class BreakdownSlice(BaseModel):
+    label: str
+    value: float
+
+
+class BreakdownDataOut(BaseModel):
+    dimension: str
+    label: str
+    unit: str
+    period_mode: str
+    slices: list[BreakdownSlice]
+
+
 class ChartConfig(BaseModel):
-    metric: str
+    # "What question do you want to answer?" -- picks which fields below
+    # apply and how the chart renders (line/bar over time for trend, pie
+    # for breakdown, bar-of-current-values for comparison).
+    question_type: str = "trend"  # trend | breakdown | comparison
+
+    # trend
+    metric: str | None = None
     chart_kind: str = "bar"  # bar | line
     period_mode: str = "month"  # month | quarter | ytd
     months: int = 6
+
+    # breakdown
+    dimension: str | None = None
+
+    # comparison
+    metrics: list[str] | None = None
+
     location_id: uuid.UUID | None = None
 
 

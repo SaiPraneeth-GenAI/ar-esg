@@ -17,13 +17,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.routes.carbon import carbon_trend
+from app.api.routes.carbon import carbon_overview, carbon_trend
 from app.api.routes.intensity import intensity_trend
 from app.api.routes.safety import safety_trend
 from app.core.auth import CurrentUser, require_roles
 from app.db.models import SavedChart, User
 from app.db.session import get_db
 from app.schemas.charts import (
+    BreakdownDataOut,
+    BreakdownDimensionOut,
+    BreakdownSlice,
     ChartMetricDataOut,
     ChartMetricOut,
     ChartMetricPoint,
@@ -144,6 +147,53 @@ def get_metric_data(
     return ChartMetricDataOut(metric=metric, label=spec["label"], unit=spec["unit"], period_mode=period_mode, points=points)
 
 
+# "Breakdown" question type ("what % is X vs Y vs Z", "who's the top
+# contributor") -- reuses the exact source-level breakdown carbon_overview
+# already computes for the dashboard's contributor pies, sliced to total
+# emissions or to one scope. GHG is the only category with a genuine
+# multi-source breakdown in this platform right now (Water/Waste are
+# single approved-total categories, not itemized by source the way GHG's
+# five source data points are) -- more dimensions can be added here as the
+# underlying per-source data exists elsewhere.
+BREAKDOWN_DIMENSIONS: dict[str, str] = {
+    "ghg_total": "Total emissions, by source",
+    "ghg_scope1": "Scope 1, by source",
+    "ghg_scope2": "Scope 2 (location-based), by source",
+}
+
+
+@router.get("/breakdown-dimensions", response_model=list[BreakdownDimensionOut])
+def list_breakdown_dimensions(current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver"))):
+    return [BreakdownDimensionOut(key=key, label=label) for key, label in BREAKDOWN_DIMENSIONS.items()]
+
+
+@router.get("/breakdown-data", response_model=BreakdownDataOut)
+def get_breakdown_data(
+    dimension: str,
+    period: date,
+    period_mode: str = "month",
+    location_id: uuid.UUID | None = None,
+    current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
+    db: Session = Depends(get_db),
+):
+    if dimension not in BREAKDOWN_DIMENSIONS:
+        raise HTTPException(status_code=404, detail="Unknown breakdown dimension.")
+
+    overview = carbon_overview(period=period, location_id=location_id, period_mode=period_mode, current=current, db=db)
+    sources = [s for s in overview.sources if s.calculation_method != "market_based"]
+    if dimension == "ghg_scope1":
+        sources = [s for s in sources if s.scope == 1]
+    elif dimension == "ghg_scope2":
+        sources = [s for s in sources if s.scope == 2]
+
+    by_name: dict[str, float] = {}
+    for s in sources:
+        by_name[s.data_point_name] = by_name.get(s.data_point_name, 0.0) + s.emissions_tco2e
+
+    slices = [BreakdownSlice(label=name, value=value) for name, value in by_name.items()]
+    return BreakdownDataOut(dimension=dimension, label=BREAKDOWN_DIMENSIONS[dimension], unit="tCO2e", period_mode=period_mode, slices=slices)
+
+
 def _chart_out(db: Session, chart: SavedChart) -> SavedChartOut:
     owner = db.get(User, chart.owner_id)
     return SavedChartOut(
@@ -172,14 +222,32 @@ def _get_owned_chart(db: Session, current: CurrentUser, chart_id: uuid.UUID) -> 
     return chart
 
 
+def _validate_config(config) -> None:
+    """Each question type stores different fields -- validate only the
+    ones the picked question actually uses, against the fixed registries
+    above (never arbitrary values)."""
+    if config.question_type == "trend":
+        if config.metric not in CHARTABLE_METRICS:
+            raise HTTPException(status_code=422, detail="Unknown metric.")
+    elif config.question_type == "breakdown":
+        if config.dimension not in BREAKDOWN_DIMENSIONS:
+            raise HTTPException(status_code=422, detail="Unknown breakdown dimension.")
+    elif config.question_type == "comparison":
+        if not config.metrics or not (2 <= len(config.metrics) <= 6):
+            raise HTTPException(status_code=422, detail="Pick between 2 and 6 metrics to compare.")
+        if any(m not in CHARTABLE_METRICS for m in config.metrics):
+            raise HTTPException(status_code=422, detail="Unknown metric.")
+    else:
+        raise HTTPException(status_code=422, detail="Unknown question type.")
+
+
 @router.post("", response_model=SavedChartOut)
 def create_chart(
     payload: SavedChartCreate,
     current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
     db: Session = Depends(get_db),
 ):
-    if payload.config.metric not in CHARTABLE_METRICS:
-        raise HTTPException(status_code=422, detail="Unknown metric.")
+    _validate_config(payload.config)
     chart = SavedChart(
         tenant_id=current.tenant_id,
         owner_id=current.id,
@@ -233,8 +301,7 @@ def update_chart(
     if payload.description is not None:
         chart.description = payload.description
     if payload.config is not None:
-        if payload.config.metric not in CHARTABLE_METRICS:
-            raise HTTPException(status_code=422, detail="Unknown metric.")
+        _validate_config(payload.config)
         chart.config = payload.config.model_dump(mode="json")
     chart.updated_at = datetime.now(timezone.utc)
     try:

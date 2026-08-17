@@ -35,14 +35,18 @@
             </div>
           </div>
 
-          <app-rich-trend-chart
-            [title]="item.metricLabel"
-            [series]="item.series"
-            [points]="item.points"
-            defaultSeriesKey="value"
-            [loading]="item.loading"
-            [decimals]="2"
-          ></app-rich-trend-chart>
+          @if (item.chart.config.question_type === 'breakdown') {
+            <app-pie-chart [title]="item.displayLabel" [slices]="item.slices" [unit]="item.unit" [decimals]="1" [loading]="item.loading"></app-pie-chart>
+          } @else {
+            <app-rich-trend-chart
+              [title]="item.displayLabel"
+              [series]="item.series"
+              [points]="item.points"
+              defaultSeriesKey="value"
+              [loading]="item.loading"
+              [decimals]="2"
+            ></app-rich-trend-chart>
+          }
         </div>
       }
     </div>

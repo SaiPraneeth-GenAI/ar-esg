@@ -16,70 +16,146 @@
       <div class="banner error">{{ errorMessage() }}</div>
     }
 
-    <label class="field">
-      <span class="field-label">Metric</span>
-      <select [ngModel]="metric()" (ngModelChange)="metric.set($event); onSettingChange()">
-        @for (group of metricGroups(); track group) {
-          <optgroup [label]="group">
-            @for (m of metricsInGroup(group); track m.key) {
-              <option [value]="m.key">{{ m.label }}</option>
-            }
-          </optgroup>
+    @if (step() === 1) {
+      <p class="panel-hint">What question do you want to answer?</p>
+      <div class="question-list">
+        @for (q of questions; track q.type) {
+          <button type="button" class="question-btn" (click)="selectQuestion(q.type)">
+            <span class="question-icon">{{ q.icon }}</span>
+            <span class="question-body">
+              <span class="question-title">{{ q.title }}</span>
+              <span class="question-blurb">{{ q.blurb }}</span>
+              <ul class="question-bullets">
+                @for (b of q.bullets; track b) {
+                  <li>{{ b }}</li>
+                }
+              </ul>
+              <span class="question-example">{{ q.example }}</span>
+            </span>
+          </button>
         }
-      </select>
-    </label>
+      </div>
+    }
 
-    <div class="field-row">
+    @if (step() === 2) {
+      <button type="button" class="link-btn" (click)="backToQuestion()">← Change question</button>
+
+      @if (questionType() === 'trend') {
+        <label class="field">
+          <span class="field-label">Metric</span>
+          <select [ngModel]="metric()" (ngModelChange)="metric.set($event); onSettingChange()">
+            @for (group of metricGroups(); track group) {
+              <optgroup [label]="group">
+                @for (m of metricsInGroup(group); track m.key) {
+                  <option [value]="m.key">{{ m.label }}</option>
+                }
+              </optgroup>
+            }
+          </select>
+        </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Period</span>
+            <select [ngModel]="periodMode()" (ngModelChange)="periodMode.set($event); onSettingChange()">
+              <option value="month">Monthly</option>
+              <option value="quarter">Quarterly</option>
+              <option value="ytd">YTD</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">Trailing periods</span>
+            <input type="number" min="2" max="24" [ngModel]="months()" (ngModelChange)="months.set($event); onSettingChange()" />
+          </label>
+        </div>
+      }
+
+      @if (questionType() === 'breakdown') {
+        <label class="field">
+          <span class="field-label">Break down</span>
+          <select [ngModel]="dimension()" (ngModelChange)="dimension.set($event); onSettingChange()">
+            @for (d of dimensions(); track d.key) {
+              <option [value]="d.key">{{ d.label }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="field">
+          <span class="field-label">Period</span>
+          <select [ngModel]="periodMode()" (ngModelChange)="periodMode.set($event); onSettingChange()">
+            <option value="month">Monthly</option>
+            <option value="quarter">Quarterly</option>
+            <option value="ytd">YTD</option>
+          </select>
+        </label>
+      }
+
+      @if (questionType() === 'comparison') {
+        <label class="field">
+          <span class="field-label">Metrics to compare (pick 2-6)</span>
+        </label>
+        <div class="metric-checkboxes">
+          @for (group of metricGroups(); track group) {
+            <div class="metric-group-label">{{ group }}</div>
+            @for (m of metricsInGroup(group); track m.key) {
+              <label class="checkbox-row">
+                <input type="checkbox" [checked]="isComparisonMetricSelected(m.key)" (change)="toggleComparisonMetric(m.key)" />
+                <span>{{ m.label }}</span>
+              </label>
+            }
+          }
+        </div>
+
+        <label class="field">
+          <span class="field-label">Period</span>
+          <select [ngModel]="periodMode()" (ngModelChange)="periodMode.set($event); onSettingChange()">
+            <option value="month">Monthly</option>
+            <option value="quarter">Quarterly</option>
+            <option value="ytd">YTD</option>
+          </select>
+        </label>
+      }
+
       <label class="field">
-        <span class="field-label">Period</span>
-        <select [ngModel]="periodMode()" (ngModelChange)="periodMode.set($event); onSettingChange()">
-          <option value="month">Monthly</option>
-          <option value="quarter">Quarterly</option>
-          <option value="ytd">YTD</option>
+        <span class="field-label">Site</span>
+        <select [ngModel]="locationId()" (ngModelChange)="locationId.set($event); onSettingChange()">
+          <option value="">Company-wide</option>
+          @for (loc of locations(); track loc.id) {
+            <option [value]="loc.id">{{ loc.name }}</option>
+          }
         </select>
       </label>
 
-      <label class="field">
-        <span class="field-label">Trailing periods</span>
-        <input type="number" min="2" max="24" [ngModel]="months()" (ngModelChange)="months.set($event); onSettingChange()" />
-      </label>
-    </div>
-
-    <label class="field">
-      <span class="field-label">Site</span>
-      <select [ngModel]="locationId()" (ngModelChange)="locationId.set($event); onSettingChange()">
-        <option value="">Company-wide</option>
-        @for (loc of locations(); track loc.id) {
-          <option [value]="loc.id">{{ loc.name }}</option>
+      <div class="preview-wrap">
+        @if (questionType() === 'breakdown') {
+          <app-pie-chart title="Preview" [slices]="breakdownSlices()" [unit]="breakdownUnit()" [decimals]="1" [loading]="previewLoading()"></app-pie-chart>
+        } @else {
+          <app-rich-trend-chart
+            title="Preview"
+            [series]="trendChartSeries()"
+            [points]="trendPreviewPoints()"
+            defaultSeriesKey="value"
+            [loading]="previewLoading()"
+            [decimals]="2"
+          ></app-rich-trend-chart>
         }
-      </select>
-    </label>
+      </div>
 
-    <div class="preview-wrap">
-      <app-rich-trend-chart
-        title="Preview"
-        [series]="chartSeries()"
-        [points]="previewPoints()"
-        defaultSeriesKey="value"
-        [loading]="previewLoading()"
-        [decimals]="2"
-      ></app-rich-trend-chart>
-    </div>
+      <label class="field">
+        <span class="field-label">Chart name <span class="required">*</span></span>
+        <input type="text" [ngModel]="name()" (ngModelChange)="name.set($event)" placeholder="e.g. Water intensity, quarterly" />
+      </label>
 
-    <label class="field">
-      <span class="field-label">Chart name <span class="required">*</span></span>
-      <input type="text" [ngModel]="name()" (ngModelChange)="name.set($event)" placeholder="e.g. Water intensity, quarterly" />
-    </label>
+      <label class="field">
+        <span class="field-label">Description</span>
+        <textarea rows="2" [ngModel]="description()" (ngModelChange)="description.set($event)" placeholder="Optional"></textarea>
+      </label>
 
-    <label class="field">
-      <span class="field-label">Description</span>
-      <textarea rows="2" [ngModel]="description()" (ngModelChange)="description.set($event)" placeholder="Optional"></textarea>
-    </label>
-
-    <div class="panel-actions">
-      <button type="button" class="primary-btn" [disabled]="!canSave() || submitting()" (click)="save()">
-        {{ submitting() ? 'Saving…' : editing ? 'Save changes' : 'Save chart' }}
-      </button>
-    </div>
+      <div class="panel-actions">
+        <button type="button" class="primary-btn" [disabled]="!canSave() || submitting()" (click)="save()">
+          {{ submitting() ? 'Saving…' : editing ? 'Save changes' : 'Save chart' }}
+        </button>
+      </div>
+    }
   </div>
 </aside>

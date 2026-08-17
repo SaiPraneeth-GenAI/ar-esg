@@ -28,11 +28,37 @@ export interface ChartMetricData {
   points: ChartMetricPoint[];
 }
 
+export type QuestionType = 'trend' | 'breakdown' | 'comparison';
+
+export interface BreakdownDimension {
+  key: string;
+  label: string;
+}
+
+export interface BreakdownSlice {
+  label: string;
+  value: number;
+}
+
+export interface BreakdownData {
+  dimension: string;
+  label: string;
+  unit: string;
+  period_mode: PeriodMode;
+  slices: BreakdownSlice[];
+}
+
 export interface ChartConfig {
-  metric: string;
+  question_type: QuestionType;
+  // trend
+  metric: string | null;
   chart_kind: 'bar' | 'line';
   period_mode: PeriodMode;
   months: number;
+  // breakdown
+  dimension: string | null;
+  // comparison
+  metrics: string[] | null;
   location_id: string | null;
 }
 
@@ -73,6 +99,18 @@ export class ChartApiService {
     const params: Record<string, string> = { metric, period, period_mode: periodMode, months: String(months) };
     if (locationId) params['location_id'] = locationId;
     return firstValueFrom(this.http.get<ChartMetricData>(`${environment.apiBaseUrl}/charts/metric-data`, { headers, params }));
+  }
+
+  async listBreakdownDimensions(): Promise<BreakdownDimension[]> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(this.http.get<BreakdownDimension[]>(`${environment.apiBaseUrl}/charts/breakdown-dimensions`, { headers }));
+  }
+
+  async getBreakdownData(dimension: string, period: string, periodMode: PeriodMode, locationId?: string): Promise<BreakdownData> {
+    const headers = await this.authHeaders();
+    const params: Record<string, string> = { dimension, period, period_mode: periodMode };
+    if (locationId) params['location_id'] = locationId;
+    return firstValueFrom(this.http.get<BreakdownData>(`${environment.apiBaseUrl}/charts/breakdown-data`, { headers, params }));
   }
 
   async list(): Promise<SavedChart[]> {

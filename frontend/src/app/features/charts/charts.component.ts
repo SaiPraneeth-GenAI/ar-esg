@@ -1,6 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { ChartApiService, ChartMetric, ChartMetricPoint, SavedChart } from '../../core/chart-api.service';
+import { BreakdownDimension, ChartApiService, ChartMetric, ChartMetricPoint, SavedChart } from '../../core/chart-api.service';
 import { PeriodMode } from '../../core/intensity-api.service';
+import { PieChartComponent, PieSlice } from '../../shared/pie-chart/pie-chart.component';
 import { ChartPoint, ChartSeriesDef, RichTrendChartComponent } from '../../shared/rich-trend-chart/rich-trend-chart.component';
 import { ChartBuilderPanelComponent } from './chart-builder-panel/chart-builder-panel.component';
 
@@ -9,19 +10,27 @@ function currentMonthValue(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function formatBucketLabel(p: { bucket_start: string | null; bucket_end: string | null; period: string }, mode: PeriodMode): string {
+  const end = new Date(`${p.bucket_end ?? p.period}T00:00:00`);
+  if (mode === 'ytd') return `${end.getFullYear()}`;
+  if (mode === 'quarter') return `Q${Math.floor(end.getMonth() / 3) + 1} '${String(end.getFullYear()).slice(2)}`;
+  return end.toLocaleDateString('en-US', { month: 'short' });
+}
+
 interface RenderedChart {
   chart: SavedChart;
-  metricLabel: string;
-  metricUnit: string;
+  displayLabel: string;
   series: ChartSeriesDef[];
   points: ChartPoint[];
+  slices: PieSlice[];
+  unit: string;
   loading: boolean;
 }
 
 @Component({
   selector: 'app-charts',
   standalone: true,
-  imports: [RichTrendChartComponent, ChartBuilderPanelComponent],
+  imports: [RichTrendChartComponent, PieChartComponent, ChartBuilderPanelComponent],
   templateUrl: './charts.component.html',
   styleUrl: './charts.component.css'
 })
@@ -32,13 +41,23 @@ export class ChartsComponent implements OnInit {
   errorMessage = signal('');
   rendered = signal<RenderedChart[]>([]);
   metrics = signal<ChartMetric[]>([]);
+  dimensions = signal<BreakdownDimension[]>([]);
 
   showBuilder = signal(false);
   editingChart = signal<SavedChart | null>(null);
 
   async ngOnInit(): Promise<void> {
-    this.metrics.set(await this.chartApi.listMetrics());
+    const [metrics, dimensions] = await Promise.all([this.chartApi.listMetrics(), this.chartApi.listBreakdownDimensions()]);
+    this.metrics.set(metrics);
+    this.dimensions.set(dimensions);
     await this.refresh();
+  }
+
+  private displayLabel(chart: SavedChart): string {
+    const cfg = chart.config;
+    if (cfg.question_type === 'trend') return this.metrics().find((m) => m.key === cfg.metric)?.label ?? cfg.metric ?? '';
+    if (cfg.question_type === 'breakdown') return this.dimensions().find((d) => d.key === cfg.dimension)?.label ?? cfg.dimension ?? '';
+    return (cfg.metrics ?? []).map((k) => this.metrics().find((m) => m.key === k)?.label ?? k).join(' vs ');
   }
 
   async refresh(): Promise<void> {
@@ -48,10 +67,11 @@ export class ChartsComponent implements OnInit {
       const charts = await this.chartApi.list();
       const items: RenderedChart[] = charts.map((chart) => ({
         chart,
-        metricLabel: this.metrics().find((m) => m.key === chart.config.metric)?.label ?? chart.config.metric,
-        metricUnit: this.metrics().find((m) => m.key === chart.config.metric)?.unit ?? '',
+        displayLabel: this.displayLabel(chart),
         series: [],
         points: [],
+        slices: [],
+        unit: '',
         loading: true
       }));
       this.rendered.set(items);
@@ -64,32 +84,36 @@ export class ChartsComponent implements OnInit {
   }
 
   private async loadChartData(item: RenderedChart): Promise<void> {
+    const cfg = item.chart.config;
     try {
-      const data = await this.chartApi.getMetricData(
-        item.chart.config.metric,
-        `${currentMonthValue()}-01`,
-        item.chart.config.period_mode,
-        item.chart.config.months,
-        item.chart.config.location_id ?? undefined
-      );
-      item.series = [{ key: 'value', label: data.label, unit: data.unit, tracked: true }];
-      item.points = data.points.map((p: ChartMetricPoint) => ({
-        period: p.period,
-        label: this.formatBucketLabel(p, item.chart.config.period_mode),
-        valuesBySeries: { value: p.value },
-        priorYearValuesBySeries: { value: p.prior_year_value }
-      }));
+      if (cfg.question_type === 'breakdown' && cfg.dimension) {
+        const data = await this.chartApi.getBreakdownData(cfg.dimension, `${currentMonthValue()}-01`, cfg.period_mode, cfg.location_id ?? undefined);
+        item.slices = data.slices.map((s) => ({ label: s.label, value: s.value }));
+        item.unit = data.unit;
+      } else if (cfg.question_type === 'comparison' && cfg.metrics) {
+        const results = await Promise.all(
+          cfg.metrics.map((key) => this.chartApi.getMetricData(key, `${currentMonthValue()}-01`, cfg.period_mode, 1, cfg.location_id ?? undefined))
+        );
+        item.series = [{ key: 'value', label: item.displayLabel, unit: results[0]?.unit ?? '', tracked: true }];
+        item.points = results.map((data, i) => ({
+          period: cfg.metrics![i],
+          label: this.metrics().find((m) => m.key === cfg.metrics![i])?.label ?? cfg.metrics![i],
+          valuesBySeries: { value: data.points[0]?.value ?? null }
+        }));
+      } else if (cfg.metric) {
+        const data = await this.chartApi.getMetricData(cfg.metric, `${currentMonthValue()}-01`, cfg.period_mode, cfg.months, cfg.location_id ?? undefined);
+        item.series = [{ key: 'value', label: data.label, unit: data.unit, tracked: true }];
+        item.points = data.points.map((p: ChartMetricPoint) => ({
+          period: p.period,
+          label: formatBucketLabel(p, cfg.period_mode),
+          valuesBySeries: { value: p.value },
+          priorYearValuesBySeries: { value: p.prior_year_value }
+        }));
+      }
     } finally {
       item.loading = false;
       this.rendered.set([...this.rendered()]);
     }
-  }
-
-  private formatBucketLabel(p: ChartMetricPoint, mode: PeriodMode): string {
-    const end = new Date(`${p.bucket_end ?? p.period}T00:00:00`);
-    if (mode === 'ytd') return `${end.getFullYear()}`;
-    if (mode === 'quarter') return `Q${Math.floor(end.getMonth() / 3) + 1} '${String(end.getFullYear()).slice(2)}`;
-    return end.toLocaleDateString('en-US', { month: 'short' });
   }
 
   openNewChart(): void {
