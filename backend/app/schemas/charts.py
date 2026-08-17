@@ -17,6 +17,7 @@ class ChartMetricPoint(BaseModel):
     bucket_end: date | None
     value: float | None
     prior_year_value: float | None
+    target_value: float | None = None
 
 
 class ChartMetricDataOut(BaseModel):

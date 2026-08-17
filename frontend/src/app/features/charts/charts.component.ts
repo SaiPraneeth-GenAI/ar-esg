@@ -120,7 +120,8 @@ export class ChartsComponent implements OnInit {
           period: p.period,
           label: formatBucketLabel(p, cfg.period_mode),
           valuesBySeries: { value: p.value },
-          priorYearValuesBySeries: { value: p.prior_year_value }
+          priorYearValuesBySeries: { value: p.prior_year_value },
+          targetValuesBySeries: { value: p.target_value }
         }));
       }
     } finally {

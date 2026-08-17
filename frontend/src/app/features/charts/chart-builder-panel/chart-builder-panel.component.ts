@@ -186,7 +186,8 @@ export class ChartBuilderPanelComponent implements OnInit {
             period: p.period,
             label: this.formatBucketLabel(p),
             valuesBySeries: { value: p.value },
-            priorYearValuesBySeries: { value: p.prior_year_value }
+            priorYearValuesBySeries: { value: p.prior_year_value },
+            targetValuesBySeries: { value: p.target_value }
           }))
         );
       } else if (this.questionType() === 'breakdown') {

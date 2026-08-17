@@ -62,12 +62,15 @@ def get_metric_data(
     if spec is None:
         raise HTTPException(status_code=404, detail="Unknown metric.")
 
+    target_field = spec.get("target_field")
+
     if spec["source"] == "carbon":
         rows = carbon_trend(period=period, months=months, location_id=location_id, period_mode=period_mode, current=current, db=db)
         points = [
             ChartMetricPoint(
                 period=r.period, bucket_start=r.bucket_start, bucket_end=r.bucket_end,
                 value=getattr(r, spec["field"]), prior_year_value=getattr(r, spec["prior_field"]),
+                target_value=getattr(r, target_field) if target_field else None,
             )
             for r in rows
         ]
@@ -77,6 +80,7 @@ def get_metric_data(
             ChartMetricPoint(
                 period=r.period, bucket_start=r.bucket_start, bucket_end=r.bucket_end,
                 value=getattr(r, spec["field"]), prior_year_value=getattr(r, spec["prior_field"]),
+                target_value=getattr(r, target_field) if target_field else None,
             )
             for r in rows
         ]

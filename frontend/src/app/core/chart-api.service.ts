@@ -18,6 +18,7 @@ export interface ChartMetricPoint {
   bucket_end: string | null;
   value: number | null;
   prior_year_value: number | null;
+  target_value: number | null;
 }
 
 export interface ChartMetricData {
