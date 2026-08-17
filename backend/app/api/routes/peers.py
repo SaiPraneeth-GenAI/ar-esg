@@ -32,7 +32,7 @@ from app.schemas.peers import (
     PeerExtractOut,
     PeerExtractRow,
 )
-from app.services.peer_extraction import extract_metrics_via_ai, extract_relevant_text
+from app.services.peer_extraction import extract_metrics_via_ai, select_relevant_pages
 
 router = APIRouter(prefix="/peers", tags=["peers"])
 
@@ -147,8 +147,8 @@ async def extract_peer_pdf(
         raise HTTPException(status_code=422, detail="Upload a PDF file.")
 
     pdf_bytes = await file.read()
-    text = extract_relevant_text(pdf_bytes)
-    extracted = extract_metrics_via_ai(text)
+    page_images = select_relevant_pages(pdf_bytes)
+    extracted = extract_metrics_via_ai(page_images)
 
     rows = [
         PeerExtractRow(
