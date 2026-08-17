@@ -1,7 +1,14 @@
 name: Deploy frontend to Azure Static Web Apps
 
-# Manual trigger only, on purpose -- see azure-backend.yml for why.
+# Azure is the system of record -- auto-deploys on every push that touches
+# the frontend, same as Render used to. workflow_dispatch stays available
+# for a manual re-run.
 on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/azure-frontend.yml"
   workflow_dispatch: {}
 
 jobs:

@@ -1,10 +1,14 @@
 name: Deploy backend to Azure Container Apps
 
-# Manual trigger only, on purpose -- this is prep for a deliberate cutover,
-# not an auto-deploy-on-push pipeline like the current Render setup. Flip
-# the `on:` block to `push: { branches: [main], paths: ['backend/**'] }`
-# once Azure is the system of record and Render is being retired.
+# Azure is the system of record -- auto-deploys on every push that touches
+# the backend, same as Render used to. workflow_dispatch stays available
+# for a manual re-run (e.g. redeploying without a code change).
 on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/azure-backend.yml"
   workflow_dispatch: {}
 
 env:
