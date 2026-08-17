@@ -193,7 +193,7 @@ export class PeerAnalysisComponent implements OnInit {
       return;
     }
     if (!this.canAddPeer()) {
-      this.addPeerError.set(`Up to ${MAX_PEERS} peers at a time -- archive one first if you need a different one.`);
+      this.addPeerError.set(`Up to ${MAX_PEERS} peers at a time — archive one first if you need a different one.`);
       return;
     }
     this.addPeerError.set('');

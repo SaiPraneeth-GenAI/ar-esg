@@ -112,7 +112,7 @@
           <button type="button" class="link-btn" (click)="toggleHistory(i)">History</button>
         </div>
         @if (editingApproved(field)) {
-          <p class="approved-edit-hint">Editing this sends it back to Draft -- it'll need Submit and Approve again before the correction counts anywhere.</p>
+          <p class="approved-edit-hint">Editing this entry sends it back to Draft — it will need to be submitted and approved again before the correction takes effect.</p>
         }
         @if (field.historyOpen && field.entry) {
           <app-entry-history [entryId]="field.entry.id"></app-entry-history>

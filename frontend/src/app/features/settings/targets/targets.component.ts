@@ -126,7 +126,7 @@ export class TargetsComponent implements OnInit {
       return 'Activate this target to start tracking monthly progress against it.';
     }
     if (t.status === 'archived') {
-      return 'Archived -- kept for reference, no longer tracked month to month.';
+      return 'Archived — kept for reference, no longer tracked month to month.';
     }
     if (t.baseline_value === null || t.target_value === null) {
       return 'Waiting on enough approved data to lock a baseline before progress can be tracked.';
@@ -143,11 +143,11 @@ export class TargetsComponent implements OnInit {
 
     switch (t.current_status_label) {
       case 'On track':
-        return `On track -- hold this pace through ${byWhen} to land on target.`;
+        return `On track — hold this pace through ${byWhen} to land on target.`;
       case 'Watch':
-        return `Slipping -- needs to ${closeText} to get back on pace for ${byWhen}.`;
+        return `Slipping — needs to ${closeText} to get back on pace for ${byWhen}.`;
       case 'Off track':
-        return `Behind pace -- needs to ${closeText} before ${byWhen} to catch up.`;
+        return `Behind pace — needs to ${closeText} before ${byWhen} to catch up.`;
       default:
         return `Tracking toward ${byWhen}.`;
     }
@@ -211,7 +211,7 @@ export class TargetsComponent implements OnInit {
   async restoreTarget(t: TargetOut): Promise<void> {
     try {
       await this.api.restore(t.id);
-      this.successMessage.set('Target restored as a draft -- review it and reactivate when ready.');
+      this.successMessage.set('Target restored as a draft — review it and reactivate when ready.');
       await this.refresh();
     } catch {
       this.errorMessage.set('Could not restore this target.');

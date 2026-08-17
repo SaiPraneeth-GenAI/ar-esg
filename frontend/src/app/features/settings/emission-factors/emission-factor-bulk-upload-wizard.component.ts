@@ -98,7 +98,7 @@ export class EmissionFactorBulkUploadWizardComponent {
     try {
       const sheets = await parseWorkbookAllSheets(file);
       if (sheets.length === 0) {
-        this.parseError.set('This file looks empty -- no sheets with data found.');
+        this.parseError.set('This file looks empty — no sheets with data found.');
         return;
       }
       this.parsedSheets.set(sheets);

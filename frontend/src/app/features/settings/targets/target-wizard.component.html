@@ -94,7 +94,7 @@
       </label>
 
       @if (!baselinePreview()?.ready) {
-        <p class="warning-text">Not enough approved data yet to activate this target -- you can still save it as a draft.</p>
+        <p class="warning-text">Not enough approved data yet to activate this target — you can still save it as a draft.</p>
       }
 
       <button type="button" class="link-btn" (click)="showReductionHelper.set(!showReductionHelper())">
@@ -143,7 +143,7 @@
           </table>
           <p class="phase-total" [class.mismatch]="phasedMismatch()">
             Sum: {{ phasedTotal() | number: '1.2-4' }} / {{ targetValue() | number: '1.2-4' }}
-            @if (phasedMismatch()) { -- doesn't match the target value yet }
+            @if (phasedMismatch()) { — doesn't match the target value yet }
           </p>
         }
       }

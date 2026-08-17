@@ -165,7 +165,7 @@ export class EntryFormComponent implements OnChanges {
       setTimeout(() => this.updateField(index, { autosaved: false }), 2000);
     } catch {
       this.updateField(index, { saving: false });
-      this.errorMessage.set(`Could not save ${field.dataPoint.name} -- your change wasn't saved, please try again.`);
+      this.errorMessage.set(`Could not save ${field.dataPoint.name} — your change wasn't saved, please try again.`);
     }
   }
 

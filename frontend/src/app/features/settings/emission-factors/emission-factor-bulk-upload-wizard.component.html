@@ -9,9 +9,8 @@
   @if (step() === 'upload') {
     <div class="wizard-body">
       <p class="wizard-intro">
-        Upload the workbook as-is -- Scope-1/2/3 tabs, wide year columns, a factor value written into a sentence in
-        one cell, consumption/output columns sitting next to the factor. Nothing gets created until you review and
-        confirm the preview.
+        Upload your workbook as-is — we'll handle multiple tabs, year columns, and factors written in different
+        formats. Nothing is saved until you review and confirm the preview.
       </p>
 
       <div class="toolbar-row">
@@ -28,7 +27,7 @@
           </select>
         </label>
       </div>
-      <p class="wizard-hint">Used for any row with no year column of its own, or no per-row method column -- both common in the real file.</p>
+      <p class="wizard-hint">Used for any row with no year column of its own, or no per-row method column — both common in the real file.</p>
 
       <div
         class="dropzone"
@@ -61,7 +60,7 @@
 
   @if (step() === 'mapping') {
     <div class="wizard-body">
-      <p class="wizard-intro"><strong>{{ fileName() }}</strong> -- review how each sheet and column was read. Mark anything that isn't a factor value as Skip.</p>
+      <p class="wizard-intro"><strong>{{ fileName() }}</strong> — review how each sheet and column was read, and mark anything that isn't a factor value as Skip.</p>
 
       @for (sheet of detection(); track sheet.sheet_name + sheet.block_index) {
         <div class="sheet-card">
@@ -181,7 +180,7 @@
                 <td><input type="text" class="source-input" [ngModel]="row.source_reference" (ngModelChange)="updateRow(rowKey(row), { source_reference: $event })" /></td>
                 <td class="nowrap">
                   @if (row.ipcc_match) {
-                    <span class="ipcc-match" [title]="row.ipcc_match.publication + ' -- ' + row.ipcc_match.effective_year">
+                    <span class="ipcc-match" [title]="row.ipcc_match.publication + ' — ' + row.ipcc_match.effective_year">
                       {{ row.ipcc_match.reference_value }} {{ row.ipcc_match.unit }}
                       @if (row.ipcc_match.delta_pct !== null) {
                         <span [class.delta-high]="row.ipcc_match.delta_pct !== null && (row.ipcc_match.delta_pct > 10 || row.ipcc_match.delta_pct < -10)">
@@ -229,7 +228,7 @@
           </div>
           <p class="confirm-headline">{{ commitResult()!.created }} emission factors created.</p>
           @if (commitResult()!.error > 0) {
-            <p class="confirm-subline">{{ commitResult()!.error }} row(s) could not be created -- something changed since validation.</p>
+            <p class="confirm-subline">{{ commitResult()!.error }} row(s) could not be created — something changed since validation.</p>
           }
           <div class="wizard-nav centered">
             <button type="button" class="primary-btn" (click)="finish()">Done</button>
@@ -237,7 +236,7 @@
         </div>
       } @else {
         <p class="wizard-intro summary-headline">{{ includedValidRows().length }} emission factors will be created.</p>
-        <p class="wizard-intro">These land directly in the factor library, versioned by year -- nothing is overwritten.</p>
+        <p class="wizard-intro">These land directly in the factor library, versioned by year — nothing is overwritten.</p>
 
         @if (commitError()) {
           <div class="banner error">{{ commitError() }}</div>

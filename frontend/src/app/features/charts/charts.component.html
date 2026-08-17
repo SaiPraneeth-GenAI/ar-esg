@@ -3,7 +3,7 @@
     <div>
       <h1>Charts</h1>
       @if (activeTab() === 'company') {
-        <p class="subtitle">Build a chart from any metric this platform already tracks -- no SQL, always live data.</p>
+        <p class="subtitle">Build a chart from any metric you're tracking. No setup required — it stays current automatically.</p>
       } @else {
         <p class="subtitle">Benchmark Amara Raja against other companies' published ESG figures.</p>
       }
@@ -27,7 +27,7 @@
       <p class="muted">Loading your charts…</p>
     } @else if (companyCharts().length === 0) {
       <div class="empty-state">
-        <p>No charts yet. Build one from any GHG, intensity, or safety metric this platform tracks.</p>
+        <p>No charts yet. Build one from any GHG, intensity, or safety metric you're tracking.</p>
         <button type="button" class="primary-btn" (click)="openNewChart()">+ New chart</button>
       </div>
     } @else {

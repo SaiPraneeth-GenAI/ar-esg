@@ -18,7 +18,7 @@
         <span class="denominator-value">{{ denominatorValue() | number: '1.1-2' }} <span class="denominator-unit">{{ denominatorUnit() }}</span></span>
       } @else {
         <span class="denominator-empty">
-          Not yet entered -- {{ mode === 'production' ? 'production volume' : 'revenue' }} intensity is unavailable until an approved entry exists for this month.
+          Not yet entered — {{ mode === 'production' ? 'production volume' : 'revenue' }} intensity is unavailable until an approved entry exists for this month.
         </span>
       }
     </div>
@@ -57,7 +57,7 @@
     </div>
 
     <app-rich-trend-chart
-      title="Trend -- last {{ trendPoints().length }} {{ periodMode === 'quarter' ? 'quarters' : periodMode === 'ytd' ? 'years' : 'months' }}"
+      title="Trend — last {{ trendPoints().length }} {{ periodMode === 'quarter' ? 'quarters' : periodMode === 'ytd' ? 'years' : 'months' }}"
       [series]="chartSeries()"
       [points]="trendPoints()"
       defaultSeriesKey="ghg"

@@ -3,7 +3,7 @@
     <div class="header-row">
       <div>
         <h1>Emission factors</h1>
-        <p class="subtitle">The factor library used to convert activity data into GHG emissions -- versioned, so an update never silently rewrites a historical calculation.</p>
+        <p class="subtitle">The library of factors used to convert activity data into GHG emissions. Past calculations stay intact even after a factor is updated.</p>
       </div>
       @if (mode() === 'list') {
         <button type="button" class="primary-btn" (click)="openAddPanel()">
@@ -80,7 +80,7 @@
                 <td>
                   {{ displayName(f) }}
                   @if (f.scope === 3 && f.description) {
-                    <span class="muted-inline"> -- {{ f.description }}</span>
+                    <span class="muted-inline"> — {{ f.description }}</span>
                   }
                   @if (!f.is_active) {
                     <span class="inactive-badge">Inactive</span>

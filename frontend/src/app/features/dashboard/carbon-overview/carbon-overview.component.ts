@@ -362,7 +362,7 @@ export class CarbonOverviewComponent implements OnChanges {
 
   targetTooltip(t: TargetStatusOut): string {
     const actualStr = t.actual !== null ? t.actual.toFixed(2) : 'no data yet';
-    return `${t.label}: ${actualStr} vs goal ${t.target_value.toFixed(2)} ${t.unit} -- ${t.status}`;
+    return `${t.label}: ${actualStr} vs goal ${t.target_value.toFixed(2)} ${t.unit} — ${t.status}`;
   }
 
   /** The whole card is colored by target status, not a small dot -- On

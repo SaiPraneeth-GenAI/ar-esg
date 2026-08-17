@@ -9,7 +9,7 @@ import { SupabaseService } from '../../core/supabase.service';
 const PITCH_LINES = [
   'Scope 1+2 emissions tracked to the exact calculation snapshot',
   'One-click BRSR-ready PDF & PPTX exports, every dashboard tab',
-  'AI insights, guardrailed to your real numbers -- never invented',
+  'AI insights, guardrailed to your real numbers — never invented',
   'Live target tracking against every site, every metric'
 ];
 

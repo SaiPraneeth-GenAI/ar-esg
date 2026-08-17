@@ -256,7 +256,7 @@ export class PeerApiService {
         }
         reject(new Error(detail));
       };
-      xhr.onerror = () => reject(new Error('Upload failed -- check your connection and try again.'));
+      xhr.onerror = () => reject(new Error('Upload failed — check your connection and try again.'));
       xhr.send(form);
     });
   }
@@ -301,7 +301,7 @@ export class PeerApiService {
           consecutiveFailures++;
           console.warn(`[peer-extraction] poll failed (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`, jobId, err);
           if (consecutiveFailures < MAX_CONSECUTIVE_FAILURES) return; // try again on the next tick
-          this.extractError.set('Lost track of the extraction job -- please try uploading again.');
+          this.extractError.set('Lost track of the extraction job — please try uploading again.');
           this.finishJob();
           resolve(null);
         }

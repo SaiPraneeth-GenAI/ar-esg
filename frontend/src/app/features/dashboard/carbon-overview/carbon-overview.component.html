@@ -3,7 +3,7 @@
     <div>
       <h2 class="carbon-title">Carbon footprint</h2>
       <p class="carbon-subtitle">
-        From approved entries and their versioned emission factor -- calculation snapshots only, never a live sum.
+        Calculated from approved entries and current emission factors, and updated each time new data is approved.
         @if (overview()) { <span class="range-badge">{{ formatRangeLabel(overview()!) }}</span> }
       </p>
     </div>
@@ -77,7 +77,7 @@
             <a class="target-link" routerLink="/admin/targets">No target set</a>
           }
         } @else {
-          <div class="card-empty">Missing approved battery production -- add it to see intensity</div>
+          <div class="card-empty">Missing approved battery production — add it to see intensity</div>
         }
       </div>
 
@@ -183,7 +183,7 @@
 
     <div class="pie-row">
       <app-pie-chart
-        title="Major contributors -- total emissions"
+        title="Major contributors — total emissions"
         [slices]="totalContributionSlices()"
         unit="tCO2e"
         [decimals]="1"
@@ -191,7 +191,7 @@
       ></app-pie-chart>
 
       <app-pie-chart
-        title="Major contributors -- within Scope {{ scopeFilter() }}"
+        title="Major contributors — within Scope {{ scopeFilter() }}"
         [slices]="scopeContributionSlices()"
         unit="tCO2e"
         [decimals]="1"
@@ -208,7 +208,7 @@
     </div>
 
     <app-rich-trend-chart
-      title="GHG trend -- last {{ trendPoints().length }} {{ periodMode === 'quarter' ? 'quarters' : periodMode === 'ytd' ? 'years' : 'months' }}"
+      title="GHG trend — last {{ trendPoints().length }} {{ periodMode === 'quarter' ? 'quarters' : periodMode === 'ytd' ? 'years' : 'months' }}"
       [series]="ghgSeries"
       [points]="trendPoints()"
       defaultSeriesKey="scope1_2"
@@ -250,7 +250,7 @@
 
     @if (overview()!.sources.length > 0) {
       <div class="source-breakdown">
-        <h3>Source breakdown -- {{ formatRangeLabel(overview()!) }}</h3>
+        <h3>Source breakdown — {{ formatRangeLabel(overview()!) }}</h3>
         <div class="source-bars">
           @for (source of sortedSources(); track sourceKey(source)) {
             <div class="source-bar-row">

@@ -107,7 +107,7 @@ export class UserRolesComponent implements OnInit {
   async removeFromRole(user: AdminUser, roleKey: string): Promise<void> {
     const remaining = user.roles.filter((r) => r !== roleKey);
     if (remaining.length === 0) {
-      this.errorMessage.set(`${user.email} needs at least one role -- assign another role before removing ${roleKey}.`);
+      this.errorMessage.set(`${user.email} needs at least one role — assign another role before removing ${roleKey}.`);
       return;
     }
     if (!confirm(`Remove the ${roleKey} role from ${user.email}?`)) {

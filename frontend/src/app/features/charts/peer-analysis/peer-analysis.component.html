@@ -59,7 +59,7 @@
         <div class="step-badge">1</div>
         <div class="step-body">
           <h2>Upload {{ company()?.name }}'s {{ year() }} BRSR report</h2>
-          <p class="step-desc">Upload the PDF and AI will pull out the figures that line up with what Amara Raja already tracks -- Scope 1/2, intensity, and safety metrics. You'll review them before anything is saved.</p>
+          <p class="step-desc">Upload the PDF and AI will pull out the figures that line up with what Amara Raja already tracks — Scope 1/2, intensity, and safety metrics. You'll review them before anything is saved.</p>
 
           @if (peerApi.extractError()) {
             <div class="banner error">{{ peerApi.extractError() }}</div>
@@ -70,7 +70,7 @@
               <div class="upload-progress-ring">{{ peerApi.uploadProgressPct() }}%</div>
               <div>
                 <span class="reading-title">Uploading {{ peerApi.extractFileName() }}…</span>
-                <p class="reading-hint">Sending the file to be read -- large reports can take a minute or two depending on your connection.</p>
+                <p class="reading-hint">Uploading your file — large reports can take a minute or two depending on your connection.</p>
                 <div class="upload-progress-bar"><div class="upload-progress-fill" [style.width.%]="peerApi.uploadProgressPct()"></div></div>
               </div>
             </div>
@@ -79,7 +79,7 @@
               <span class="spinner"></span>
               <div>
                 <span class="reading-title">Reading {{ peerApi.extractFileName() }}… {{ peerApi.extractElapsedSeconds() }}s</span>
-                <p class="reading-hint">Upload complete -- AI is reading the report now. This runs in the background -- feel free to switch tabs and come back.</p>
+                <p class="reading-hint">Upload complete. We're reading the report now — this can take a minute, and you're free to switch tabs while you wait.</p>
               </div>
             </div>
           } @else {

@@ -32,7 +32,7 @@
     <p class="muted">Loading…</p>
   } @else if (currentSeries() && !currentSeries()!.tracked) {
     <div class="not-tracked">
-      <p>{{ currentSeries()!.label }} isn't calculated anywhere in this platform yet -- no entries, no factors, no numbers to chart.</p>
+      <p>No data yet for {{ currentSeries()!.label }} — add entries and emission factors to start seeing this chart.</p>
     </div>
   } @else if (chartKind() === 'bar') {
     <div class="bar-chart-wrap">

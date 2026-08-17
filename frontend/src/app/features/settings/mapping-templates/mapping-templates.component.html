@@ -2,8 +2,8 @@
   <header>
     <h1>Mapping templates</h1>
     <p class="subtitle">
-      What this saves you time on: when someone maps a bulk-upload file's columns to fields here, it's remembered.
-      The next time a file with the exact same column headers is uploaded, that mapping step is skipped automatically.
+      Column mappings from your bulk uploads are saved here. The next time you upload a file with the same column
+      headers, mapping is applied automatically.
     </p>
   </header>
 
@@ -16,9 +16,8 @@
   } @else if (templates().length === 0) {
     <div class="empty-state">
       <p>
-        Nothing saved yet -- and that's normal until someone does their first bulk upload. The first time a Manager
-        maps an uploaded file's columns, it's saved here automatically. From then on, any file with that same
-        column layout skips the mapping step and goes straight to validation.
+        No mapping templates yet — one is created automatically the first time a Manager maps a bulk upload's
+        columns. After that, files with the same layout skip straight to validation.
       </p>
     </div>
   } @else {

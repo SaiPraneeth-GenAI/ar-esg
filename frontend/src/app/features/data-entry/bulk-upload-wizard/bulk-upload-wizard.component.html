@@ -34,10 +34,9 @@
       }
 
       <p class="optional-template">
-        Don't have a file yet? Track this in a spreadsheet already? Either works -- upload whatever you have and
-        we'll help map its columns in step 3, or
+        Already tracking this in a spreadsheet? Upload it as-is — we'll help map its columns in the next step. Or
         <button type="button" class="link-btn" (click)="downloadTemplate()">download a blank template</button>
-        to start from. No Period column needed for a single month -- it'll use the period selected above. Add your
+        to start from. No Period column needed for a single month — it'll use the period selected above. Add your
         own Period/Month column only if you want to backfill several months in one upload.
       </p>
     </div>
@@ -45,7 +44,7 @@
 
   @if (step() === 'preview') {
     <div class="wizard-body">
-      <p class="wizard-intro"><strong>{{ fileName() }}</strong> -- first {{ previewRows().length }} of {{ rawRows().length }} rows</p>
+      <p class="wizard-intro"><strong>{{ fileName() }}</strong> — first {{ previewRows().length }} of {{ rawRows().length }} rows</p>
       <div class="table-scroll">
         <table class="preview-table">
           <thead>
@@ -90,7 +89,7 @@
       @if (uploadMode() === 'wide') {
         <p class="wizard-intro">
           Each column below looks like it's its own metric (e.g. "Diesel Consumed", "Grid Electricity"). We've matched
-          what we recognize -- confirm or fix the rest.
+          what we recognize — confirm or fix the rest.
         </p>
 
         @if (wideDetecting()) {
@@ -110,7 +109,7 @@
                   <td class="mapping-header">{{ col.header || '(blank)' }}</td>
                   <td>
                     <select [ngModel]="wideMapping()[i] ?? ''" (ngModelChange)="setWideMapping(i, $event)">
-                      <option value="">Unmatched -- ignore this column</option>
+                      <option value="">Unmatched — ignore this column</option>
                       <option value="period">Period / Month</option>
                       <option value="note">Note</option>
                       @for (dp of category!.data_points; track dp.id) {
@@ -139,7 +138,7 @@
         </div>
       } @else {
         <p class="wizard-intro">Match each column in your file to a field. We've guessed based on the header names.</p>
-        <p class="wizard-hint">Period / Month is optional -- leave it unmatched and every row uses the period selected above.</p>
+        <p class="wizard-hint">Period / Month is optional — leave it unmatched and every row uses the period selected above.</p>
 
         <table class="mapping-table">
           <thead>
@@ -154,7 +153,7 @@
                 <td class="mapping-header">{{ m.header || '(blank)' }}</td>
                 <td>
                   <select [ngModel]="m.target ?? ''" (ngModelChange)="setMapping(m.headerIndex, $event)">
-                    <option value="">Unmatched -- ignore this column</option>
+                    <option value="">Unmatched — ignore this column</option>
                     @for (field of targetFields; track field.key) {
                       <option [value]="field.key">{{ field.label }}{{ field.required ? ' *' : '' }}</option>
                     }
@@ -193,7 +192,7 @@
         <p class="wizard-intro">
           {{ includedValidRows().length }} valid, {{ errorRows().length }} flagged out of {{ rows().length }} rows.
           Rows with no Period will use <strong>{{ period | date: 'MMMM yyyy' }}</strong>. Fix a flagged row directly
-          below, then Recheck -- or download the file back with every issue and suggested fix marked, fix it in
+          below, then Recheck — or download the file back with every issue and suggested fix marked, fix it in
           Excel, and re-upload.
         </p>
 
@@ -332,7 +331,7 @@
           </div>
           <p class="confirm-headline">{{ commitResult()!.created }} entries created and submitted for approval.</p>
           @if (commitResult()!.error > 0) {
-            <p class="confirm-subline">{{ commitResult()!.error }} row(s) could not be created -- something changed since validation.</p>
+            <p class="confirm-subline">{{ commitResult()!.error }} row(s) could not be created — something changed since validation.</p>
           }
           <div class="wizard-nav centered">
             <button type="button" class="primary-btn" (click)="finish()">Done</button>

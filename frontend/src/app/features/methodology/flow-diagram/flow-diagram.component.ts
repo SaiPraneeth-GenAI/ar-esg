@@ -501,7 +501,7 @@ export class FlowDiagramComponent implements OnInit {
       case 'scope2-total':
         return 'Sum of approved grid-electricity calculations (location-based)';
       case 'scope3-total':
-        return 'Not calculated yet -- deliberately deferred';
+        return 'Not calculated yet — deliberately deferred';
       case 'energy-total':
         return 'Sum of fuel MJ + electricity MJ, ÷ 1000 = GJ';
       case 'water-total':
@@ -521,7 +521,7 @@ export class FlowDiagramComponent implements OnInit {
       case 'unresolved-queue':
         return 'Excluded from every total until an Admin resolves it';
       case 'safety-input':
-        return 'Entered directly, never calculated -- LTIFR is computed by HR before it reaches this platform';
+        return 'Entered directly, never calculated — LTIFR is provided by HR';
       case 'dashboard':
         return 'Four tabs: Absolute Metrics, Intensity by Production, Intensity by Revenue, Safety & Trends';
       default:
@@ -530,14 +530,14 @@ export class FlowDiagramComponent implements OnInit {
   }
 
   private noteFor(node: FlowNode): string {
-    if (!node.live) return 'Planned -- not calculated in the platform yet.';
+    if (!node.live) return 'Planned — not calculated yet.';
     switch (node.kind) {
       case 'input':
         return node.sourceName
           ? 'Click a row below to see the exact factor version used for that entry.'
           : 'Read from the same approved entries the rest of the dashboard uses.';
       case 'warning':
-        return 'Never silently estimated -- the entry is set aside until a human fixes the underlying data.';
+        return 'Never silently estimated — the entry is set aside until a human fixes the underlying data.';
       default:
         return 'Computed from approved calculation snapshots for the selected period, never a live sum.';
     }

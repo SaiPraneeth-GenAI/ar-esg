@@ -1,7 +1,6 @@
 <div class="safety-view">
   <p class="section-note">
-    Safety metrics are entered directly, not calculated from activity data -- LTIFR is computed by HR before it reaches this
-    platform.
+    Safety metrics are entered directly rather than calculated — LTIFR is provided by HR.
   </p>
 
   @if (errorMessage()) {
@@ -38,7 +37,7 @@
     </div>
 
     <app-rich-trend-chart
-      title="Trend -- last {{ trendPoints().length }} {{ periodMode === 'quarter' ? 'quarters' : periodMode === 'ytd' ? 'years' : 'months' }}"
+      title="Trend — last {{ trendPoints().length }} {{ periodMode === 'quarter' ? 'quarters' : periodMode === 'ytd' ? 'years' : 'months' }}"
       [series]="chartSeries()"
       [points]="trendPoints()"
       defaultSeriesKey="LTIFR"

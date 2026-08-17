@@ -196,7 +196,7 @@ export class BulkUploadWizardComponent {
     try {
       const { headers, rows } = await parseSpreadsheet(file);
       if (headers.length === 0 || rows.length === 0) {
-        this.parseError.set('This file looks empty -- no rows to import.');
+        this.parseError.set('This file looks empty — no rows to import.');
         return;
       }
       this.headers.set(headers);
@@ -243,7 +243,7 @@ export class BulkUploadWizardComponent {
         // for a manual mapping screen to usefully ask, so skip straight
         // to showing the actual data.
         const count = this.wideDetectResult()?.columns.length ?? 0;
-        this.autoMappedMessage.set(`Recognized all ${count} columns automatically -- nothing to map.`);
+        this.autoMappedMessage.set(`Recognized all ${count} columns automatically — nothing to map.`);
         await this.runValidation();
       } else {
         this.step.set('mapping');

@@ -66,7 +66,7 @@ export const COLUMN_ROLE_LABEL: Record<string, string> = {
   source_reference: 'Source reference',
   value: 'Factor value',
   year_value: 'Factor value (year-specific)',
-  skip: 'Skip -- not a factor'
+  skip: 'Skip — not a factor'
 };
 
 export const COLUMN_ROLE_OPTIONS = Object.keys(COLUMN_ROLE_LABEL);
