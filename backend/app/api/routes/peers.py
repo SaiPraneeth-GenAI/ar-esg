@@ -144,7 +144,7 @@ def _data_out(db: Session, row: PeerData) -> PeerDataOut:
 
 def _run_extraction_job(job_id: str, pdf_bytes: bytes, year: int, company_id: uuid.UUID, company_name: str, filename: str, user: CurrentUser) -> None:
     try:
-        extracted = extract_metrics_from_pdf(pdf_bytes)
+        extracted, elapsed_seconds = extract_metrics_from_pdf(pdf_bytes)
         db = SessionLocal()
         try:
             rows = [
@@ -160,7 +160,10 @@ def _run_extraction_job(job_id: str, pdf_bytes: bytes, year: int, company_id: uu
             ]
         finally:
             db.close()
-        result = PeerExtractOut(peer_company_id=company_id, peer_company_name=company_name, year=year, source_filename=filename, rows=rows)
+        result = PeerExtractOut(
+            peer_company_id=company_id, peer_company_name=company_name, year=year, source_filename=filename,
+            rows=rows, elapsed_seconds=elapsed_seconds,
+        )
         with _EXTRACT_JOBS_LOCK:
             _EXTRACT_JOBS[job_id] = {"status": "done", "result": result}
     except Exception as exc:

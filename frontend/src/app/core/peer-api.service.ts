@@ -51,6 +51,7 @@ export interface PeerExtractResult {
   year: number;
   source_filename: string;
   rows: PeerExtractRow[];
+  elapsed_seconds: number | null;
 }
 
 export interface PeerCompareYearMetric {

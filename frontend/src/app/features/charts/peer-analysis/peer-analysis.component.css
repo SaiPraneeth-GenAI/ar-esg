@@ -130,6 +130,13 @@
   max-width: 620px;
 }
 
+.extract-timing {
+  margin: 0;
+  font-size: 0.74rem;
+  color: #98a2b3;
+  font-variant-numeric: tabular-nums;
+}
+
 .step-actions {
   display: flex;
   align-items: center;

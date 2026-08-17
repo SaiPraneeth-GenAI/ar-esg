@@ -74,6 +74,9 @@
         <div class="step-body">
           <h2>Review {{ company()?.name }}'s {{ year() }} figures</h2>
           <p class="step-desc">Amara Raja's own {{ year() }} figure is shown for reference. Check the extracted peer values against the report and fix anything that looks off before saving.</p>
+          @if (peerApi.extractResult()?.elapsed_seconds !== null && peerApi.extractResult()?.elapsed_seconds !== undefined) {
+            <p class="extract-timing">Extracted in {{ peerApi.extractResult()!.elapsed_seconds }}s</p>
+          }
 
           @for (group of groupedRows(); track group.group) {
             <div class="review-group">

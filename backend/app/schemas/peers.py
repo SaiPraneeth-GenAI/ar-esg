@@ -57,6 +57,7 @@ class PeerExtractOut(BaseModel):
     year: int
     source_filename: str
     rows: list[PeerExtractRow]
+    elapsed_seconds: float | None = None
 
 
 class PeerExtractJobOut(BaseModel):
