@@ -100,7 +100,17 @@ class CarbonOverviewSource(BaseModel):
 class TargetComparison(BaseModel):
     target_id: uuid.UUID
     target_value: float
-    status: str  # On track | Watch | Off track | Not enough data
+    status: str  # On track | Watch | Off track | Not enough data | Not started yet | Target period ended
+
+
+class TargetStatusOut(BaseModel):
+    target_id: uuid.UUID
+    metric_key: str
+    label: str
+    unit: str
+    actual: float | None
+    target_value: float
+    status: str
 
 
 class CarbonOverview(BaseModel):
@@ -126,3 +136,10 @@ class CarbonOverview(BaseModel):
     insight: str | None
     scope1_2_target: TargetComparison | None = None
     intensity_target: TargetComparison | None = None
+    scope1_target: TargetComparison | None = None
+    scope2_target: TargetComparison | None = None
+    all_targets: list[TargetStatusOut] = []
+
+
+class AiInsightOut(BaseModel):
+    insight: str | None

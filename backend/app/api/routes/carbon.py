@@ -10,6 +10,7 @@ from app.core.carbon_mapping import get_carbon_mapping
 from app.db.models import Category, DataPoint, EmissionCalculation, EmissionTarget, Entry, Location, User
 from app.db.session import get_db
 from app.schemas.carbon import (
+    AiInsightOut,
     CarbonOverview,
     CarbonOverviewSource,
     CarbonPreviewRequest,
@@ -18,6 +19,7 @@ from app.schemas.carbon import (
     EmissionCalculationOut,
     RecalculateResponse,
     TargetComparison,
+    TargetStatusOut,
 )
 from app.services.carbon_calculation import (
     CalculationOutcome,
@@ -33,8 +35,15 @@ from app.services.carbon_calculation import (
     to_decimal,
     trailing_buckets_for_mode,
 )
+from app.services.dashboard_insight import generate_dashboard_insight
 from app.services.rollups import month_start
-from app.services.target_calculation import RATE_METRIC_KEYS, classify_status, months_between, target_value_for_month
+from app.services.target_calculation import (
+    RATE_METRIC_KEYS,
+    all_target_comparisons,
+    classify_status,
+    months_between,
+    target_value_for_month,
+)
 
 router = APIRouter(prefix="/carbon", tags=["carbon"])
 
@@ -379,6 +388,19 @@ def carbon_overview(
     intensity_target = _active_target_comparison(
         db, current.tenant_id, location_id, "ghg_intensity_production", current_months, current_totals["intensity"]
     )
+    scope1_target = _active_target_comparison(
+        db, current.tenant_id, location_id, "scope1_tco2e", current_months, current_totals["scope1_tco2e"]
+    )
+    scope2_target = _active_target_comparison(
+        db, current.tenant_id, location_id, "scope2_tco2e", current_months, current_totals["scope2_loc_tco2e"]
+    )
+    all_targets = [
+        TargetStatusOut(
+            target_id=t.target_id, metric_key=t.metric_key, label=t.label, unit=t.unit,
+            actual=t.actual, target_value=t.target_value, status=t.status,
+        )
+        for t in all_target_comparisons(db, current.tenant_id, location_id, current_months)
+    ]
 
     return CarbonOverview(
         period=period,
@@ -403,7 +425,85 @@ def carbon_overview(
         insight=insight,
         scope1_2_target=scope1_2_target,
         intensity_target=intensity_target,
+        scope1_target=scope1_target,
+        scope2_target=scope2_target,
+        all_targets=all_targets,
     )
+
+
+@router.get("/ai-insight", response_model=AiInsightOut)
+def carbon_ai_insight(
+    period: date,
+    location_id: uuid.UUID | None = None,
+    period_mode: str = "month",
+    current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
+    db: Session = Depends(get_db),
+):
+    """A guardrailed AI summary of the same figures the overview cards show
+    -- kept off the /overview response on purpose so a slow or unavailable
+    OpenAI call never blocks the dashboard's main load; the frontend fetches
+    this separately and reveals it once ready. Always falls back to the
+    existing deterministic sentence on any AI failure (see
+    services/dashboard_insight.py)."""
+    period = month_start(period)
+    range_start, range_end = range_bounds_for_mode(period, period_mode)
+    current_months = months_in_range(range_start, range_end)
+    prior_start, prior_end = prior_range_for_mode(range_start, range_end, period_mode)
+    prior_months = months_in_range(prior_start, prior_end)
+
+    current_totals = compute_range_totals(db, current.tenant_id, location_id, current_months)
+    prior_totals = compute_range_totals(db, current.tenant_id, location_id, prior_months)
+    rows = current_totals["rows"]
+
+    by_source: dict[tuple[str, int, str | None], list] = {}
+    dp_names: dict[uuid.UUID, str] = {}
+    for r in rows:
+        if r.data_point_id not in dp_names:
+            dp = db.get(DataPoint, r.data_point_id)
+            dp_names[r.data_point_id] = dp.name if dp else ""
+        key = (dp_names[r.data_point_id], r.scope, r.calculation_method)
+        by_source.setdefault(key, []).append(r)
+    sources = [
+        CarbonOverviewSource(
+            data_point_name=name, scope=scope, calculation_method=method,
+            emissions_tco2e=float(sum((r.emissions_kgco2e for r in group), Decimal("0")) / 1000),
+            entry_count=len(group),
+        )
+        for (name, scope, method), group in sorted(by_source.items())
+    ]
+
+    fallback = _build_insight(sources, current_totals["scope1_2_loc_tco2e"], prior_totals["scope1_2_loc_tco2e"], current_totals["unresolved_count"])
+
+    targets = all_target_comparisons(db, current.tenant_id, location_id, current_months)
+    context = {
+        "period_label": period.isoformat(),
+        "period_mode": period_mode,
+        "scope1_tco2e": current_totals["scope1_tco2e"],
+        "scope2_location_based_tco2e": current_totals["scope2_loc_tco2e"],
+        "scope1_2_location_based_tco2e": current_totals["scope1_2_loc_tco2e"],
+        "prior_scope1_2_location_based_tco2e": prior_totals["scope1_2_loc_tco2e"],
+        "ghg_intensity_tco2e_per_mnah": current_totals["intensity"],
+        "prior_ghg_intensity_tco2e_per_mnah": prior_totals["intensity"],
+        "unresolved_count": current_totals["unresolved_count"],
+        "completeness_pct": current_totals["completeness_pct"],
+        "top_contributors": [
+            {"name": s.data_point_name, "scope": s.scope, "emissions_tco2e": round(s.emissions_tco2e, 2)}
+            for s in sorted(sources, key=lambda s: s.emissions_tco2e, reverse=True)[:5]
+        ],
+        "targets": [
+            {
+                "metric": t.label,
+                "unit": t.unit,
+                "actual": round(t.actual, 3) if t.actual is not None else None,
+                "target_value": round(t.target_value, 3),
+                "status": t.status,
+            }
+            for t in targets
+        ],
+    }
+
+    insight = generate_dashboard_insight(context, fallback)
+    return AiInsightOut(insight=insight)
 
 
 def _active_target_comparison(

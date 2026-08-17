@@ -19,6 +19,16 @@ export interface TargetComparison {
   status: string;
 }
 
+export interface TargetStatusOut {
+  target_id: string;
+  metric_key: string;
+  label: string;
+  unit: string;
+  actual: number | null;
+  target_value: number;
+  status: string;
+}
+
 export interface CarbonOverview {
   period: string | null;
   period_mode: PeriodMode;
@@ -42,6 +52,9 @@ export interface CarbonOverview {
   insight: string | null;
   scope1_2_target: TargetComparison | null;
   intensity_target: TargetComparison | null;
+  scope1_target: TargetComparison | null;
+  scope2_target: TargetComparison | null;
+  all_targets: TargetStatusOut[];
 }
 
 export interface CarbonTrendPoint {
@@ -110,6 +123,13 @@ export class CarbonApiService {
     const params: Record<string, string> = { period, months: String(months), period_mode: periodMode };
     if (locationId) params['location_id'] = locationId;
     return firstValueFrom(this.http.get<CarbonTrendPoint[]>(`${environment.apiBaseUrl}/carbon/trend`, { headers, params }));
+  }
+
+  async getAiInsight(period: string, locationId?: string, periodMode: PeriodMode = 'month'): Promise<{ insight: string | null }> {
+    const headers = await this.authHeaders();
+    const params: Record<string, string> = { period, period_mode: periodMode };
+    if (locationId) params['location_id'] = locationId;
+    return firstValueFrom(this.http.get<{ insight: string | null }>(`${environment.apiBaseUrl}/carbon/ai-insight`, { headers, params }));
   }
 
   async getCalculations(

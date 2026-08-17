@@ -266,6 +266,73 @@
   line-height: 1.5;
 }
 
+.ai-insight {
+  position: relative;
+  padding-left: 5.2rem;
+}
+
+.ai-badge {
+  position: absolute;
+  left: 1rem;
+  top: 0.78rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #027a48;
+  background: #e7f6ee;
+  border: 1px solid #d1e7dd;
+  border-radius: 999px;
+  padding: 0.12rem 0.45rem;
+}
+
+.type-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 0.9em;
+  margin-left: 2px;
+  background: #0e2c21;
+  vertical-align: text-bottom;
+  animation: cursor-blink 0.9s step-end infinite;
+}
+
+@keyframes cursor-blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+.targets-strip {
+  margin: 0.6rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: #475467;
+}
+
+.targets-strip-label {
+  font-weight: 600;
+  color: #667085;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.target-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #f9fafb;
+  border: 1px solid #eaecf0;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem 0.2rem 0.35rem;
+}
+
 .pie-row {
   display: flex;
   align-items: stretch;

@@ -544,8 +544,12 @@ def csv_template(
         filename = f"{category.replace(' ', '_')}_template.csv"
 
     return Response(
-        content=buffer.getvalue(),
-        media_type="text/csv",
+        # UTF-8 BOM prefix: without it, Excel opens the file using the
+        # system codepage (Windows-1252) instead of UTF-8, mangling the
+        # em dash in data point names like "Battery Waste -- Incinerated"
+        # into "â€"". The BOM makes Excel detect UTF-8 correctly.
+        content="\ufeff" + buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

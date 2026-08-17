@@ -56,8 +56,14 @@ export class CarbonOverviewComponent implements OnChanges {
 
   sourceKey = sourceKey;
 
+  aiInsightTyped = signal('');
+  aiInsightBusy = signal(false); // true while fetching AND while the typewriter is still revealing text
+  private aiInsightGeneration = 0;
+  private typeTimer: ReturnType<typeof setInterval> | null = null;
+
   async ngOnChanges(): Promise<void> {
     await Promise.all([this.load(), this.loadTrend()]);
+    this.loadAiInsight();
   }
 
   private periodIso(): string {
@@ -165,6 +171,53 @@ export class CarbonOverviewComponent implements OnChanges {
     } finally {
       this.trendLoading.set(false);
     }
+  }
+
+  // -- AI insight, typed in like a chat reply -----------------------------
+  // Fetched separately from the overview (never blocks the main dashboard
+  // load, since an OpenAI call can take a few seconds) and revealed with a
+  // typewriter effect once it arrives. A generation counter guards against
+  // a stale response finishing its typing after the user has already moved
+  // to a different period/location.
+
+  async loadAiInsight(): Promise<void> {
+    const generation = ++this.aiInsightGeneration;
+    if (this.typeTimer) {
+      clearInterval(this.typeTimer);
+      this.typeTimer = null;
+    }
+    this.aiInsightTyped.set('');
+    this.aiInsightBusy.set(true);
+    try {
+      const { insight } = await this.api.getAiInsight(this.periodIso(), this.locationId ?? undefined, this.periodMode);
+      if (generation !== this.aiInsightGeneration) return;
+      if (!insight) {
+        this.aiInsightBusy.set(false);
+        return;
+      }
+      this.typeOut(insight);
+    } catch {
+      // Silent -- the rule-based `overview()!.insight` sentence stays shown.
+      if (generation === this.aiInsightGeneration) this.aiInsightBusy.set(false);
+    }
+  }
+
+  private typeOut(text: string): void {
+    const generation = this.aiInsightGeneration;
+    let i = 0;
+    this.typeTimer = setInterval(() => {
+      if (generation !== this.aiInsightGeneration) {
+        clearInterval(this.typeTimer!);
+        return;
+      }
+      i += 2;
+      this.aiInsightTyped.set(text.slice(0, i));
+      if (i >= text.length) {
+        clearInterval(this.typeTimer!);
+        this.typeTimer = null;
+        this.aiInsightBusy.set(false);
+      }
+    }, 18);
   }
 
   async toggleSource(source: CarbonOverviewSource): Promise<void> {

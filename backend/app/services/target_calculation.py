@@ -19,7 +19,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.core.metrics_registry import CHARTABLE_METRICS
-from app.db.models import ProductionVolumeMapping
+from app.db.models import EmissionTarget, ProductionVolumeMapping
 from app.services.carbon_calculation import compute_period_totals_batch, compute_range_totals
 from app.services.intensity_calculation import (
     compute_intensity_overview_batch,
@@ -268,6 +268,71 @@ def target_value_for_month(
     if num_months == 0:
         return None
     return target_value / num_months
+
+
+@dataclass
+class TargetStatus:
+    target_id: uuid.UUID
+    metric_key: str
+    label: str
+    unit: str
+    actual: float | None
+    target_value: float
+    status: str
+
+
+def all_target_comparisons(db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, months: list[date]) -> list["TargetStatus"]:
+    """Every active target for this location that's currently in its period
+    -- not just the handful of metrics a given dashboard card hardcodes.
+    One query for all active targets, then only the metrics that actually
+    have one pay for extract_metric_value. Mirrors the single-metric logic
+    in carbon.py's _active_target_comparison exactly, generalized across
+    every targetable metric at once."""
+    anchor_period = months[-1]
+    targets = (
+        db.query(EmissionTarget)
+        .filter(
+            EmissionTarget.tenant_id == tenant_id,
+            EmissionTarget.location_id == location_id,
+            EmissionTarget.status == "active",
+            EmissionTarget.target_period_start <= anchor_period,
+            EmissionTarget.target_period_end >= anchor_period,
+        )
+        .all()
+    )
+    results: list[TargetStatus] = []
+    for target in targets:
+        if target.target_value is None or target.metric_key not in CHARTABLE_METRICS:
+            continue
+        num_months = len(months_between(target.target_period_start, target.target_period_end))
+        if target.metric_key in RATE_METRIC_KEYS:
+            range_target = target_value_for_month(
+                target.monthly_phasing, anchor_period, float(target.target_value), num_months, target.metric_key
+            )
+        else:
+            relevant = [m for m in months if target.target_period_start <= m <= target.target_period_end]
+            monthly_targets = [
+                target_value_for_month(target.monthly_phasing, m, float(target.target_value), num_months, target.metric_key)
+                for m in relevant
+            ]
+            monthly_targets = [t for t in monthly_targets if t is not None]
+            range_target = sum(monthly_targets) if monthly_targets else None
+        if range_target is None:
+            continue
+        window = [m for m in months if target.target_period_start <= m <= target.target_period_end] or months
+        actual, _ = extract_metric_value(db, tenant_id, location_id, target.metric_key, window)
+        results.append(
+            TargetStatus(
+                target_id=target.id,
+                metric_key=target.metric_key,
+                label=metric_label(target.metric_key),
+                unit=metric_unit(target.metric_key),
+                actual=actual,
+                target_value=range_target,
+                status=classify_status(actual, range_target),
+            )
+        )
+    return results
 
 
 def classify_status(actual: float | None, target: float | None) -> str:
