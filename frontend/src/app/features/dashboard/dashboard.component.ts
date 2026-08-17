@@ -74,7 +74,7 @@ export class DashboardComponent implements OnInit {
     this.downloadingFormat.set(format);
     this.downloadError.set('');
     try {
-      await this.reportsApi.downloadDashboardReport(format, this.period(), this.periodMode(), this.effectiveLocationId() ?? undefined);
+      await this.reportsApi.downloadDashboardReport(format, `${this.period()}-01`, this.periodMode(), this.effectiveLocationId() ?? undefined);
     } catch {
       this.downloadError.set('Could not generate the report. Please try again.');
     } finally {
