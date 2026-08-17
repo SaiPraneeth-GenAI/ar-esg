@@ -95,6 +95,7 @@
               class="note-input-inline"
               placeholder="Note (optional)"
               [ngModel]="field.note"
+              [title]="field.note"
               (ngModelChange)="updateField(i, { note: $event })"
               (blur)="onFieldBlur(i)"
             />

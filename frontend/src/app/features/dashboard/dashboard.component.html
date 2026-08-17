@@ -42,10 +42,10 @@
           </select>
         </label>
 
-        <a class="status-badge" [class.has-issues]="unresolvedCount() > 0" routerLink="/admin/data-entry">
+        <button type="button" class="status-badge" [class.has-issues]="unresolvedCount() > 0" (click)="focusUnresolved()">
           <span class="status-dot"></span>
           {{ unresolvedCount() }} unresolved {{ unresolvedCount() === 1 ? 'entry' : 'entries' }}
-        </a>
+        </button>
 
         <div class="download-group">
           <button
@@ -89,7 +89,12 @@
   <div class="tab-content">
     @switch (activeTab()) {
       @case ('absolute') {
-        <app-absolute-metrics-view [period]="period()" [locationId]="effectiveLocationId()" [periodMode]="periodMode()"></app-absolute-metrics-view>
+        <app-absolute-metrics-view
+          [period]="period()"
+          [locationId]="effectiveLocationId()"
+          [periodMode]="periodMode()"
+          [unresolvedRequestId]="unresolvedRequestId()"
+        ></app-absolute-metrics-view>
       }
       @case ('production') {
         <app-intensity-view mode="production" [period]="period()" [locationId]="effectiveLocationId()" [periodMode]="periodMode()"></app-intensity-view>

@@ -1,5 +1,5 @@
 import { DecimalPipe } from '@angular/common';
-import { Component, Input, OnChanges, inject, signal } from '@angular/core';
+import { Component, ElementRef, Input, OnChanges, SimpleChanges, ViewChild, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CarbonApiService, CarbonOverview, CarbonOverviewSource, EmissionCalculationOut, TargetComparison } from '../../../core/carbon-api.service';
 import { PeriodMode, formatBucketLabel, priorPeriodLabel, priorYearLabel, showsPriorPeriod } from '../../../core/intensity-api.service';
@@ -34,6 +34,8 @@ export class CarbonOverviewComponent implements OnChanges {
   @Input({ required: true }) period!: string;
   @Input() locationId: string | null = null;
   @Input() periodMode: PeriodMode = 'month';
+  @Input() unresolvedRequestId = 0;
+  @ViewChild('unresolvedPanel') unresolvedPanelRef?: ElementRef<HTMLElement>;
 
   loading = signal(true);
   errorMessage = signal('');
@@ -61,9 +63,17 @@ export class CarbonOverviewComponent implements OnChanges {
   private aiInsightGeneration = 0;
   private typeTimer: ReturnType<typeof setInterval> | null = null;
 
-  async ngOnChanges(): Promise<void> {
-    await Promise.all([this.load(), this.loadTrend()]);
-    this.loadAiInsight();
+  async ngOnChanges(changes: SimpleChanges): Promise<void> {
+    const dataInputsChanged = !!(changes['period'] || changes['locationId'] || changes['periodMode']);
+    const unresolvedTriggered = !!changes['unresolvedRequestId'] && !changes['unresolvedRequestId'].firstChange && this.unresolvedRequestId > 0;
+
+    if (dataInputsChanged) {
+      await Promise.all([this.load(), this.loadTrend()]);
+      this.loadAiInsight();
+    }
+    if (unresolvedTriggered) {
+      await this.openUnresolved();
+    }
   }
 
   private periodIso(): string {
@@ -256,15 +266,27 @@ export class CarbonOverviewComponent implements OnChanges {
   }
 
   async toggleUnresolved(): Promise<void> {
-    this.showUnresolved.set(!this.showUnresolved());
+    if (this.showUnresolved()) {
+      this.showUnresolved.set(false);
+      return;
+    }
+    await this.openUnresolved();
+  }
+
+  /** Forces the panel open (vs. toggleUnresolved(), which flips it) and
+   * scrolls it into view -- used by the dashboard header's unresolved
+   * badge, which can be clicked from anywhere on the page, including
+   * while the panel is already open and off-screen. */
+  async openUnresolved(): Promise<void> {
+    this.showUnresolved.set(true);
     this.expandedSourceKey.set(null);
-    if (!this.showUnresolved()) return;
     this.unresolvedLoading.set(true);
     try {
       this.unresolvedItems.set(await this.api.getUnresolved(this.locationId ?? undefined));
     } finally {
       this.unresolvedLoading.set(false);
     }
+    setTimeout(() => this.unresolvedPanelRef?.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }
 
   formatMonth(period: string | null): string {

@@ -43,6 +43,12 @@ export class DashboardComponent implements OnInit {
   activeTab = signal<TabId>('absolute');
   locations = signal<AdminLocation[]>([]);
   unresolvedCount = signal(0);
+  // Bumped on every click of the unresolved badge -- passed down through
+  // absolute-metrics-view to carbon-overview (where the actual unresolved
+  // list lives) as a plain counter so the same click always re-triggers
+  // even if the panel's already open, instead of a boolean that could
+  // silently no-op on a second click.
+  unresolvedRequestId = signal(0);
 
   downloadingFormat = signal<ReportFormat | null>(null);
   downloadError = signal('');
@@ -50,6 +56,17 @@ export class DashboardComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     this.locations.set(await this.api.listLocations());
     await this.refreshUnresolvedBadge();
+  }
+
+  /** The badge used to link to /admin/data-entry, which has nothing to do
+   * with unresolved GHG calculations (a distinct concept from an Entry's
+   * own Draft/Submitted/Approved workflow status) -- there was nowhere on
+   * that page to actually find them. This jumps to the tab that has the
+   * real unresolved list (Absolute Metrics' Carbon footprint card) and
+   * opens it directly instead. */
+  focusUnresolved(): void {
+    this.activeTab.set('absolute');
+    this.unresolvedRequestId.set(this.unresolvedRequestId() + 1);
   }
 
   async refreshUnresolvedBadge(): Promise<void> {

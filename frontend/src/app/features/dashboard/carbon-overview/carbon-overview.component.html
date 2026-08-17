@@ -213,7 +213,7 @@
     ></app-rich-trend-chart>
 
     @if (showUnresolved()) {
-      <div class="unresolved-panel">
+      <div class="unresolved-panel" #unresolvedPanel>
         <h3>Unresolved calculations</h3>
         @if (unresolvedLoading()) {
           <p class="muted">Loading…</p>

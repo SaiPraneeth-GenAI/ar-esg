@@ -32,6 +32,7 @@ export class AbsoluteMetricsViewComponent implements OnChanges {
   @Input({ required: true }) period!: string;
   @Input() locationId: string | null = null;
   @Input() periodMode: PeriodMode = 'month';
+  @Input() unresolvedRequestId = 0;
 
   loading = signal(true);
   errorMessage = signal('');
