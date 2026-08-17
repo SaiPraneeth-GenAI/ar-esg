@@ -431,26 +431,103 @@
   color: #b54708;
 }
 
-.source-row {
-  cursor: pointer;
+.source-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
-.source-row:hover {
+.source-bar-row {
+  background: #fff;
+  border: 1px solid #eaecf0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.source-bar-trigger {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.7rem 0.9rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.source-bar-trigger:hover {
   background: #fafbfc;
 }
 
-.source-row.expanded {
+.source-bar-trigger.expanded {
   background: #f5faf7;
 }
 
-.chevron-cell {
-  color: #98a2b3;
-  text-align: right;
+.source-bar-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
 }
 
-.drilldown-row td {
-  padding: 0.75rem;
+.source-name {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #101828;
+}
+
+.source-tag {
+  font-size: 0.72rem;
+  color: #98a2b3;
+  white-space: nowrap;
+}
+
+.source-bar-track {
+  height: 8px;
+  background: #f2f4f7;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.source-bar-fill {
+  height: 100%;
+  background: #127a45;
+  border-radius: 4px;
+  transition: width 0.25s ease;
+}
+
+.source-bar-bottom {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+}
+
+.source-value {
+  font-weight: 600;
+  color: #344054;
+  font-variant-numeric: tabular-nums;
+}
+
+.source-entries {
+  color: #98a2b3;
+}
+
+.chevron {
+  margin-left: auto;
+  color: #98a2b3;
+}
+
+.drilldown-panel {
+  padding: 0 0.9rem 0.9rem;
   background: #fafbfc;
+  border-top: 1px solid #eaecf0;
+}
+
+.drilldown-panel .evidence-table {
+  margin-top: 0.75rem;
 }
 
 .formula-cell {

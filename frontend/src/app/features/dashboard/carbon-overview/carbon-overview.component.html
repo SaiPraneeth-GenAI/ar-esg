@@ -194,77 +194,72 @@
     @if (overview()!.sources.length > 0) {
       <div class="source-breakdown">
         <h3>Source breakdown -- {{ formatRangeLabel(overview()!) }}</h3>
-        <table class="drilldown-table">
-          <thead>
-            <tr>
-              <th>Source</th>
-              <th>Scope</th>
-              <th>Method</th>
-              <th>tCO2e</th>
-              <th>Entries</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (source of overview()!.sources; track sourceKey(source)) {
-              <tr class="source-row" [class.expanded]="expandedSourceKey() === sourceKey(source)" (click)="toggleSource(source)">
-                <td>{{ source.data_point_name }}</td>
-                <td>Scope {{ source.scope }}</td>
-                <td>{{ source.calculation_method ?? '—' }}</td>
-                <td>{{ source.emissions_tco2e | number: '1.2-3' }}</td>
-                <td>{{ source.entry_count }}</td>
-                <td class="chevron-cell">{{ expandedSourceKey() === sourceKey(source) ? '▾' : '▸' }}</td>
-              </tr>
+        <div class="source-bars">
+          @for (source of sortedSources(); track sourceKey(source)) {
+            <div class="source-bar-row">
+              <button type="button" class="source-bar-trigger" [class.expanded]="expandedSourceKey() === sourceKey(source)" (click)="toggleSource(source)">
+                <div class="source-bar-top">
+                  <span class="source-name">{{ source.data_point_name }}</span>
+                  <span class="source-tag">Scope {{ source.scope }}{{ source.calculation_method ? ' · ' + source.calculation_method : '' }}</span>
+                </div>
+                <div class="source-bar-track">
+                  <div class="source-bar-fill" [style.width.%]="sourceBarPct(source)"></div>
+                </div>
+                <div class="source-bar-bottom">
+                  <span class="source-value">{{ source.emissions_tco2e | number: '1.2-3' }} tCO2e</span>
+                  <span class="source-entries">{{ source.entry_count }} {{ source.entry_count === 1 ? 'entry' : 'entries' }}</span>
+                  <span class="chevron">{{ expandedSourceKey() === sourceKey(source) ? '▾' : '▸' }}</span>
+                </div>
+              </button>
+
               @if (expandedSourceKey() === sourceKey(source)) {
-                <tr class="drilldown-row">
-                  <td colspan="6">
-                    @if (sourceLoading()) {
-                      <p class="muted">Loading calculation evidence…</p>
-                    } @else {
-                      <table class="evidence-table">
-                        <thead>
+                <div class="drilldown-panel">
+                  @if (sourceLoading()) {
+                    <p class="muted">Loading calculation evidence…</p>
+                  } @else {
+                    <table class="evidence-table">
+                      <thead>
+                        <tr>
+                          <th>Location</th>
+                          <th>Activity</th>
+                          <th>Normalized</th>
+                          <th>Factor</th>
+                          <th>Formula</th>
+                          <th>tCO2e</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (calc of sourceCalculations(); track calc.id) {
                           <tr>
-                            <th>Location</th>
-                            <th>Activity</th>
-                            <th>Normalized</th>
-                            <th>Factor</th>
-                            <th>Formula</th>
-                            <th>tCO2e</th>
-                            <th></th>
+                            <td>{{ calc.location_name }}</td>
+                            <td>{{ calc.activity_value }} {{ calc.activity_unit }}</td>
+                            <td>{{ calc.normalized_activity_value }} {{ calc.normalized_activity_unit }}</td>
+                            <td [title]="calc.factor_source ?? ''">{{ calc.factor_value }} {{ calc.factor_unit }} ({{ calc.factor_version }})</td>
+                            <td class="formula-cell">{{ calc.formula }}</td>
+                            <td>{{ calc.emissions_tco2e | number: '1.2-3' }}</td>
+                            <td>
+                              <button type="button" class="link-btn" (click)="toggleEntryHistory(calc.entry_id)">
+                                {{ expandedEntryId() === calc.entry_id ? 'Hide history' : 'History' }}
+                              </button>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          @for (calc of sourceCalculations(); track calc.id) {
-                            <tr>
-                              <td>{{ calc.location_name }}</td>
-                              <td>{{ calc.activity_value }} {{ calc.activity_unit }}</td>
-                              <td>{{ calc.normalized_activity_value }} {{ calc.normalized_activity_unit }}</td>
-                              <td [title]="calc.factor_source ?? ''">{{ calc.factor_value }} {{ calc.factor_unit }} ({{ calc.factor_version }})</td>
-                              <td class="formula-cell">{{ calc.formula }}</td>
-                              <td>{{ calc.emissions_tco2e | number: '1.2-3' }}</td>
-                              <td>
-                                <button type="button" class="link-btn" (click)="toggleEntryHistory(calc.entry_id)">
-                                  {{ expandedEntryId() === calc.entry_id ? 'Hide history' : 'History' }}
-                                </button>
+                          @if (expandedEntryId() === calc.entry_id) {
+                            <tr class="history-row">
+                              <td colspan="7">
+                                <app-entry-history [entryId]="calc.entry_id"></app-entry-history>
                               </td>
                             </tr>
-                            @if (expandedEntryId() === calc.entry_id) {
-                              <tr class="history-row">
-                                <td colspan="7">
-                                  <app-entry-history [entryId]="calc.entry_id"></app-entry-history>
-                                </td>
-                              </tr>
-                            }
                           }
-                        </tbody>
-                      </table>
-                    }
-                  </td>
-                </tr>
+                        }
+                      </tbody>
+                    </table>
+                  }
+                </div>
               }
-            }
-          </tbody>
-        </table>
+            </div>
+          }
+        </div>
       </div>
     }
   }

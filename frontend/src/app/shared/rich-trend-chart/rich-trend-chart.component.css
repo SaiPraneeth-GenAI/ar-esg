@@ -135,16 +135,16 @@
 }
 
 .swatch-current {
-  background: #0e2c21;
+  background: #127a45;
 }
 
 .swatch-prior {
-  background: #c8cdd6;
+  background: #eb6834;
 }
 
 .swatch-dashed {
   background: none;
-  border-top: 2px dashed #98a2b3;
+  border-top: 2px dashed #eb6834;
   height: 0;
   width: 14px;
 }
@@ -223,14 +223,14 @@
 .bar {
   position: relative;
   flex: 1;
-  background: #0e2c21;
+  background: #127a45;
   border-radius: 4px 4px 0 0;
   transition: height 0.25s ease;
   min-height: 2px;
 }
 
 .bar-prior {
-  background: #c8cdd6;
+  background: #eb6834;
 }
 
 .bar-empty {
@@ -246,6 +246,10 @@
   font-weight: 600;
   color: #344054;
   white-space: nowrap;
+}
+
+.bar-value-prior {
+  color: #475467;
 }
 
 .bar-label {

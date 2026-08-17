@@ -13,8 +13,17 @@ interface RenderedSlice extends PieSlice {
   dashOffset: number;
 }
 
-const PALETTE = ['#0e2c21', '#2f8f5b', '#5cb582', '#f5a623', '#4a6fa5', '#e0621f', '#8fd4a8', '#7b5ea7', '#c8cdd6'];
-const MAX_SLICES = 7; // beyond this, group the smallest remainder into "Other"
+// Validated categorical order (node scripts/validate_palette.js, --pairs all,
+// light mode): green/orange/blue/violet clear every CVD and normal-vision
+// floor together. A 5th real hue does not -- past four, fold the remainder
+// into "Other" (muted grey) rather than add a hue that can't be told apart
+// from its neighbors. Every slice still carries a direct-labeled legend row
+// (name + value + %), which is the required mitigation for the one WARN
+// (green<->orange sits in the 6-8 CVD floor band, legal only with secondary
+// encoding).
+const PALETTE = ['#127a45', '#eb6834', '#2a78d6', '#4a3aa7'];
+const OTHER_COLOR = '#98a2b3';
+const MAX_SLICES = 4; // beyond this, group the smallest remainder into "Other"
 
 const CIRC = 2 * Math.PI * 40; // r=40
 
@@ -53,7 +62,7 @@ export class PieChartComponent implements OnChanges {
         const slice: RenderedSlice = {
           ...s,
           pct,
-          color: PALETTE[i % PALETTE.length],
+          color: s.label === 'Other' ? OTHER_COLOR : PALETTE[i % PALETTE.length],
           dashArray: `${arc} ${CIRC - arc}`,
           dashOffset: -offset
         };

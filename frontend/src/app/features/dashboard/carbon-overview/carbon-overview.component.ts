@@ -114,6 +114,24 @@ export class CarbonOverviewComponent implements OnChanges {
     return Array.from(scopes).sort();
   }
 
+  // -- Source breakdown, ranked bars ------------------------------------
+  // A plain table of numbers doesn't show which source dominates at a
+  // glance; a ranked bar makes the magnitude visible while keeping every
+  // number (and the click-to-drill-down evidence) the table already had.
+
+  sortedSources(): CarbonOverviewSource[] {
+    return [...(this.overview()?.sources ?? [])].sort((a, b) => b.emissions_tco2e - a.emissions_tco2e);
+  }
+
+  private maxSourceValue(): number {
+    const values = this.sortedSources().map((s) => s.emissions_tco2e);
+    return Math.max(...values, 0.0001);
+  }
+
+  sourceBarPct(source: CarbonOverviewSource): number {
+    return Math.max((source.emissions_tco2e / this.maxSourceValue()) * 100, 2);
+  }
+
   setScopeFilter(scope: number): void {
     this.scopeFilter.set(scope);
   }
