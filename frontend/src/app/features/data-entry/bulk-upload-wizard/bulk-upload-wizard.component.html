@@ -184,6 +184,9 @@
 
   @if (step() === 'validate') {
     <div class="wizard-body">
+      @if (autoMappedMessage()) {
+        <div class="banner success">✓ {{ autoMappedMessage() }}</div>
+      }
       @if (validating() && rows().length === 0) {
         <p class="wizard-intro">Checking every row against your existing data…</p>
       } @else {

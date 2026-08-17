@@ -62,6 +62,12 @@
   border: 1px solid #fecdca;
 }
 
+.banner.success {
+  background: #f5faf7;
+  color: #027a48;
+  border: 1px solid #d1e7dd;
+}
+
 /* Step 1: upload */
 
 .dropzone {

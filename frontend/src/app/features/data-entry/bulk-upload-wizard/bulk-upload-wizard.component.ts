@@ -106,6 +106,29 @@ export class BulkUploadWizardComponent {
   wideDetecting = signal(false);
   wideDetectResult = signal<SheetDetectionResult | null>(null);
   wideMapping = signal<Record<number, string | null>>({});
+  /** Shown once on the Validate screen after an auto-skip, so the customer
+   * isn't left wondering whether mapping happened at all -- it did, it
+   * just didn't need them for it. */
+  autoMappedMessage = signal('');
+
+  /** Every column resolved by an exact-alias hit, a remembered column
+   * (this customer confirmed this exact header before), or a remembered
+   * whole-file template -- all effectively certain, unlike a "fuzzy"
+   * guess. When the whole file clears this bar, there's nothing left for
+   * a human to usefully check, so making them look at a mapping table
+   * anyway is pure friction, not safety. */
+  wideAllConfident = computed(() => {
+    const cols = this.wideDetectResult()?.columns ?? [];
+    if (cols.length === 0) return false;
+    // Deliberately strict: an unmatched column stays a reason to show the
+    // mapping screen, not something to silently skip past -- it might be
+    // a real metric the matcher just didn't recognize, and dropping a
+    // whole column's data without the customer ever seeing that is worse
+    // than one extra click ever saves.
+    const confidentRules = new Set(['exact_alias', 'memory', 'template']);
+    const hasAnyDataPoint = cols.some((c) => c.target_type === 'data_point');
+    return hasAnyDataPoint && cols.every((c) => confidentRules.has(c.rule));
+  });
 
   validating = signal(false);
   rows = signal<EditableRow[]>([]);
@@ -197,6 +220,7 @@ export class BulkUploadWizardComponent {
     this.uploadMode.set('long');
     this.wideDetectResult.set(null);
     this.wideMapping.set({});
+    this.autoMappedMessage.set('');
   }
 
   async confirmPreview(): Promise<void> {
@@ -212,7 +236,18 @@ export class BulkUploadWizardComponent {
     } else {
       this.uploadMode.set('wide');
       await this.runWideDetect();
-      this.step.set('mapping');
+      if (this.wideAllConfident()) {
+        // Every column was recognized with certainty (an exact alias, a
+        // column this customer has confirmed before, or the exact same
+        // file structure as a remembered upload) -- there's nothing left
+        // for a manual mapping screen to usefully ask, so skip straight
+        // to showing the actual data.
+        const count = this.wideDetectResult()?.columns.length ?? 0;
+        this.autoMappedMessage.set(`Recognized all ${count} columns automatically -- nothing to map.`);
+        await this.runValidation();
+      } else {
+        this.step.set('mapping');
+      }
     }
   }
 
@@ -554,5 +589,6 @@ export class BulkUploadWizardComponent {
     this.uploadMode.set('long');
     this.wideDetectResult.set(null);
     this.wideMapping.set({});
+    this.autoMappedMessage.set('');
   }
 }
