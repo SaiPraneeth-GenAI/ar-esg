@@ -15,7 +15,7 @@ export interface CarbonOverviewSource {
 
 export interface TargetComparison {
   target_id: string;
-  target_value: number;
+  target_value: number | null;
   status: string;
 }
 

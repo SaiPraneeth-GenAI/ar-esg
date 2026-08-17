@@ -584,7 +584,13 @@ def _active_target_comparison(
     """Only ever reads an active target for the exact same boundary this
     card already shows -- never substitutes a different location/metric
     target, and never fabricates a comparison when none has been
-    declared (rule: targets are never auto-created)."""
+    declared (rule: targets are never auto-created). Returns None only
+    when there's truly no active target for this metric/location -- a
+    target that exists but whose period doesn't cover this month (not
+    started yet, or already ended) still returns a comparison, carrying
+    that status instead of a fabricated actual-vs-target number, so the
+    card can say "Not started yet" instead of the misleading "No target
+    set" (a real target was declared -- it's just not in force yet)."""
     target = (
         db.query(EmissionTarget)
         .filter(
@@ -595,6 +601,21 @@ def _active_target_comparison(
         )
         .first()
     )
+    if target is None:
+        return None
+    anchor_period = months[-1]
+    if anchor_period < target.target_period_start:
+        return TargetComparison(
+            target_id=target.id,
+            target_value=float(target.target_value) if target.target_value is not None else None,
+            status="Not started yet",
+        )
+    if anchor_period > target.target_period_end:
+        return TargetComparison(
+            target_id=target.id,
+            target_value=float(target.target_value) if target.target_value is not None else None,
+            status="Target period ended",
+        )
     range_target = _target_value_for_bucket(target, metric_key, months)
     if range_target is None:
         return None

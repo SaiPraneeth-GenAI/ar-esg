@@ -106,7 +106,10 @@ class CarbonOverviewSource(BaseModel):
 
 class TargetComparison(BaseModel):
     target_id: uuid.UUID
-    target_value: float
+    # None only when status is "Not started yet"/"Target period ended" and
+    # the target itself has no annual figure recorded (shouldn't normally
+    # happen for an active target, but the type reflects what's possible).
+    target_value: float | None
     status: str  # On track | Watch | Off track | Not enough data | Not started yet | Target period ended
 
 
