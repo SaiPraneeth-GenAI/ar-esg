@@ -120,21 +120,41 @@ def _preview_from_outcome(data_point_name: str, activity_value: float, activity_
     )
 
 
-def _calc_out(db: Session, calc: EmissionCalculation) -> EmissionCalculationOut:
-    dp = db.get(DataPoint, calc.data_point_id)
-    loc = db.get(Location, calc.location_id)
-    calculated_by_email = None
-    if calc.calculated_by:
-        user = db.get(User, calc.calculated_by)
-        calculated_by_email = user.email if user else None
+def _calc_out(
+    db: Session,
+    calc: EmissionCalculation,
+    dp_names: dict[uuid.UUID, str] | None = None,
+    loc_names: dict[uuid.UUID, str] | None = None,
+    user_emails: dict[uuid.UUID, str] | None = None,
+) -> EmissionCalculationOut:
+    """Pass pre-fetched dp_names/loc_names/user_emails (see _calc_out_batch)
+    when rendering a list -- without them, this falls back to one db.get()
+    per lookup, correct but N+1 across a list of many calculations."""
+    if dp_names is not None:
+        dp_name = dp_names.get(calc.data_point_id, "")
+    else:
+        dp = db.get(DataPoint, calc.data_point_id)
+        dp_name = dp.name if dp else ""
+    if loc_names is not None:
+        loc_name = loc_names.get(calc.location_id, "")
+    else:
+        loc = db.get(Location, calc.location_id)
+        loc_name = loc.name if loc else ""
+    if user_emails is not None:
+        calculated_by_email = user_emails.get(calc.calculated_by) if calc.calculated_by else None
+    else:
+        calculated_by_email = None
+        if calc.calculated_by:
+            user = db.get(User, calc.calculated_by)
+            calculated_by_email = user.email if user else None
     emissions_kg = float(calc.emissions_kgco2e) if calc.emissions_kgco2e is not None else None
     return EmissionCalculationOut(
         id=calc.id,
         entry_id=calc.entry_id,
         data_point_id=calc.data_point_id,
-        data_point_name=dp.name if dp else "",
+        data_point_name=dp_name,
         location_id=calc.location_id,
-        location_name=loc.name if loc else "",
+        location_name=loc_name,
         reporting_period=calc.reporting_period,
         scope=calc.scope,
         calculation_method=calc.calculation_method,
@@ -156,6 +176,21 @@ def _calc_out(db: Session, calc: EmissionCalculation) -> EmissionCalculationOut:
         calculated_by_email=calculated_by_email,
         supersedes_calculation_id=calc.supersedes_calculation_id,
     )
+
+
+def _calc_out_batch(db: Session, calcs: list[EmissionCalculation]) -> list[EmissionCalculationOut]:
+    """3 queries for the whole list instead of up to 3 per row -- the
+    dp/location/user id sets are usually far smaller than the row count
+    (many calculations share the same data point/location)."""
+    if not calcs:
+        return []
+    dp_ids = {c.data_point_id for c in calcs}
+    loc_ids = {c.location_id for c in calcs}
+    user_ids = {c.calculated_by for c in calcs if c.calculated_by}
+    dp_names = {dp.id: dp.name for dp in db.query(DataPoint).filter(DataPoint.id.in_(dp_ids)).all()}
+    loc_names = {loc.id: loc.name for loc in db.query(Location).filter(Location.id.in_(loc_ids)).all()}
+    user_emails = {u.id: u.email for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    return [_calc_out(db, c, dp_names, loc_names, user_emails) for c in calcs]
 
 
 @router.post("/entries/{entry_id}/calculate", response_model=EmissionCalculationOut | None)
@@ -216,7 +251,7 @@ def recalculate_period(
         calculated_count=len(calculated),
         unresolved_count=len(unresolved),
         skipped_not_ghg_count=skipped,
-        results=[_calc_out(db, c) for c in (calculated + unresolved)],
+        results=_calc_out_batch(db, calculated + unresolved),
     )
 
 
@@ -232,7 +267,7 @@ def unresolved_queue(
     if location_id is not None:
         q = q.filter(EmissionCalculation.location_id == location_id)
     rows = q.order_by(EmissionCalculation.reporting_period.desc(), EmissionCalculation.calculated_at.desc()).all()
-    return [_calc_out(db, r) for r in rows]
+    return _calc_out_batch(db, rows)
 
 
 @router.get("/calculations", response_model=list[EmissionCalculationOut])
@@ -274,7 +309,7 @@ def list_calculations(
         rows = [r for r in rows if r.data_point_id in dp_ids]
 
     rows.sort(key=lambda r: r.calculated_at, reverse=True)
-    return [_calc_out(db, r) for r in rows]
+    return _calc_out_batch(db, rows)
 
 
 @router.get("/trend", response_model=list[CarbonTrendPoint])

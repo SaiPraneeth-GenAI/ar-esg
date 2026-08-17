@@ -99,6 +99,58 @@ def _entry_out(db: Session, entry: Entry) -> EntryOut:
     )
 
 
+def _entry_out_batch(db: Session, entries: list[Entry]) -> list[EntryOut]:
+    """A handful of batched queries for the whole list instead of up to 5
+    per row (DataPoint, Category, Location, User, and a Rejected-only
+    Approval lookup) -- used by every endpoint that returns more than one
+    entry (the approval queue chief among them)."""
+    if not entries:
+        return []
+    dps = {dp.id: dp for dp in db.query(DataPoint).filter(DataPoint.id.in_({e.data_point_id for e in entries})).all()}
+    categories = {
+        c.id: c.name for c in db.query(Category).filter(Category.id.in_({dp.category_id for dp in dps.values()})).all()
+    }
+    locations = {
+        loc.id: loc.name for loc in db.query(Location).filter(Location.id.in_({e.location_id for e in entries})).all()
+    }
+    user_ids = {e.submitted_by for e in entries if e.submitted_by}
+    users = {u.id: u.email for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+
+    rejected_ids = [e.id for e in entries if e.status == "Rejected"]
+    rejection_notes: dict[uuid.UUID, str | None] = {}
+    if rejected_ids:
+        approvals = (
+            db.query(Approval)
+            .filter(Approval.entry_id.in_(rejected_ids), Approval.action == "reject")
+            .order_by(Approval.timestamp.desc())
+            .all()
+        )
+        for a in approvals:
+            rejection_notes.setdefault(a.entry_id, a.reject_note)  # first seen per entry, in desc order, is the latest
+
+    out = []
+    for entry in entries:
+        dp = dps.get(entry.data_point_id)
+        out.append(
+            EntryOut(
+                id=entry.id,
+                data_point_id=entry.data_point_id,
+                data_point_name=dp.name if dp else "",
+                category_name=categories.get(dp.category_id, "") if dp else "",
+                location_id=entry.location_id,
+                location_name=locations.get(entry.location_id, ""),
+                period=entry.period,
+                value=float(entry.value) if entry.value is not None else None,
+                status=entry.status,
+                note=entry.note,
+                submitted_by=entry.submitted_by,
+                submitted_by_email=users.get(entry.submitted_by) if entry.submitted_by else None,
+                latest_rejection_note=rejection_notes.get(entry.id) if entry.status == "Rejected" else None,
+            )
+        )
+    return out
+
+
 @router.get("/categories", response_model=list[CategoryOut])
 def list_categories(current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")), db: Session = Depends(get_db)):
     categories = (
@@ -227,7 +279,7 @@ def current_entries(
         )
         .all()
     )
-    return [_entry_out(db, e) for e in rows]
+    return _entry_out_batch(db, rows)
 
 
 def _upsert_one(
@@ -288,11 +340,11 @@ def upsert_entries(
     current: CurrentUser = Depends(require_roles("Admin", "Manager")),
     db: Session = Depends(get_db),
 ):
-    results = []
-    for item in payload:
-        entry = _upsert_one(db, current, item.data_point_id, item.location_id, item.period, item.value, item.note, item.meter_id)
-        results.append(_entry_out(db, entry))
-    return results
+    entries = [
+        _upsert_one(db, current, item.data_point_id, item.location_id, item.period, item.value, item.note, item.meter_id)
+        for item in payload
+    ]
+    return _entry_out_batch(db, entries)
 
 
 @router.post("/bulk-import/detect", response_model=DetectResponse)
@@ -815,7 +867,7 @@ def submit_entries(
         write_audit(db, entry.id, current.email, "submitted", "Draft", "Submitted")
         if auto_approve:
             _approve_entry_now(db, entry, current.tenant_id, current.id, current.email, auto=True)
-    return [_entry_out(db, e) for e in rows]
+    return _entry_out_batch(db, rows)
 
 
 @router.get("/queue", response_model=list[EntryOut])
@@ -831,7 +883,7 @@ def approval_queue(
         .order_by(Entry.period.desc())
         .all()
     )
-    return [_entry_out(db, e) for e in rows]
+    return _entry_out_batch(db, rows)
 
 
 def _load_entry_for_decision(db: Session, entry_id: uuid.UUID, tenant_id) -> Entry:

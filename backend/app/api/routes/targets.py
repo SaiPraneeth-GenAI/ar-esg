@@ -28,6 +28,7 @@ from app.services.target_calculation import (
     classify_status,
     compute_baseline,
     extract_metric_value,
+    extract_metric_value_batch,
     metric_label,
     metric_unit,
     months_between,
@@ -368,9 +369,11 @@ def target_performance(
     num_months = len(months)
     target_value = float(target.target_value) if target.target_value is not None else None
 
+    values_by_month = extract_metric_value_batch(db, current.tenant_id, target.location_id, target.metric_key, months)
+
     out_months: list[TargetMonthPerformance] = []
     for period in months:
-        actual, completeness = extract_metric_value(db, current.tenant_id, target.location_id, target.metric_key, [period])
+        actual, completeness = values_by_month[period]
         month_target = target_value_for_month(target.monthly_phasing, period, target_value, num_months, target.metric_key)
         variance_pct = None
         if actual is not None and month_target is not None and month_target != 0:

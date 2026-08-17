@@ -121,6 +121,26 @@ def extract_metric_value(
     return value, (100.0 if value is not None else None)
 
 
+def extract_metric_value_batch(
+    db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, metric_key: str, months: list[date]
+) -> dict[date, tuple[float | None, float | None]]:
+    """The same (value, completeness_pct) pair extract_metric_value returns,
+    for every month in `months` at once -- one batched query set covering
+    every month, not one round of queries per month. Used by
+    /targets/{id}/performance, which needs each month of a target's period
+    individually rather than one aggregated range."""
+    if metric_key in _GHG_ABSOLUTE_FIELD or metric_key in _GHG_RATE_FIELD:
+        by_month = compute_period_totals_batch(db, tenant_id, location_id, months)
+        field = _GHG_ABSOLUTE_FIELD.get(metric_key) or _GHG_RATE_FIELD.get(metric_key)
+        return {m: (by_month[m][field], by_month[m]["completeness_pct"]) for m in months}
+    overview_by_month = compute_intensity_overview_batch(db, tenant_id, location_id, months)
+    attr = _OTHER_RATE_FIELD[metric_key]
+    return {
+        m: (getattr(overview_by_month[m], attr), 100.0 if getattr(overview_by_month[m], attr) is not None else None)
+        for m in months
+    }
+
+
 def get_active_production_mapping(db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None) -> ProductionVolumeMapping | None:
     q = db.query(ProductionVolumeMapping).filter(
         ProductionVolumeMapping.tenant_id == tenant_id, ProductionVolumeMapping.is_active.is_(True)
@@ -300,6 +320,20 @@ def all_target_comparisons(db: Session, tenant_id: uuid.UUID, location_id: uuid.
         )
         .all()
     )
+    if not targets:
+        return []
+
+    # Batched once for every target this call needs, instead of each
+    # target re-running its own compute_range_totals/
+    # compute_intensity_overview_range (which would otherwise re-scan the
+    # same approved calculations/production data once per target -- see
+    # extract_metric_value). A dashboard with all 11 metrics targeted
+    # would otherwise cost ~200 queries here instead of these 2.
+    needs_ghg = any(t.metric_key in _GHG_ABSOLUTE_FIELD or t.metric_key in _GHG_RATE_FIELD for t in targets)
+    needs_other = any(t.metric_key in _OTHER_RATE_FIELD for t in targets)
+    ghg_by_month = compute_period_totals_batch(db, tenant_id, location_id, months) if needs_ghg else None
+    other_by_month = compute_intensity_overview_batch(db, tenant_id, location_id, months) if needs_other else None
+
     results: list[TargetStatus] = []
     for target in targets:
         if target.target_value is None or target.metric_key not in CHARTABLE_METRICS:
@@ -320,7 +354,13 @@ def all_target_comparisons(db: Session, tenant_id: uuid.UUID, location_id: uuid.
         if range_target is None:
             continue
         window = [m for m in months if target.target_period_start <= m <= target.target_period_end] or months
-        actual, _ = extract_metric_value(db, tenant_id, location_id, target.metric_key, window)
+        if target.metric_key in _GHG_ABSOLUTE_FIELD or target.metric_key in _GHG_RATE_FIELD:
+            totals = compute_range_totals(db, tenant_id, location_id, window, by_month=ghg_by_month)
+            field = _GHG_ABSOLUTE_FIELD.get(target.metric_key) or _GHG_RATE_FIELD.get(target.metric_key)
+            actual = totals[field]
+        else:
+            overview = compute_intensity_overview_range(db, tenant_id, location_id, window, by_month=other_by_month)
+            actual = getattr(overview, _OTHER_RATE_FIELD[target.metric_key])
         results.append(
             TargetStatus(
                 target_id=target.id,
