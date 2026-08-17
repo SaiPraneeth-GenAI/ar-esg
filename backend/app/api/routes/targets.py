@@ -71,12 +71,21 @@ def _target_out(db: Session, target: EmissionTarget) -> TargetOut:
     if target.status == "active":
         now = datetime.now(timezone.utc)
         period = month_start(now.date())
-        value, _ = extract_metric_value(db, target.tenant_id, target.location_id, target.metric_key, [period])
-        num_months = len(months_between(target.target_period_start, target.target_period_end))
-        month_target = target_value_for_month(
-            target.monthly_phasing, period, float(target.target_value) if target.target_value is not None else None, num_months, target.metric_key
-        )
-        status_label = classify_status(value, month_target)
+        if period < target.target_period_start:
+            # Comparing this month's actual against a target period that
+            # hasn't started yet (e.g. a target set now for a future year)
+            # isn't a real comparison -- the target commits to an outcome
+            # BY that period, not one owed starting today.
+            status_label = "Not started yet"
+        elif period > target.target_period_end:
+            status_label = "Target period ended"
+        else:
+            value, _ = extract_metric_value(db, target.tenant_id, target.location_id, target.metric_key, [period])
+            num_months = len(months_between(target.target_period_start, target.target_period_end))
+            month_target = target_value_for_month(
+                target.monthly_phasing, period, float(target.target_value) if target.target_value is not None else None, num_months, target.metric_key
+            )
+            status_label = classify_status(value, month_target)
 
     return TargetOut(
         id=target.id,
