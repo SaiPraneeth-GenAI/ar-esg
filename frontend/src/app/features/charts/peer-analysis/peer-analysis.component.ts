@@ -105,6 +105,8 @@ export class PeerAnalysisComponent implements OnInit {
   }
 
   reupload(): void {
+    const company = this.company();
+    if (company) this.peerApi.invalidateCompare(company.id, this.year());
     this.phase.set('upload');
     this.peerApi.clearExtraction();
     this.selectedFile.set(null);
@@ -195,10 +197,33 @@ export class PeerAnalysisComponent implements OnInit {
         notes: null
       });
       this.successMessage.set('Comparison saved.');
+
+      // Build the comparison straight from what's already in memory (the
+      // AR reference values fetched during extraction, the peer values just
+      // confirmed) instead of re-fetching and recomputing everything from
+      // the server -- this becomes the cached result for the year until a
+      // re-upload invalidates it.
+      const extractResult = this.peerApi.extractResult();
+      const result: PeerCompareYearResult = {
+        year: this.year(),
+        peer_company_name: extractResult?.peer_company_name ?? company.name,
+        groups: this.groupedRows().map((g) => ({
+          group: g.group,
+          metrics: g.rows.map((r) => ({
+            key: r.key,
+            label: r.label,
+            unit: r.unit,
+            amara_raja_value: r.amara_raja_value,
+            peer_value: this.editableValues()[r.key] ?? null
+          }))
+        }))
+      };
+      this.peerApi.setCachedCompare(company.id, this.year(), result);
+      this.compareResult.set(result);
+
       this.peerApi.clearExtraction();
       await this.refreshSavedYears();
       this.phase.set('compare');
-      await this.loadCompare(this.year());
     } catch (err: any) {
       this.errorMessage.set(err?.error?.detail ?? 'Could not save this comparison.');
     } finally {

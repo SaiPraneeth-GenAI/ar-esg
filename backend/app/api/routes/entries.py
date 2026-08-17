@@ -1,7 +1,7 @@
 import csv
 import io
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -11,7 +11,20 @@ from app.core.auth import CurrentUser, require_roles
 from app.core.config import get_settings
 from app.core.supabase_storage import upload_file
 from app.core.unit_conversion import convert_unit, units_equivalent
-from app.db.models import Approval, AuditLog, Attachment, Category, DataPoint, EmailLog, Entry, Location, MappingTemplate, Tenant, User
+from app.db.models import (
+    Approval,
+    AuditLog,
+    Attachment,
+    Category,
+    ColumnMappingMemory,
+    DataPoint,
+    EmailLog,
+    Entry,
+    Location,
+    MappingTemplate,
+    Tenant,
+    User,
+)
 from app.db.session import get_db
 from app.schemas.entries import (
     AttachmentOut,
@@ -40,7 +53,7 @@ from app.schemas.mapping import (
 from app.services.audit import write_audit
 from app.services.carbon_calculation import calculate_entry
 from app.services.mailing import MailingError, send_email
-from app.services.mapping import header_fingerprint, infer_period, match_category, match_data_point, match_metadata_field
+from app.services.mapping import header_fingerprint, infer_period, match_category, match_data_point, match_metadata_field, normalize
 from app.services.rollups import recompute_rollup_for_entry
 
 router = APIRouter(prefix="/entries", tags=["entries"])
@@ -352,7 +365,28 @@ def detect_bulk_import(
                     columns.append(ColumnSuggestion(header=header, target=None, target_type="unmatched", score=1.0, rule="template"))
         elif category is not None:
             category_dps = dp_by_category.get(category.id, [])
+            memory_by_header = {
+                m.source_header: m
+                for m in db.query(ColumnMappingMemory).filter(
+                    ColumnMappingMemory.tenant_id == current.tenant_id,
+                    ColumnMappingMemory.category_id == category.id,
+                )
+            }
             for header in sheet.headers:
+                mem = memory_by_header.get(normalize(header))
+                if mem is not None:
+                    columns.append(
+                        ColumnSuggestion(
+                            header=header,
+                            target=mem.target,
+                            target_type=mem.target_type,
+                            data_point_name=dp_name_by_id.get(mem.target) if mem.target_type == "data_point" else None,
+                            score=mem.confidence,
+                            rule="memory",
+                        )
+                    )
+                    continue
+
                 meta_match = match_metadata_field(header)
                 if meta_match.key:
                     columns.append(
@@ -427,6 +461,39 @@ def save_mapping_template(
         db.add(template)
     else:
         template.column_mapping = payload.column_mapping
+
+    # Also remember each column individually (not just this exact whole-file
+    # signature) so a future file with the same header renamed/reordered/
+    # mixed with new columns still gets this header right without asking again.
+    for header, target in payload.column_mapping.items():
+        if not target:
+            continue
+        norm_header = normalize(header)
+        if not norm_header:
+            continue
+        mem = (
+            db.query(ColumnMappingMemory)
+            .filter(
+                ColumnMappingMemory.tenant_id == current.tenant_id,
+                ColumnMappingMemory.category_id == payload.category_id,
+                ColumnMappingMemory.source_header == norm_header,
+            )
+            .first()
+        )
+        if mem is None:
+            mem = ColumnMappingMemory(
+                tenant_id=current.tenant_id,
+                category_id=payload.category_id,
+                source_header=norm_header,
+                confirmed_by=current.id,
+            )
+            db.add(mem)
+        mem.target_type = "metadata" if target in ("period", "note") else "data_point"
+        mem.target = target
+        mem.confidence = 1.0
+        mem.source = "manual_confirm"
+        mem.updated_at = datetime.now(timezone.utc)
+
     db.commit()
     db.refresh(template)
 

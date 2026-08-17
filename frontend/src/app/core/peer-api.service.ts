@@ -163,10 +163,34 @@ export class PeerApiService {
     this.extractElapsedSeconds.set(0);
   }
 
+  // Comparison results are cached by year once built (either fetched or
+  // assembled straight from a just-confirmed save) so revisiting a year
+  // -- including after navigating away and back -- reads from memory
+  // instead of re-hitting the server, until a re-upload invalidates it.
+  private compareCache = new Map<string, PeerCompareYearResult>();
+
+  private compareCacheKey(companyId: string, year: number): string {
+    return `${companyId}:${year}`;
+  }
+
   async compareYear(companyId: string, year: number): Promise<PeerCompareYearResult> {
+    const key = this.compareCacheKey(companyId, year);
+    const cached = this.compareCache.get(key);
+    if (cached) return cached;
+
     const headers = await this.authHeaders();
-    return firstValueFrom(
+    const result = await firstValueFrom(
       this.http.get<PeerCompareYearResult>(`${environment.apiBaseUrl}/peers/${companyId}/compare-year`, { headers, params: { year } })
     );
+    this.compareCache.set(key, result);
+    return result;
+  }
+
+  setCachedCompare(companyId: string, year: number, result: PeerCompareYearResult): void {
+    this.compareCache.set(this.compareCacheKey(companyId, year), result);
+  }
+
+  invalidateCompare(companyId: string, year: number): void {
+    this.compareCache.delete(this.compareCacheKey(companyId, year));
   }
 }

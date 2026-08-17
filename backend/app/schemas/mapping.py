@@ -16,7 +16,7 @@ class ColumnSuggestion(BaseModel):
     target_type: str  # "metadata" | "data_point" | "unmatched"
     data_point_name: str | None = None
     score: float
-    rule: str  # "exact_alias" | "fuzzy" | "no_match" | "template"
+    rule: str  # "exact_alias" | "fuzzy" | "memory" | "ai" | "no_match" | "template"
 
 
 class SheetDetectionResult(BaseModel):
