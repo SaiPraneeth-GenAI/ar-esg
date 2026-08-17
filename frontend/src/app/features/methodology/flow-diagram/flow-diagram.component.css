@@ -128,7 +128,7 @@
 .edge {
   stroke: var(--edge-color);
   stroke-width: 1.8;
-  transition: stroke 0.2s ease, stroke-width 0.2s ease;
+  transition: stroke 0.2s ease, stroke-width 0.2s ease, opacity 0.2s ease;
 }
 
 .edge.dashed {
@@ -140,11 +140,20 @@
   stroke-width: 2.6;
 }
 
+.edge.dimmed {
+  opacity: 0.18;
+}
+
 /* Nodes */
 
 .node {
   cursor: pointer;
   outline: none;
+  transition: opacity 0.2s ease;
+}
+
+.node.dimmed {
+  opacity: 0.32;
 }
 
 .node-box {

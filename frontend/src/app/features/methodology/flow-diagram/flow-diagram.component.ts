@@ -1,6 +1,7 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, ElementRef, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { AdminLocation, ApiService } from '../../../core/api.service';
 import { CarbonApiService, EmissionCalculationOut } from '../../../core/carbon-api.service';
 import { IntensityApiService, PeriodMode } from '../../../core/intensity-api.service';
@@ -170,6 +171,7 @@ export class FlowDiagramComponent implements OnInit {
   private safetyApi = inject(SafetyApiService);
   private targetApi = inject(TargetApiService);
   private api = inject(ApiService);
+  private route = inject(ActivatedRoute);
 
   @ViewChild('svgEl') svgEl!: ElementRef<SVGSVGElement>;
 
@@ -200,7 +202,30 @@ export class FlowDiagramComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     this.locations.set(await this.api.listLocations());
+
+    // A dashboard card can deep-link here with the exact period/site/nodes
+    // it was showing, so the diagram opens already scoped and spotlit
+    // instead of leaving the customer to hunt for the right slice.
+    const params = this.route.snapshot.queryParamMap;
+    const period = params.get('period');
+    const periodMode = params.get('periodMode') as PeriodMode | null;
+    const locationId = params.get('locationId');
+    const nodeIds = params.get('nodes');
+    if (periodMode === 'month' || periodMode === 'quarter' || periodMode === 'ytd') {
+      this.periodMode.set(periodMode);
+    }
+    if (period) {
+      this.period.set(period);
+    }
+    if (locationId) {
+      this.locationId.set(locationId);
+    }
+
     await this.load();
+
+    if (nodeIds) {
+      this.highlightPath(nodeIds.split(',').filter(Boolean));
+    }
   }
 
   async setLocation(value: string): Promise<void> {
@@ -571,6 +596,52 @@ export class FlowDiagramComponent implements OnInit {
     this.activeEdgeKeys.set(new Set());
   }
 
+  /** Spotlights one or more target nodes plus everything that feeds them --
+   * walked backward through the edge list, same graph the Play animation
+   * uses, just resolved instantly instead of staged. Used when a dashboard
+   * card deep-links straight to "how was this number built". */
+  highlightPath(targetIds: string[]): void {
+    const validTargets = targetIds.filter((id) => this.nodes.some((n) => n.id === id));
+    if (validTargets.length === 0) return;
+
+    const nodeIds = new Set<string>(validTargets);
+    const edgeKeys = new Set<string>();
+    let frontier = [...validTargets];
+    while (frontier.length > 0) {
+      const next: string[] = [];
+      for (const id of frontier) {
+        for (const edge of this.edges) {
+          if (edge.to !== id) continue;
+          edgeKeys.add(`${edge.from}->${edge.to}`);
+          if (!nodeIds.has(edge.from)) {
+            nodeIds.add(edge.from);
+            next.push(edge.from);
+          }
+        }
+      }
+      frontier = next;
+    }
+
+    this.activeNodeIds.set(nodeIds);
+    this.activeEdgeKeys.set(edgeKeys);
+    this.fitToNodes([...nodeIds]);
+    if (validTargets.length > 0) {
+      const first = this.nodes.find((n) => n.id === validTargets[0]);
+      if (first) this.selectNode(first);
+    }
+  }
+
+  private fitToNodes(nodeIds: string[]): void {
+    const targetNodes = this.nodes.filter((n) => nodeIds.includes(n.id));
+    if (targetNodes.length === 0) return;
+    const pad = 90;
+    const minX = Math.min(...targetNodes.map((n) => n.x)) - pad;
+    const minY = Math.min(...targetNodes.map((n) => n.y)) - pad;
+    const maxX = Math.max(...targetNodes.map((n) => n.x + n.w)) + pad;
+    const maxY = Math.max(...targetNodes.map((n) => n.y + n.h)) + pad;
+    this.viewBox.set({ x: minX, y: minY, w: Math.max(maxX - minX, 400), h: Math.max(maxY - minY, 300) });
+  }
+
   // -- Geometry helpers ---------------------------------------------------
 
   edgePath(edge: FlowEdge): string {
@@ -590,6 +661,14 @@ export class FlowDiagramComponent implements OnInit {
 
   isEdgeActive(edge: FlowEdge): boolean {
     return this.activeEdgeKeys().has(this.edgeKey(edge));
+  }
+
+  /** True whenever any node is spotlit (mid-Play or a deep-linked
+   * highlight) -- drives dimming everything else so the lit path actually
+   * reads as "this is the answer", not just one more highlighted node
+   * among equals. */
+  isHighlighting(): boolean {
+    return this.activeNodeIds().size > 0;
   }
 
   isNodeActive(node: FlowNode): boolean {

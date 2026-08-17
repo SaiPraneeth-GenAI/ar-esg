@@ -23,7 +23,15 @@
     </div>
   } @else if (overview()) {
     <div class="carbon-cards">
-      <div class="carbon-card" [class]="cardTargetClass(overview()!.scope1_2_target)">
+      <div
+        class="carbon-card flow-clickable"
+        [class]="cardTargetClass(overview()!.scope1_2_target)"
+        role="button"
+        tabindex="0"
+        title="See how this is calculated"
+        (click)="goToFlowDiagram('scope1_2')"
+        (keydown.enter)="goToFlowDiagram('scope1_2')"
+      >
         <div class="card-top">
           <span class="card-label">Scope 1+2 (location-based)</span>
         </div>
@@ -45,14 +53,23 @@
               }
             </div>
           } @else {
-            <a class="target-link" routerLink="/admin/targets">No target set</a>
+            <a class="target-link" routerLink="/admin/targets" (click)="$event.stopPropagation()">No target set</a>
           }
         } @else {
           <div class="card-empty">No approved calculation yet</div>
         }
+        <span class="flow-hint">See calculation →</span>
       </div>
 
-      <div class="carbon-card" [class]="cardTargetClass(overview()!.intensity_target)">
+      <div
+        class="carbon-card flow-clickable"
+        [class]="cardTargetClass(overview()!.intensity_target)"
+        role="button"
+        tabindex="0"
+        title="See how this is calculated"
+        (click)="goToFlowDiagram('intensity')"
+        (keydown.enter)="goToFlowDiagram('intensity')"
+      >
         <div class="card-top">
           <span class="card-label">Specific GHG emissions</span>
         </div>
@@ -74,14 +91,23 @@
               }
             </div>
           } @else {
-            <a class="target-link" routerLink="/admin/targets">No target set</a>
+            <a class="target-link" routerLink="/admin/targets" (click)="$event.stopPropagation()">No target set</a>
           }
         } @else {
           <div class="card-empty">Missing approved battery production — add it to see intensity</div>
         }
+        <span class="flow-hint">See calculation →</span>
       </div>
 
-      <div class="carbon-card" [class]="cardTargetClass(overview()!.scope1_target)">
+      <div
+        class="carbon-card flow-clickable"
+        [class]="cardTargetClass(overview()!.scope1_target)"
+        role="button"
+        tabindex="0"
+        title="See how this is calculated"
+        (click)="goToFlowDiagram('scope1')"
+        (keydown.enter)="goToFlowDiagram('scope1')"
+      >
         <div class="card-top">
           <span class="card-label">Scope 1</span>
         </div>
@@ -103,14 +129,23 @@
               }
             </div>
           } @else {
-            <a class="target-link" routerLink="/admin/targets">No target set</a>
+            <a class="target-link" routerLink="/admin/targets" (click)="$event.stopPropagation()">No target set</a>
           }
         } @else {
           <div class="card-empty">No approved calculation yet</div>
         }
+        <span class="flow-hint">See calculation →</span>
       </div>
 
-      <div class="carbon-card" [class]="cardTargetClass(overview()!.scope2_target)">
+      <div
+        class="carbon-card flow-clickable"
+        [class]="cardTargetClass(overview()!.scope2_target)"
+        role="button"
+        tabindex="0"
+        title="See how this is calculated"
+        (click)="goToFlowDiagram('scope2')"
+        (keydown.enter)="goToFlowDiagram('scope2')"
+      >
         <div class="card-top">
           <span class="card-label">Scope 2 (location-based)</span>
         </div>
@@ -135,11 +170,12 @@
               }
             </div>
           } @else {
-            <a class="target-link" routerLink="/admin/targets">No target set</a>
+            <a class="target-link" routerLink="/admin/targets" (click)="$event.stopPropagation()">No target set</a>
           }
         } @else {
           <div class="card-empty">No approved calculation yet</div>
         }
+        <span class="flow-hint">See calculation →</span>
       </div>
 
       <div class="carbon-card">

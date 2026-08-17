@@ -79,6 +79,7 @@
           class="edge"
           [class.dashed]="edge.dashed"
           [class.active]="isEdgeActive(edge)"
+          [class.dimmed]="isHighlighting() && !isEdgeActive(edge)"
           fill="none"
           [attr.marker-end]="isEdgeActive(edge) ? 'url(#arrow-active)' : 'url(#arrow)'"
         />
@@ -91,6 +92,7 @@
           [class]="'kind-' + node.kind"
           [class.planned]="!node.live"
           [class.active]="isNodeActive(node)"
+          [class.dimmed]="isHighlighting() && !isNodeActive(node)"
           [class.selected]="selectedNode()?.id === node.id"
           [attr.transform]="'translate(' + node.x + ',' + node.y + ')'"
           (click)="selectNode(node)"

@@ -1,6 +1,6 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, ElementRef, Input, OnChanges, SimpleChanges, ViewChild, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { CarbonApiService, CarbonOverview, CarbonOverviewSource, EmissionCalculationOut, TargetComparison, TargetStatusOut } from '../../../core/carbon-api.service';
 import { PeriodMode, formatBucketLabel, priorPeriodLabel, priorYearLabel, showsPriorPeriod } from '../../../core/intensity-api.service';
 import { PieChartComponent, PieSlice } from '../../../shared/pie-chart/pie-chart.component';
@@ -21,6 +21,16 @@ const GHG_SERIES: ChartSeriesDef[] = [
   { key: 'intensity', label: 'Specific GHG emissions', unit: 'tCO2e/MnAh', tracked: true }
 ];
 
+/** Which Calculations flow-diagram node(s) a given card's figure is built
+ * from -- lets a click jump straight to that node's slice of the diagram
+ * instead of leaving the customer to hunt for it themselves. */
+const FLOW_NODES_BY_CARD: Record<string, string[]> = {
+  scope1_2: ['scope1-total', 'scope2-total'],
+  scope1: ['scope1-total'],
+  scope2: ['scope2-total'],
+  intensity: ['intensity-production']
+};
+
 @Component({
   selector: 'app-carbon-overview',
   standalone: true,
@@ -30,6 +40,7 @@ const GHG_SERIES: ChartSeriesDef[] = [
 })
 export class CarbonOverviewComponent implements OnChanges {
   private api = inject(CarbonApiService);
+  private router = inject(Router);
 
   @Input({ required: true }) period!: string;
   @Input() locationId: string | null = null;
@@ -329,6 +340,23 @@ export class CarbonOverviewComponent implements OnChanges {
     if (pct <= 0) return 'green';
     if (pct <= 10) return 'amber';
     return 'red';
+  }
+
+  /** Jumps to the Calculations page with the exact node(s) this card's
+   * figure comes from highlighted, and the same period/site carried over --
+   * so "how was this number built" is one click, not a hunt through the
+   * whole diagram. */
+  goToFlowDiagram(cardKey: keyof typeof FLOW_NODES_BY_CARD): void {
+    const nodes = FLOW_NODES_BY_CARD[cardKey];
+    if (!nodes) return;
+    this.router.navigate(['/admin/methodology'], {
+      queryParams: {
+        nodes: nodes.join(','),
+        period: this.period,
+        periodMode: this.periodMode,
+        locationId: this.locationId || undefined
+      }
+    });
   }
 
   targetStatusClass(status: string): string {
