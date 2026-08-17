@@ -200,6 +200,60 @@
   color: #98a2b3;
 }
 
+.mode-toggle {
+  display: flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 0.2rem;
+  gap: 0.15rem;
+  background: #f2f4f7;
+  border-radius: 9px;
+}
+
+.mode-btn {
+  border: none;
+  background: transparent;
+  padding: 0.4rem 0.85rem;
+  border-radius: 7px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #667085;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.mode-btn.active {
+  background: #fff;
+  color: #101828;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+
+.match-rule {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rule-exact_alias,
+.rule-memory,
+.rule-template {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.rule-fuzzy {
+  background: #fffaeb;
+  color: #b54708;
+}
+
+.rule-no_match {
+  background: #f2f4f7;
+  color: #667085;
+}
+
 /* Step 4: validate */
 
 .row-error {

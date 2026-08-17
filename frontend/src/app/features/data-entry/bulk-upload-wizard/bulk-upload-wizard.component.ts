@@ -2,6 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, EventEmitter, Input, Output, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BulkImportRowIn, EntriesApiService, EntryCategory } from '../../../core/entries-api.service';
+import { ColumnSuggestion, MappingApiService, SheetDetectionResult } from '../../../core/mapping-api.service';
 import {
   TARGET_FIELDS,
   TargetField,
@@ -13,6 +14,15 @@ import {
 
 type Step = 'upload' | 'preview' | 'mapping' | 'validate' | 'confirm';
 type RowStatus = 'valid' | 'error' | 'created' | 'unchecked';
+/** 'long' = the wizard's original shape, one row per (data point, period)
+ * reading with role columns like Data point/Value/Period. 'wide' = the
+ * customer's own file where each column IS a distinct metric (e.g.
+ * "Diesel Consumed", "Grid Electricity" as separate columns) and rows are
+ * periods -- detected automatically, backed by the same deterministic
+ * alias/fuzzy/memory matcher /bulk-import/detect already has, just never
+ * wired into this wizard until now. Both converge to the same
+ * BulkImportRowIn[] shape before validation/commit. */
+type UploadMode = 'long' | 'wide';
 
 interface MappingChoice {
   headerIndex: number;
@@ -52,6 +62,7 @@ function cellDisplay(value: unknown): string {
 })
 export class BulkUploadWizardComponent {
   private api = inject(EntriesApiService);
+  private mappingApi = inject(MappingApiService);
 
   /** null = "all categories" mode -- one upload covering every category at
    * once, matched by (category, data_point_name) since a few field names
@@ -84,6 +95,17 @@ export class BulkUploadWizardComponent {
   headers = signal<string[]>([]);
   rawRows = signal<unknown[][]>([]);
   mapping = signal<MappingChoice[]>([]);
+
+  // 'wide' mode: the customer's own file, one column per metric, matched
+  // via the backend's real alias/fuzzy/memory-of-past-confirmations
+  // matcher (/bulk-import/detect) instead of the client-side role guesser
+  // 'long' mode uses. Only available when a single category is selected --
+  // "all categories" mode has no way to know which category a wide
+  // column's metric belongs to.
+  uploadMode = signal<UploadMode>('long');
+  wideDetecting = signal(false);
+  wideDetectResult = signal<SheetDetectionResult | null>(null);
+  wideMapping = signal<Record<number, string | null>>({});
 
   validating = signal(false);
   rows = signal<EditableRow[]>([]);
@@ -172,12 +194,39 @@ export class BulkUploadWizardComponent {
     this.rawRows.set([]);
     this.fileName.set('');
     this.rowsBuiltForMapping = null;
+    this.uploadMode.set('long');
+    this.wideDetectResult.set(null);
+    this.wideMapping.set({});
   }
 
-  confirmPreview(): void {
+  async confirmPreview(): Promise<void> {
     const guesses = guessMapping(this.headers());
-    this.mapping.set(this.headers().map((header, i) => ({ headerIndex: i, header, target: guesses[i] })));
-    this.step.set('mapping');
+    const looksLongFormat = guesses.includes('data_point_name') && guesses.includes('value');
+    if (looksLongFormat || !this.category) {
+      // "All categories" mode has no wide-format equivalent (a wide
+      // column's metric could belong to any category), so it always uses
+      // the long-format role-mapping flow regardless of this guess.
+      this.uploadMode.set('long');
+      this.mapping.set(this.headers().map((header, i) => ({ headerIndex: i, header, target: guesses[i] })));
+      this.step.set('mapping');
+    } else {
+      this.uploadMode.set('wide');
+      await this.runWideDetect();
+      this.step.set('mapping');
+    }
+  }
+
+  /** Manual override for when the auto-detected shape guessed wrong. */
+  async switchUploadMode(mode: UploadMode): Promise<void> {
+    if (mode === this.uploadMode()) return;
+    if (mode === 'wide' && !this.category) return;
+    this.uploadMode.set(mode);
+    if (mode === 'wide' && !this.wideDetectResult()) {
+      await this.runWideDetect();
+    } else if (mode === 'long' && this.mapping().length === 0) {
+      const guesses = guessMapping(this.headers());
+      this.mapping.set(this.headers().map((header, i) => ({ headerIndex: i, header, target: guesses[i] })));
+    }
   }
 
   setMapping(headerIndex: number, target: string): void {
@@ -187,6 +236,124 @@ export class BulkUploadWizardComponent {
 
   targetLabel(key: string | null): string {
     return this.targetFields.find((f) => f.key === key)?.label ?? 'Unmatched';
+  }
+
+  // -- Wide-format mapping (one column per metric) --------------------
+
+  private async runWideDetect(): Promise<void> {
+    if (!this.category) return;
+    this.wideDetecting.set(true);
+    try {
+      const response = await this.mappingApi.detect([{ name: this.category.name, filename: this.fileName(), headers: this.headers() }]);
+      const result = response.sheets[0] ?? null;
+      this.wideDetectResult.set(result);
+      const initial: Record<number, string | null> = {};
+      result?.columns.forEach((col, i) => (initial[i] = col.target));
+      this.wideMapping.set(initial);
+    } finally {
+      this.wideDetecting.set(false);
+    }
+  }
+
+  wideColumnAt(index: number): ColumnSuggestion | undefined {
+    return this.wideDetectResult()?.columns[index];
+  }
+
+  setWideMapping(headerIndex: number, target: string): void {
+    this.wideMapping.set({ ...this.wideMapping(), [headerIndex]: target || null });
+  }
+
+  wideMappingComplete = computed(() => Object.values(this.wideMapping()).some((t) => t && t !== 'period' && t !== 'note'));
+
+  ruleLabel(rule: string | undefined): string {
+    switch (rule) {
+      case 'exact_alias':
+        return 'Exact match';
+      case 'fuzzy':
+        return 'Likely match';
+      case 'memory':
+        return 'Remembered';
+      case 'template':
+        return 'Remembered file';
+      default:
+        return 'Unmatched';
+    }
+  }
+
+  /** Resolves a data-point id to its name from the CURRENT mapping
+   * selection -- not the original suggestion's data_point_name, which
+   * goes stale the moment the user picks a different data point in the
+   * dropdown. */
+  private dataPointNameForId(id: string): string | undefined {
+    const cats = this.isAllCategories() ? this.allCategories : this.category ? [this.category] : [];
+    for (const cat of cats) {
+      const dp = cat.data_points.find((d) => d.id === id);
+      if (dp) return dp.name;
+    }
+    return undefined;
+  }
+
+  private buildRowsFromWideFile(): EditableRow[] {
+    const result = this.wideDetectResult();
+    const map = this.wideMapping();
+    if (!result) return [];
+
+    const periodIdx = result.columns.findIndex((_, i) => map[i] === 'period');
+    const noteIdx = result.columns.findIndex((_, i) => map[i] === 'note');
+    const dataPointCols = result.columns
+      .map((_col, i) => ({ i, target: map[i] }))
+      .filter((c) => c.target && c.target !== 'period' && c.target !== 'note')
+      .map((c) => ({ i: c.i, name: this.dataPointNameForId(c.target!) }))
+      .filter((c): c is { i: number; name: string } => !!c.name);
+
+    const rows: EditableRow[] = [];
+    let rowIndex = 2;
+    for (const rawRow of this.rawRows()) {
+      const periodRaw = periodIdx >= 0 ? rawRow[periodIdx] : null;
+      const periodIso = (periodRaw ? parsePeriodToIso(periodRaw) : null) ?? this.period;
+      const noteVal = noteIdx >= 0 ? String(rawRow[noteIdx] ?? '').trim() || null : null;
+      for (const col of dataPointCols) {
+        const raw = rawRow[col.i];
+        if (raw === '' || raw === null || raw === undefined) continue; // not every metric has a value every row
+        rows.push({
+          row_index: rowIndex++,
+          category: this.category?.name ?? null,
+          data_point_name: col.name,
+          period_iso: periodIso,
+          value_raw: String(raw).trim(),
+          unit_raw: null,
+          note: noteVal,
+          included: true,
+          status: 'unchecked',
+          message: null,
+          entry_id: null,
+          unitNote: null,
+          suggestedUnit: null
+        });
+      }
+    }
+    return rows;
+  }
+
+  /** Best-effort: remembers the confirmed mapping (both the whole-file
+   * fingerprint and, server-side, each individual column) so the exact
+   * same file -- or just a column reused in a different file -- doesn't
+   * need mapping again. A failure here shouldn't block the actual
+   * upload. */
+  private async saveWideMappingMemory(): Promise<void> {
+    const result = this.wideDetectResult();
+    if (!result?.category_id) return;
+    const columnMapping: Record<string, string> = {};
+    result.columns.forEach((col, i) => {
+      const target = this.wideMapping()[i];
+      if (target) columnMapping[col.header] = target;
+    });
+    if (Object.keys(columnMapping).length === 0) return;
+    try {
+      await this.mappingApi.saveTemplate(result.category_id, result.header_fingerprint, columnMapping);
+    } catch {
+      // non-fatal
+    }
   }
 
   private buildRowsFromFile(): EditableRow[] {
@@ -230,10 +397,19 @@ export class BulkUploadWizardComponent {
   private rowsBuiltForMapping: string | null = null;
 
   async runValidation(): Promise<void> {
-    const mappingKey = JSON.stringify(this.mapping().map((m) => m.target));
-    if (this.rows().length === 0 || mappingKey !== this.rowsBuiltForMapping) {
-      this.rows.set(this.buildRowsFromFile());
-      this.rowsBuiltForMapping = mappingKey;
+    if (this.uploadMode() === 'wide') {
+      const mappingKey = JSON.stringify(this.wideMapping());
+      if (this.rows().length === 0 || mappingKey !== this.rowsBuiltForMapping) {
+        this.rows.set(this.buildRowsFromWideFile());
+        this.rowsBuiltForMapping = mappingKey;
+      }
+      void this.saveWideMappingMemory();
+    } else {
+      const mappingKey = JSON.stringify(this.mapping().map((m) => m.target));
+      if (this.rows().length === 0 || mappingKey !== this.rowsBuiltForMapping) {
+        this.rows.set(this.buildRowsFromFile());
+        this.rowsBuiltForMapping = mappingKey;
+      }
     }
     this.step.set('validate');
     await this.recheck();
@@ -375,5 +551,8 @@ export class BulkUploadWizardComponent {
     this.rowsBuiltForMapping = null;
     this.commitResult.set(null);
     this.commitError.set('');
+    this.uploadMode.set('long');
+    this.wideDetectResult.set(null);
+    this.wideMapping.set({});
   }
 }

@@ -76,46 +76,109 @@
 
   @if (step() === 'mapping') {
     <div class="wizard-body">
-      <p class="wizard-intro">Match each column in your file to a field. We've guessed based on the header names.</p>
-      <p class="wizard-hint">Period / Month is optional -- leave it unmatched and every row uses the period selected above.</p>
-
-      <table class="mapping-table">
-        <thead>
-          <tr>
-            <th>Your column</th>
-            <th>Maps to</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (m of mapping(); track m.headerIndex) {
-            <tr>
-              <td class="mapping-header">{{ m.header || '(blank)' }}</td>
-              <td>
-                <select [ngModel]="m.target ?? ''" (ngModelChange)="setMapping(m.headerIndex, $event)">
-                  <option value="">Unmatched -- ignore this column</option>
-                  @for (field of targetFields; track field.key) {
-                    <option [value]="field.key">{{ field.label }}{{ field.required ? ' *' : '' }}</option>
-                  }
-                </select>
-                @if (!m.target) {
-                  <span class="unmatched-flag">Unmatched</span>
-                }
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-
-      @if (!mappingComplete()) {
-        <div class="banner error">Map a column to Data point and Value (marked *) before continuing.</div>
+      @if (category) {
+        <div class="mode-toggle" role="group" aria-label="How this file is shaped">
+          <button type="button" class="mode-btn" [class.active]="uploadMode() === 'wide'" (click)="switchUploadMode('wide')">
+            One column per metric
+          </button>
+          <button type="button" class="mode-btn" [class.active]="uploadMode() === 'long'" (click)="switchUploadMode('long')">
+            One row per reading
+          </button>
+        </div>
       }
 
-      <div class="wizard-nav">
-        <button type="button" class="secondary-btn" (click)="step.set('preview')">Back</button>
-        <button type="button" class="primary-btn" [disabled]="!mappingComplete()" (click)="runValidation()">
-          Continue to validation
-        </button>
-      </div>
+      @if (uploadMode() === 'wide') {
+        <p class="wizard-intro">
+          Each column below looks like it's its own metric (e.g. "Diesel Consumed", "Grid Electricity"). We've matched
+          what we recognize -- confirm or fix the rest.
+        </p>
+
+        @if (wideDetecting()) {
+          <p class="wizard-hint">Matching your columns…</p>
+        } @else {
+          <table class="mapping-table">
+            <thead>
+              <tr>
+                <th>Your column</th>
+                <th>Maps to</th>
+                <th>How we matched it</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (col of wideDetectResult()?.columns ?? []; track $index; let i = $index) {
+                <tr>
+                  <td class="mapping-header">{{ col.header || '(blank)' }}</td>
+                  <td>
+                    <select [ngModel]="wideMapping()[i] ?? ''" (ngModelChange)="setWideMapping(i, $event)">
+                      <option value="">Unmatched -- ignore this column</option>
+                      <option value="period">Period / Month</option>
+                      <option value="note">Note</option>
+                      @for (dp of category!.data_points; track dp.id) {
+                        <option [value]="dp.id">{{ dp.name }}</option>
+                      }
+                    </select>
+                  </td>
+                  <td>
+                    <span class="match-rule" [class]="'rule-' + col.rule">{{ ruleLabel(col.rule) }}</span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+
+          @if (!wideMappingComplete()) {
+            <div class="banner error">Map at least one column to a data point before continuing.</div>
+          }
+        }
+
+        <div class="wizard-nav">
+          <button type="button" class="secondary-btn" (click)="step.set('preview')">Back</button>
+          <button type="button" class="primary-btn" [disabled]="!wideMappingComplete() || wideDetecting()" (click)="runValidation()">
+            Continue to validation
+          </button>
+        </div>
+      } @else {
+        <p class="wizard-intro">Match each column in your file to a field. We've guessed based on the header names.</p>
+        <p class="wizard-hint">Period / Month is optional -- leave it unmatched and every row uses the period selected above.</p>
+
+        <table class="mapping-table">
+          <thead>
+            <tr>
+              <th>Your column</th>
+              <th>Maps to</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (m of mapping(); track m.headerIndex) {
+              <tr>
+                <td class="mapping-header">{{ m.header || '(blank)' }}</td>
+                <td>
+                  <select [ngModel]="m.target ?? ''" (ngModelChange)="setMapping(m.headerIndex, $event)">
+                    <option value="">Unmatched -- ignore this column</option>
+                    @for (field of targetFields; track field.key) {
+                      <option [value]="field.key">{{ field.label }}{{ field.required ? ' *' : '' }}</option>
+                    }
+                  </select>
+                  @if (!m.target) {
+                    <span class="unmatched-flag">Unmatched</span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+
+        @if (!mappingComplete()) {
+          <div class="banner error">Map a column to Data point and Value (marked *) before continuing.</div>
+        }
+
+        <div class="wizard-nav">
+          <button type="button" class="secondary-btn" (click)="step.set('preview')">Back</button>
+          <button type="button" class="primary-btn" [disabled]="!mappingComplete()" (click)="runValidation()">
+            Continue to validation
+          </button>
+        </div>
+      }
     </div>
   }
 
