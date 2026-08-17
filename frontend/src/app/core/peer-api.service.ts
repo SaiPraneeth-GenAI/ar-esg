@@ -112,6 +112,20 @@ export class PeerApiService {
     return firstValueFrom(this.http.get<PeerCompany>(`${environment.apiBaseUrl}/peers/default-company`, { headers }));
   }
 
+  /** Every peer company this tenant tracks -- not just the one
+   * auto-provisioned default. Backs the multi-peer picker (up to 4 at
+   * once): the comparison algorithm itself never changes per company,
+   * only which company_id it's pointed at. */
+  async listCompanies(): Promise<PeerCompany[]> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(this.http.get<PeerCompany[]>(`${environment.apiBaseUrl}/peers`, { headers }));
+  }
+
+  async createCompany(payload: { name: string; industry: string | null; country: string | null }): Promise<PeerCompany> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(this.http.post<PeerCompany>(`${environment.apiBaseUrl}/peers`, payload, { headers }));
+  }
+
   async listData(companyId: string): Promise<PeerData[]> {
     const headers = await this.authHeaders();
     return firstValueFrom(this.http.get<PeerData[]>(`${environment.apiBaseUrl}/peers/${companyId}/data`, { headers }));

@@ -1,9 +1,28 @@
 import { DecimalPipe } from '@angular/common';
-import { Component, OnInit, effect, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { PeerApiService, PeerCompany, PeerCompareYearResult, PeerExtractRow } from '../../../core/peer-api.service';
 
 type Phase = 'upload' | 'review' | 'compare';
+
+// The comparison algorithm itself never changes per company -- extract,
+// review, save, compare-year all take a company_id and work identically
+// for any of them. This cap is purely a UI/UX choice (side-by-side gets
+// cramped past four peers), not a backend limitation.
+const MAX_PEERS = 4;
+
+interface MultiCompareRow {
+  key: string;
+  label: string;
+  unit: string;
+  amara_raja_value: number | null;
+  peerValues: (number | null)[];
+}
+
+interface MultiCompareGroup {
+  group: string;
+  rows: MultiCompareRow[];
+}
 
 function defaultYear(): number {
   return new Date().getFullYear() - 1;
@@ -27,10 +46,34 @@ export class PeerAnalysisComponent implements OnInit {
   errorMessage = signal('');
   successMessage = signal('');
 
-  company = signal<PeerCompany | null>(null);
+  // Every peer this tenant tracks (up to MAX_PEERS) -- `company` is
+  // whichever one is currently selected for the upload/review/compare
+  // flow below, same as the old single-company version, just no longer
+  // hardcoded to one auto-provisioned default.
+  companies = signal<PeerCompany[]>([]);
+  selectedCompanyId = signal<string | null>(null);
+  company = computed<PeerCompany | null>(() => this.companies().find((c) => c.id === this.selectedCompanyId()) ?? null);
+
+  addingPeer = signal(false);
+  newPeerName = signal('');
+  newPeerIndustry = signal('');
+  newPeerCountry = signal('');
+  addPeerError = signal('');
+
+  canAddPeer(): boolean {
+    return this.companies().length < MAX_PEERS;
+  }
+
   savedYears = signal<number[]>([]);
   year = signal<number>(defaultYear());
   phase = signal<Phase>('upload');
+
+  // Side-by-side view: Amara Raja vs every peer that has data for the
+  // selected year, all at once -- not just the currently selected one.
+  showCompareAll = signal(false);
+  compareAllLoading = signal(false);
+  compareAllCompanies = signal<PeerCompany[]>([]);
+  compareAllGroups = signal<MultiCompareGroup[]>([]);
 
   selectedFile = signal<File | null>(null);
   dragActive = signal(false);
@@ -71,8 +114,16 @@ export class PeerAnalysisComponent implements OnInit {
     this.loading.set(true);
     this.errorMessage.set('');
     try {
-      const company = await this.peerApi.getDefaultCompany();
-      this.company.set(company);
+      let companies = await this.peerApi.listCompanies();
+      if (companies.length === 0) {
+        // First-ever visit for this tenant: seed one starting peer so the
+        // page isn't empty -- fully editable/removable afterward, not a
+        // hardcoded fixture the rest of the UI assumes exists.
+        await this.peerApi.getDefaultCompany();
+        companies = await this.peerApi.listCompanies();
+      }
+      this.companies.set(companies);
+      this.selectedCompanyId.set(companies[0]?.id ?? null);
       await this.refreshSavedYears();
       if (!this.peerApi.extracting() && !this.peerApi.extractResult()) {
         this.selectYear(this.savedYears()[0] ?? defaultYear());
@@ -106,6 +157,108 @@ export class PeerAnalysisComponent implements OnInit {
       void this.loadCompare(y);
     } else {
       this.phase.set('upload');
+    }
+  }
+
+  // -- Multi-peer: switching which company the upload/review/compare flow
+  // above operates on, and adding up to MAX_PEERS of them ------------------
+
+  async selectCompany(id: string): Promise<void> {
+    if (id === this.selectedCompanyId()) return;
+    this.selectedCompanyId.set(id);
+    this.errorMessage.set('');
+    this.successMessage.set('');
+    this.selectedFile.set(null);
+    this.showCompareAll.set(false);
+    await this.refreshSavedYears();
+    this.selectYear(this.savedYears()[0] ?? defaultYear());
+  }
+
+  startAddPeer(): void {
+    this.addingPeer.set(true);
+    this.newPeerName.set('');
+    this.newPeerIndustry.set('');
+    this.newPeerCountry.set('');
+    this.addPeerError.set('');
+  }
+
+  cancelAddPeer(): void {
+    this.addingPeer.set(false);
+  }
+
+  async confirmAddPeer(): Promise<void> {
+    const name = this.newPeerName().trim();
+    if (!name) {
+      this.addPeerError.set('Enter a company name.');
+      return;
+    }
+    if (!this.canAddPeer()) {
+      this.addPeerError.set(`Up to ${MAX_PEERS} peers at a time -- archive one first if you need a different one.`);
+      return;
+    }
+    this.addPeerError.set('');
+    try {
+      const created = await this.peerApi.createCompany({
+        name,
+        industry: this.newPeerIndustry().trim() || null,
+        country: this.newPeerCountry().trim() || null
+      });
+      this.companies.set([...this.companies(), created]);
+      this.addingPeer.set(false);
+      await this.selectCompany(created.id);
+    } catch (err: any) {
+      this.addPeerError.set(err?.error?.detail ?? 'Could not add this peer company.');
+    }
+  }
+
+  // -- Side-by-side: Amara Raja vs every peer with data for this year -----
+
+  async toggleCompareAll(): Promise<void> {
+    this.showCompareAll.set(!this.showCompareAll());
+    if (this.showCompareAll()) await this.loadCompareAll();
+  }
+
+  private async loadCompareAll(): Promise<void> {
+    this.compareAllLoading.set(true);
+    this.errorMessage.set('');
+    try {
+      const year = this.year();
+      const settled = await Promise.all(
+        this.companies().map(async (c) => {
+          try {
+            return { company: c, result: await this.peerApi.compareYear(c.id, year) };
+          } catch {
+            return null; // no data saved for this peer/year yet -- skip it, not an error
+          }
+        })
+      );
+      const withData = settled.filter((s): s is { company: PeerCompany; result: PeerCompareYearResult } => s !== null);
+      this.compareAllCompanies.set(withData.map((w) => w.company));
+
+      const groups: MultiCompareGroup[] = [];
+      const first = withData[0]?.result;
+      if (first) {
+        for (const g of first.groups) {
+          groups.push({
+            group: g.group,
+            rows: g.metrics.map((m) => ({
+              key: m.key,
+              label: m.label,
+              unit: m.unit,
+              amara_raja_value: m.amara_raja_value,
+              peerValues: withData.map((w) => {
+                const group = w.result.groups.find((gr) => gr.group === g.group);
+                return group?.metrics.find((mm) => mm.key === m.key)?.peer_value ?? null;
+              })
+            }))
+          });
+        }
+      }
+      this.compareAllGroups.set(groups);
+    } catch {
+      this.errorMessage.set('Could not load the side-by-side comparison.');
+    } finally {
+      this.compareAllLoading.set(false);
     }
   }
 

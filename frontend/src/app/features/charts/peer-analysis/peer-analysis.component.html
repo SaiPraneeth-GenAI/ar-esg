@@ -10,8 +10,38 @@
     <p class="muted">Loading…</p>
   } @else {
     <div class="intro">
-      <p class="intro-text">Amara Raja vs <strong>{{ company()?.name }}</strong>, one reporting year at a time. Pick a year, upload their BRSR report, and the figures come out as comparison charts.</p>
+      <p class="intro-text">Amara Raja vs up to {{ 4 }} peers, one reporting year at a time. Pick a peer, upload their BRSR report, and the figures come out as comparison charts.</p>
     </div>
+
+    <div class="peer-picker">
+      @for (c of companies(); track c.id) {
+        <button type="button" class="peer-pill" [class.active]="c.id === selectedCompanyId()" (click)="selectCompany(c.id)">
+          {{ c.name }}
+        </button>
+      }
+      @if (canAddPeer()) {
+        <button type="button" class="peer-pill peer-pill-add" (click)="startAddPeer()">+ Add peer</button>
+      } @else {
+        <span class="peer-limit-note">Up to 4 peers at a time</span>
+      }
+    </div>
+
+    @if (addingPeer()) {
+      <div class="add-peer-card">
+        @if (addPeerError()) {
+          <div class="banner error">{{ addPeerError() }}</div>
+        }
+        <div class="add-peer-fields">
+          <input type="text" placeholder="Company name (required)" [ngModel]="newPeerName()" (ngModelChange)="newPeerName.set($event)" />
+          <input type="text" placeholder="Industry (optional)" [ngModel]="newPeerIndustry()" (ngModelChange)="newPeerIndustry.set($event)" />
+          <input type="text" placeholder="Country (optional)" [ngModel]="newPeerCountry()" (ngModelChange)="newPeerCountry.set($event)" />
+        </div>
+        <div class="add-peer-actions">
+          <button type="button" class="text-btn" (click)="cancelAddPeer()">Cancel</button>
+          <button type="button" class="primary-btn" (click)="confirmAddPeer()">Add peer</button>
+        </div>
+      </div>
+    }
 
     <div class="year-picker">
       @for (y of yearOptions(); track y) {
@@ -136,10 +166,55 @@
         <div class="step-body">
           <div class="compare-header">
             <h2>Amara Raja vs {{ compareResult()?.peer_company_name || company()?.name }} — {{ year() }}</h2>
-            <button type="button" class="text-btn" (click)="reupload()">Re-upload / edit this year</button>
+            <div class="compare-header-actions">
+              @if (companies().length > 1) {
+                <button type="button" class="text-btn" (click)="toggleCompareAll()">
+                  {{ showCompareAll() ? 'Hide side-by-side' : 'Compare all peers side by side →' }}
+                </button>
+              }
+              <button type="button" class="text-btn" (click)="reupload()">Re-upload / edit this year</button>
+            </div>
           </div>
 
-          @if (compareLoading()) {
+          @if (showCompareAll()) {
+            <div class="compare-all-panel">
+              @if (compareAllLoading()) {
+                <p class="muted">Loading every peer's {{ year() }} figures…</p>
+              } @else if (compareAllCompanies().length === 0) {
+                <p class="muted">No other peer has {{ year() }} data saved yet.</p>
+              } @else {
+                @for (group of compareAllGroups(); track group.group) {
+                  <div class="compare-group">
+                    <h3 class="review-group-title">{{ group.group }}</h3>
+                    <div class="table-scroll">
+                      <table class="multi-compare-table">
+                        <thead>
+                          <tr>
+                            <th>Metric</th>
+                            <th>Amara Raja</th>
+                            @for (c of compareAllCompanies(); track c.id) {
+                              <th>{{ c.name }}</th>
+                            }
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (row of group.rows; track row.key) {
+                            <tr>
+                              <td>{{ row.label }} <span class="unit-tag">{{ row.unit }}</span></td>
+                              <td class="self-value">{{ row.amara_raja_value !== null ? (row.amara_raja_value | number: '1.0-3') : '—' }}</td>
+                              @for (v of row.peerValues; track $index) {
+                                <td>{{ v !== null ? (v | number: '1.0-3') : '—' }}</td>
+                              }
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                }
+              }
+            </div>
+          } @else if (compareLoading()) {
             <p class="muted">Loading comparison…</p>
           } @else if (compareResult()) {
             <div class="legend">
