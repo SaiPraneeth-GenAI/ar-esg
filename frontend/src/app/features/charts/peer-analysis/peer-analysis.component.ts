@@ -47,7 +47,12 @@ export class PeerAnalysisComponent implements OnInit {
     // straight to review instead of looking stuck.
     effect(() => {
       const result = this.peerApi.extractResult();
-      if (!this.peerApi.extracting() && result && this.phase() === 'upload') {
+      const extracting = this.peerApi.extracting();
+      const currentPhase = this.phase();
+      if (result || extracting) {
+        console.info('[peer-analysis] extraction state changed', { extracting, hasResult: !!result, phase: currentPhase });
+      }
+      if (!extracting && result && currentPhase === 'upload') {
         const values: Record<string, number | null> = {};
         for (const row of result.rows) values[row.key] = row.peer_value;
         this.editableValues.set(values);

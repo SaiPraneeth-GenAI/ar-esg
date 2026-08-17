@@ -240,21 +240,35 @@ export class PeerApiService {
 
   private pollJob(companyId: string, jobId: string): void {
     if (this.pollTimer) clearInterval(this.pollTimer);
+    let consecutiveFailures = 0;
+    // A single poll can fail transiently (a network blip, a momentary 5xx
+    // during a backend redeploy) -- giving up on the very first failed
+    // poll turned a one-off hiccup into "extraction silently abandoned,
+    // no error shown, no result, just stuck". Tolerate a few in a row
+    // (the job itself is unaffected server-side either way) before
+    // actually surfacing an error.
+    const MAX_CONSECUTIVE_FAILURES = 5;
     const check = async () => {
       try {
         const headers = await this.authHeaders();
         const job = await firstValueFrom(
           this.http.get<PeerExtractJob>(`${environment.apiBaseUrl}/peers/${companyId}/extract/${jobId}`, { headers })
         );
+        consecutiveFailures = 0;
         if (job.status === 'done') {
+          console.info('[peer-extraction] job done', jobId, job.result);
           this.extractResult.set(job.result ?? null);
           this.finishJob();
         } else if (job.status === 'error') {
+          console.warn('[peer-extraction] job error', jobId, job.error);
           this.extractError.set(job.error ?? 'Could not read this PDF.');
           this.finishJob();
         }
         // "processing" -- keep polling, the interval below will fire again
-      } catch {
+      } catch (err) {
+        consecutiveFailures++;
+        console.warn(`[peer-extraction] poll failed (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`, jobId, err);
+        if (consecutiveFailures < MAX_CONSECUTIVE_FAILURES) return; // try again on the next tick
         this.extractError.set('Lost track of the extraction job -- please try uploading again.');
         this.finishJob();
       }
