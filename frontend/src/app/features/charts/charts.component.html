@@ -64,40 +64,10 @@
       </div>
     }
   } @else {
-    <app-peer-analysis (newComparisonChart)="openNewPeerChart()"></app-peer-analysis>
-
-    @if (!loading() && peerCharts().length > 0) {
-      <div class="chart-grid peer-chart-grid">
-        @for (item of peerCharts(); track item.chart.id) {
-          <div class="chart-card">
-            <div class="chart-card-header">
-              <div>
-                <h3>{{ item.chart.name }}</h3>
-                @if (item.chart.description) {
-                  <p class="chart-desc">{{ item.chart.description }}</p>
-                }
-              </div>
-              <div class="chart-card-actions">
-                <button type="button" class="link-btn" (click)="openEditChart(item)">Edit</button>
-                <button type="button" class="link-btn danger-link" (click)="deleteChart(item)">Delete</button>
-              </div>
-            </div>
-
-            <app-rich-trend-chart
-              [title]="item.displayLabel"
-              [series]="item.series"
-              [points]="item.points"
-              defaultSeriesKey="value"
-              [loading]="item.loading"
-              [decimals]="2"
-            ></app-rich-trend-chart>
-          </div>
-        }
-      </div>
-    }
+    <app-peer-analysis></app-peer-analysis>
   }
 
   @if (showBuilder()) {
-    <app-chart-builder-panel [editing]="editingChart()" [peerOnly]="builderPeerOnly()" (closed)="closeBuilder()" (saved)="onBuilderSaved()"></app-chart-builder-panel>
+    <app-chart-builder-panel [editing]="editingChart()" (closed)="closeBuilder()" (saved)="onBuilderSaved()"></app-chart-builder-panel>
   }
 </div>

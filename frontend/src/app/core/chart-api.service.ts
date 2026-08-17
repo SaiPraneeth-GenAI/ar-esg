@@ -48,8 +48,6 @@ export interface BreakdownData {
   slices: BreakdownSlice[];
 }
 
-export type ComparisonMode = 'metrics' | 'peers';
-
 export interface ChartConfig {
   question_type: QuestionType;
   // trend
@@ -59,10 +57,10 @@ export interface ChartConfig {
   months: number;
   // breakdown
   dimension: string | null;
-  // comparison
-  comparison_mode: ComparisonMode;
+  // comparison -- 2-6 of our own metrics, current period. Peer comparison
+  // is a separate, dedicated flow (see PeerAnalysisComponent), not a
+  // Chart Builder config.
   metrics: string[] | null;
-  compare_peer_ids: string[] | null;
   location_id: string | null;
 }
 

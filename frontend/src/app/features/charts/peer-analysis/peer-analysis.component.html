@@ -6,220 +6,146 @@
     <div class="banner success">{{ successMessage() }}</div>
   }
 
-  <section class="section">
-    <div class="section-header">
-      <div>
-        <h2>Peer companies</h2>
-        <p class="section-subtitle">Companies you're benchmarking against, and the figures you've entered for them.</p>
-      </div>
-      <button type="button" class="secondary-btn" (click)="openAddCompany()">+ Add peer company</button>
+  @if (loading()) {
+    <p class="muted">Loading…</p>
+  } @else {
+    <div class="intro">
+      <p class="intro-text">Amara Raja vs <strong>{{ company()?.name }}</strong>, one reporting year at a time. Pick a year, upload their BRSR report, and the figures come out as comparison charts.</p>
     </div>
 
-    @if (showAddCompany()) {
-      <div class="card">
-        <div class="field-row">
-          <label class="field">
-            <span class="field-label">Company name <span class="required">*</span></span>
-            <input type="text" [ngModel]="newCompanyName()" (ngModelChange)="newCompanyName.set($event)" placeholder="e.g. Exide Industries" />
+    <div class="year-picker">
+      @for (y of yearOptions(); track y) {
+        <button type="button" class="year-pill" [class.active]="year() === y" (click)="selectYear(y)">
+          {{ y }}
+          @if (hasDataFor(y)) {
+            <span class="year-dot" title="Data saved"></span>
+          }
+        </button>
+      }
+    </div>
+
+    @if (phase() === 'upload') {
+      <div class="step-card">
+        <div class="step-badge">1</div>
+        <div class="step-body">
+          <h2>Upload {{ company()?.name }}'s {{ year() }} BRSR report</h2>
+          <p class="step-desc">Upload the PDF and AI will pull out the figures that line up with what Amara Raja already tracks -- Scope 1/2, intensity, and safety metrics. You'll review them before anything is saved.</p>
+
+          <label class="upload-dropzone" [class.has-file]="selectedFile()">
+            <input type="file" accept=".pdf" (change)="onFileChange($event)" hidden />
+            @if (selectedFile()) {
+              <span class="upload-filename">📄 {{ selectedFile()!.name }}</span>
+            } @else {
+              <span>Click to choose a PDF, or drag one here</span>
+            }
           </label>
-          <label class="field">
-            <span class="field-label">Industry</span>
-            <input type="text" [ngModel]="newCompanyIndustry()" (ngModelChange)="newCompanyIndustry.set($event)" placeholder="e.g. Battery" />
-          </label>
-          <label class="field">
-            <span class="field-label">Country</span>
-            <input type="text" [ngModel]="newCompanyCountry()" (ngModelChange)="newCompanyCountry.set($event)" placeholder="e.g. India" />
-          </label>
-        </div>
-        <div class="card-actions">
-          <button type="button" class="text-btn" (click)="showAddCompany.set(false)">Cancel</button>
-          <button type="button" class="primary-btn" [disabled]="!newCompanyName().trim()" (click)="saveCompany()">Add company</button>
+
+          <div class="step-actions">
+            <button type="button" class="primary-btn" [disabled]="!selectedFile() || extracting()" (click)="extract()">
+              {{ extracting() ? 'Reading report…' : 'Extract figures' }}
+            </button>
+          </div>
         </div>
       </div>
     }
 
-    @if (loading()) {
-      <p class="muted">Loading…</p>
-    } @else if (companies().length === 0) {
-      <div class="empty-state">
-        <p>No peer companies yet. Add one -- Exide, Tata Chemicals, an industry average -- and enter their published figures to compare against.</p>
-      </div>
-    } @else {
-      <div class="company-list">
-        @for (company of companies(); track company.id) {
-          <div class="company-card" [class.expanded]="expandedCompanyId() === company.id">
-            <button type="button" class="company-trigger" (click)="toggleExpand(company)">
-              <div>
-                <span class="company-name">{{ company.name }}</span>
-                <span class="company-meta">{{ company.industry || 'Industry not set' }}{{ company.country ? ' · ' + company.country : '' }}</span>
-              </div>
-              <span class="period-count">{{ company.period_count }} {{ company.period_count === 1 ? 'period' : 'periods' }}</span>
-            </button>
+    @if (phase() === 'review' && extractResult()) {
+      <div class="step-card">
+        <div class="step-badge">2</div>
+        <div class="step-body">
+          <h2>Review {{ company()?.name }}'s {{ year() }} figures</h2>
+          <p class="step-desc">Amara Raja's own {{ year() }} figure is shown for reference. Check the extracted peer values against the report and fix anything that looks off before saving.</p>
 
-            <div class="company-actions">
-              <button type="button" class="text-btn danger-link" (click)="deleteCompany(company)">Remove company</button>
+          @for (group of groupedRows(); track group.group) {
+            <div class="review-group">
+              <h3 class="review-group-title">{{ group.group }}</h3>
+              <table class="review-table">
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Amara Raja</th>
+                    <th>{{ company()?.name }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of group.rows; track row.key) {
+                    <tr>
+                      <td>{{ row.label }} <span class="unit-tag">{{ row.unit }}</span></td>
+                      <td class="self-value">{{ row.amara_raja_value !== null ? (row.amara_raja_value | number: '1.0-3') : '—' }}</td>
+                      <td>
+                        <input
+                          type="number"
+                          step="any"
+                          class="peer-input"
+                          [ngModel]="editableValues()[row.key]"
+                          (ngModelChange)="setPeerValue(row.key, $event)"
+                          placeholder="Not found"
+                        />
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+
+          <div class="step-actions">
+            <button type="button" class="text-btn" (click)="reupload()">← Upload a different file</button>
+            <button type="button" class="primary-btn" [disabled]="filledCount() === 0 || saving()" (click)="saveComparison()">
+              {{ saving() ? 'Saving…' : 'Save comparison (' + filledCount() + ' values)' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
+    @if (phase() === 'compare') {
+      <div class="step-card">
+        <div class="step-badge">✓</div>
+        <div class="step-body">
+          <div class="compare-header">
+            <h2>Amara Raja vs {{ compareResult()?.peer_company_name || company()?.name }} — {{ year() }}</h2>
+            <button type="button" class="text-btn" (click)="reupload()">Re-upload / edit this year</button>
+          </div>
+
+          @if (compareLoading()) {
+            <p class="muted">Loading comparison…</p>
+          } @else if (compareResult()) {
+            <div class="legend">
+              <span class="legend-item"><span class="legend-swatch swatch-self"></span>Amara Raja</span>
+              <span class="legend-item"><span class="legend-swatch swatch-peer"></span>{{ compareResult()!.peer_company_name }}</span>
             </div>
 
-            @if (expandedCompanyId() === company.id) {
-              <div class="company-detail">
-                @if (dataLoading()) {
-                  <p class="muted">Loading periods…</p>
-                } @else {
-                  @if (companyData().length === 0) {
-                    <p class="muted">No data entered yet for {{ company.name }}.</p>
-                  } @else {
-                    <table class="data-table">
-                      <thead>
-                        <tr>
-                          <th>Period</th>
-                          <th>Metrics entered</th>
-                          <th>Source</th>
-                          <th>Confidence</th>
-                          <th></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        @for (row of companyData(); track row.id) {
-                          <tr>
-                            <td>{{ formatPeriod(row.period) }}</td>
-                            <td>
-                              @for (key of metricKeysFor(row); track key) {
-                                <span class="metric-chip">{{ metricLabel(key) }}: {{ row.metrics[key] | number: '1.0-3' }} {{ metricUnit(key) }}</span>
-                              }
-                            </td>
-                            <td>{{ row.data_source || '—' }}</td>
-                            <td>{{ row.data_confidence ? confidenceLabels[row.data_confidence] : '—' }}</td>
-                            <td><button type="button" class="text-btn danger-link" (click)="deletePeriod(row)">Delete</button></td>
-                          </tr>
-                        }
-                      </tbody>
-                    </table>
-                  }
-
-                  @if (!showAddPeriod()) {
-                    <button type="button" class="text-btn" (click)="openAddPeriod()">+ Add a period's data</button>
-                  } @else {
-                    <div class="add-period-form">
-                      <div class="mode-toggle" role="group" aria-label="How to enter data">
-                        <button type="button" class="mode-btn" [class.active]="entryMode() === 'manual'" (click)="setEntryMode('manual')">Enter manually</button>
-                        <button type="button" class="mode-btn" [class.active]="entryMode() === 'template'" (click)="setEntryMode('template')">Use a template</button>
-                      </div>
-
-                      <label class="field">
-                        <span class="field-label">Period</span>
-                        <input type="month" [ngModel]="periodValue()" (ngModelChange)="periodValue.set($event)" />
-                      </label>
-
-                      @if (entryMode() === 'manual') {
-                        <div class="metric-inputs">
-                          @for (group of metricGroups(); track group) {
-                            <div class="metric-group-label">{{ group }}</div>
-                            <div class="metric-input-row-group">
-                              @for (m of metricsInGroup(group); track m.key) {
-                                <label class="metric-input-row">
-                                  <span>{{ m.label }}</span>
-                                  <div class="metric-input-value">
-                                    <input type="number" step="any" [ngModel]="periodMetricValues()[m.key]" (ngModelChange)="setMetricValue(m.key, $event)" />
-                                    <span class="metric-input-unit">{{ m.unit }}</span>
-                                  </div>
-                                </label>
-                              }
-                            </div>
-                          }
-                        </div>
-                      } @else {
-                        <div class="template-flow">
-                          <p class="step-label">1. Pick which metrics to include</p>
-                          <div class="metric-checkboxes">
-                            @for (group of metricGroups(); track group) {
-                              <div class="metric-group-label">{{ group }}</div>
-                              @for (m of metricsInGroup(group); track m.key) {
-                                <label class="checkbox-row">
-                                  <input type="checkbox" [checked]="isTemplateMetricSelected(m.key)" (change)="toggleTemplateMetric(m.key)" />
-                                  <span>{{ m.label }}</span>
-                                </label>
-                              }
-                            }
+            @for (group of compareResult()!.groups; track group.group) {
+              <div class="compare-group">
+                <h3 class="review-group-title">{{ group.group }}</h3>
+                <div class="compare-grid">
+                  @for (m of group.metrics; track m.key) {
+                    <div class="compare-card">
+                      <span class="compare-label">{{ m.label }}</span>
+                      <span class="compare-unit">{{ m.unit }}</span>
+                      <div class="dual-bars">
+                        <div class="dual-bar-col">
+                          <span class="dual-bar-value">{{ m.amara_raja_value !== null ? (m.amara_raja_value | number: '1.0-2') : '—' }}</span>
+                          <div class="dual-bar-track">
+                            <div class="dual-bar bar-self" [style.height.%]="barPct(m.amara_raja_value, pairMax(m.amara_raja_value, m.peer_value))"></div>
                           </div>
-
-                          <p class="step-label">2. Download, fill in {{ expandedCompany()?.name }}'s column, and re-upload</p>
-                          <div class="template-actions">
-                            <button type="button" class="secondary-btn" [disabled]="templateMetricKeys().size === 0 || downloadingTemplate()" (click)="downloadTemplate()">
-                              {{ downloadingTemplate() ? 'Downloading…' : '⬇ Download template (.csv)' }}
-                            </button>
-                            <label class="upload-btn">
-                              Upload filled template
-                              <input type="file" accept=".csv,.xlsx,.xls" (change)="onTemplateFileChange($event)" hidden />
-                            </label>
-                          </div>
-                          @if (uploadedFileName()) {
-                            <p class="upload-status">{{ uploadedFileName() }} {{ uploadParseError() ? '' : '— values loaded below' }}</p>
-                          }
-                          @if (uploadParseError()) {
-                            <p class="upload-error">{{ uploadParseError() }}</p>
-                          }
-                          @if (hasAnyMetricValue()) {
-                            <div class="loaded-values">
-                              @for (entry of periodMetricValues() | keyvalue; track entry.key) {
-                                @if (entry.value !== null) {
-                                  <span class="metric-chip">{{ metricLabel(entry.key) }}: {{ entry.value }} {{ metricUnit(entry.key) }}</span>
-                                }
-                              }
-                            </div>
-                          }
                         </div>
-                      }
-
-                      <div class="field-row">
-                        <label class="field">
-                          <span class="field-label">Data source</span>
-                          <input type="text" [ngModel]="dataSource()" (ngModelChange)="dataSource.set($event)" placeholder="e.g. BRSR 2026" />
-                        </label>
-                        <label class="field">
-                          <span class="field-label">Confidence</span>
-                          <select [ngModel]="dataConfidence()" (ngModelChange)="dataConfidence.set($event)">
-                            <option value="verified">Verified</option>
-                            <option value="self_reported">Self-reported</option>
-                            <option value="estimated">Estimated</option>
-                          </select>
-                        </label>
-                      </div>
-
-                      <label class="field">
-                        <span class="field-label">Source link</span>
-                        <input type="text" [ngModel]="sourceLink()" (ngModelChange)="sourceLink.set($event)" placeholder="Optional URL" />
-                      </label>
-
-                      <label class="field">
-                        <span class="field-label">Notes</span>
-                        <textarea rows="2" [ngModel]="notes()" (ngModelChange)="notes.set($event)" placeholder="Optional"></textarea>
-                      </label>
-
-                      <div class="card-actions">
-                        <button type="button" class="text-btn" (click)="showAddPeriod.set(false)">Cancel</button>
-                        <button type="button" class="primary-btn" [disabled]="!hasAnyMetricValue() || submittingPeriod()" (click)="savePeriodData()">
-                          {{ submittingPeriod() ? 'Saving…' : 'Save period' }}
-                        </button>
+                        <div class="dual-bar-col">
+                          <span class="dual-bar-value">{{ m.peer_value !== null ? (m.peer_value | number: '1.0-2') : '—' }}</span>
+                          <div class="dual-bar-track">
+                            <div class="dual-bar bar-peer" [style.height.%]="barPct(m.peer_value, pairMax(m.amara_raja_value, m.peer_value))"></div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   }
-                }
+                </div>
               </div>
             }
-          </div>
-        }
+          }
+        </div>
       </div>
     }
-  </section>
-
-  <section class="section">
-    <div class="section-header">
-      <div>
-        <h2>Peer comparison charts</h2>
-        <p class="section-subtitle">Amara Raja vs your peer companies, for any metric this platform tracks.</p>
-      </div>
-      <button type="button" class="secondary-btn" (click)="newComparisonChart.emit()">+ New peer comparison</button>
-    </div>
-    <p class="muted">Saved peer-comparison charts show up on the Company Charts tab too -- this button just opens the builder pre-set to compare against peers.</p>
-  </section>
+  }
 </div>

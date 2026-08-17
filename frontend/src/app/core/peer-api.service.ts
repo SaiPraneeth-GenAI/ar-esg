@@ -2,7 +2,6 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { PeriodMode } from './intensity-api.service';
 import { SupabaseService } from './supabase.service';
 
 export interface PeerCompany {
@@ -12,12 +11,6 @@ export interface PeerCompany {
   country: string | null;
   created_at: string;
   period_count: number;
-}
-
-export interface PeerCompanyCreate {
-  name: string;
-  industry: string | null;
-  country: string | null;
 }
 
 export interface PeerData {
@@ -43,19 +36,40 @@ export interface PeerDataCreate {
   notes: string | null;
 }
 
-export interface PeerCompareEntry {
-  name: string;
-  is_self: boolean;
-  value: number | null;
-  period: string | null;
-}
-
-export interface PeerCompareData {
-  metric: string;
+export interface PeerExtractRow {
+  key: string;
   label: string;
   unit: string;
-  period: string;
-  entries: PeerCompareEntry[];
+  group: string;
+  amara_raja_value: number | null;
+  peer_value: number | null;
+}
+
+export interface PeerExtractResult {
+  peer_company_id: string;
+  peer_company_name: string;
+  year: number;
+  source_filename: string;
+  rows: PeerExtractRow[];
+}
+
+export interface PeerCompareYearMetric {
+  key: string;
+  label: string;
+  unit: string;
+  amara_raja_value: number | null;
+  peer_value: number | null;
+}
+
+export interface PeerCompareYearGroup {
+  group: string;
+  metrics: PeerCompareYearMetric[];
+}
+
+export interface PeerCompareYearResult {
+  year: number;
+  peer_company_name: string;
+  groups: PeerCompareYearGroup[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -68,19 +82,9 @@ export class PeerApiService {
     return { Authorization: `Bearer ${data.session?.access_token ?? ''}` };
   }
 
-  async listCompanies(): Promise<PeerCompany[]> {
+  async getDefaultCompany(): Promise<PeerCompany> {
     const headers = await this.authHeaders();
-    return firstValueFrom(this.http.get<PeerCompany[]>(`${environment.apiBaseUrl}/peers`, { headers }));
-  }
-
-  async createCompany(payload: PeerCompanyCreate): Promise<PeerCompany> {
-    const headers = await this.authHeaders();
-    return firstValueFrom(this.http.post<PeerCompany>(`${environment.apiBaseUrl}/peers`, payload, { headers }));
-  }
-
-  async deleteCompany(id: string): Promise<void> {
-    const headers = await this.authHeaders();
-    await firstValueFrom(this.http.delete<void>(`${environment.apiBaseUrl}/peers/${id}`, { headers }));
+    return firstValueFrom(this.http.get<PeerCompany>(`${environment.apiBaseUrl}/peers/default-company`, { headers }));
   }
 
   async listData(companyId: string): Promise<PeerData[]> {
@@ -98,27 +102,27 @@ export class PeerApiService {
     await firstValueFrom(this.http.delete<void>(`${environment.apiBaseUrl}/peers/${companyId}/data/${dataId}`, { headers }));
   }
 
-  async compare(metric: string, period: string, periodMode: PeriodMode, peerIds: string[], locationId?: string): Promise<PeerCompareData> {
-    const headers = await this.authHeaders();
-    const params: Record<string, string> = { metric, period, period_mode: periodMode, peer_ids: peerIds.join(',') };
-    if (locationId) params['location_id'] = locationId;
-    return firstValueFrom(this.http.get<PeerCompareData>(`${environment.apiBaseUrl}/peers/compare`, { headers, params }));
+  async extractPdf(companyId: string, file: File, year: number): Promise<PeerExtractResult> {
+    const { data } = await this.supabase.client.auth.getSession();
+    const form = new FormData();
+    form.append('file', file);
+    form.append('year', String(year));
+    const response = await fetch(`${environment.apiBaseUrl}/peers/${companyId}/extract`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${data.session?.access_token ?? ''}` },
+      body: form
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.detail ?? 'Could not extract this PDF.');
+    }
+    return response.json();
   }
 
-  async downloadTemplate(companyId: string, companyName: string, period: string, metricKeys: string[], locationId?: string): Promise<void> {
-    const { data } = await this.supabase.client.auth.getSession();
-    const params: Record<string, string> = { period, metrics: metricKeys.join(',') };
-    if (locationId) params['location_id'] = locationId;
-    const query = new URLSearchParams(params);
-    const response = await fetch(`${environment.apiBaseUrl}/peers/${companyId}/template?${query}`, {
-      headers: { Authorization: `Bearer ${data.session?.access_token ?? ''}` }
-    });
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${companyName.replace(/\s+/g, '_')}_${period.slice(0, 7)}_template.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  async compareYear(companyId: string, year: number): Promise<PeerCompareYearResult> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(
+      this.http.get<PeerCompareYearResult>(`${environment.apiBaseUrl}/peers/${companyId}/compare-year`, { headers, params: { year } })
+    );
   }
 }

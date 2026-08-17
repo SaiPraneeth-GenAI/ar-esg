@@ -38,9 +38,7 @@
     }
 
     @if (step() === 2) {
-      @if (!peerOnly) {
-        <button type="button" class="link-btn" (click)="backToQuestion()">← Change question</button>
-      }
+      <button type="button" class="link-btn" (click)="backToQuestion()">← Change question</button>
 
       @if (questionType() === 'trend') {
         <label class="field">
@@ -93,55 +91,20 @@
       }
 
       @if (questionType() === 'comparison') {
-        @if (peerOnly) {
-          <p class="panel-hint">Comparing Amara Raja against your peer companies for one metric.</p>
-        }
-
-        @if (comparisonMode() === 'metrics') {
-          <label class="field">
-            <span class="field-label">Metrics to compare (pick 2-6)</span>
-          </label>
-          <div class="metric-checkboxes">
-            @for (group of metricGroups(); track group) {
-              <div class="metric-group-label">{{ group }}</div>
-              @for (m of metricsInGroup(group); track m.key) {
-                <label class="checkbox-row">
-                  <input type="checkbox" [checked]="isComparisonMetricSelected(m.key)" (change)="toggleComparisonMetric(m.key)" />
-                  <span>{{ m.label }}</span>
-                </label>
-              }
+        <label class="field">
+          <span class="field-label">Metrics to compare (pick 2-6)</span>
+        </label>
+        <div class="metric-checkboxes">
+          @for (group of metricGroups(); track group) {
+            <div class="metric-group-label">{{ group }}</div>
+            @for (m of metricsInGroup(group); track m.key) {
+              <label class="checkbox-row">
+                <input type="checkbox" [checked]="isComparisonMetricSelected(m.key)" (change)="toggleComparisonMetric(m.key)" />
+                <span>{{ m.label }}</span>
+              </label>
             }
-          </div>
-        } @else {
-          <label class="field">
-            <span class="field-label">Metric</span>
-            <select [ngModel]="comparePeerMetric()" (ngModelChange)="comparePeerMetric.set($event); onSettingChange()">
-              @for (group of metricGroups(); track group) {
-                <optgroup [label]="group">
-                  @for (m of metricsInGroup(group); track m.key) {
-                    <option [value]="m.key">{{ m.label }}</option>
-                  }
-                </optgroup>
-              }
-            </select>
-          </label>
-
-          @if (peerCompanies().length === 0) {
-            <p class="muted-text">No peer companies yet -- add one under Settings → Peer Companies first.</p>
-          } @else {
-            <label class="field">
-              <span class="field-label">Compare against</span>
-            </label>
-            <div class="metric-checkboxes">
-              @for (p of peerCompanies(); track p.id) {
-                <label class="checkbox-row">
-                  <input type="checkbox" [checked]="isPeerSelected(p.id)" (change)="togglePeerSelection(p.id)" />
-                  <span>{{ p.name }}</span>
-                </label>
-              }
-            </div>
           }
-        }
+        </div>
 
         <label class="field">
           <span class="field-label">Period</span>

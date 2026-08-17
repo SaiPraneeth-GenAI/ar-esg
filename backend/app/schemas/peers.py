@@ -42,16 +42,37 @@ class PeerDataOut(BaseModel):
     updated_at: datetime
 
 
-class PeerCompareEntry(BaseModel):
-    name: str
-    is_self: bool
-    value: float | None
-    period: date | None  # the actual period this value came from -- may not be an exact match
-
-
-class PeerCompareOut(BaseModel):
-    metric: str
+class PeerExtractRow(BaseModel):
+    key: str
     label: str
     unit: str
-    period: date
-    entries: list[PeerCompareEntry]
+    group: str
+    amara_raja_value: float | None
+    peer_value: float | None  # AI-extracted from the uploaded PDF -- null if not found
+
+
+class PeerExtractOut(BaseModel):
+    peer_company_id: uuid.UUID
+    peer_company_name: str
+    year: int
+    source_filename: str
+    rows: list[PeerExtractRow]
+
+
+class PeerCompareYearMetric(BaseModel):
+    key: str
+    label: str
+    unit: str
+    amara_raja_value: float | None
+    peer_value: float | None
+
+
+class PeerCompareYearGroup(BaseModel):
+    group: str
+    metrics: list[PeerCompareYearMetric]
+
+
+class PeerCompareYearOut(BaseModel):
+    year: int
+    peer_company_name: str
+    groups: list[PeerCompareYearGroup]

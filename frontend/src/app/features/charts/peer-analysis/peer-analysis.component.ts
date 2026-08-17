@@ -1,288 +1,217 @@
-import { DecimalPipe, KeyValuePipe } from '@angular/common';
-import { Component, EventEmitter, OnInit, Output, inject, signal } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ChartApiService, ChartMetric } from '../../../core/chart-api.service';
-import { PeerApiService, PeerCompany, PeerData } from '../../../core/peer-api.service';
-import { parseSpreadsheet } from '../../data-entry/bulk-upload-wizard/bulk-upload-wizard.utils';
+import {
+  PeerApiService,
+  PeerCompany,
+  PeerCompareYearResult,
+  PeerExtractResult,
+  PeerExtractRow
+} from '../../../core/peer-api.service';
 
-function currentMonthValue(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+type Phase = 'upload' | 'review' | 'compare';
+
+function defaultYear(): number {
+  return new Date().getFullYear() - 1;
 }
-
-const CONFIDENCE_LABELS: Record<string, string> = {
-  verified: 'Verified',
-  self_reported: 'Self-reported',
-  estimated: 'Estimated'
-};
-
-type EntryMode = 'manual' | 'template';
 
 @Component({
   selector: 'app-peer-analysis',
   standalone: true,
-  imports: [FormsModule, DecimalPipe, KeyValuePipe],
+  imports: [FormsModule, DecimalPipe],
   templateUrl: './peer-analysis.component.html',
   styleUrl: './peer-analysis.component.css'
 })
 export class PeerAnalysisComponent implements OnInit {
   private peerApi = inject(PeerApiService);
-  private chartApi = inject(ChartApiService);
-
-  @Output() newComparisonChart = new EventEmitter<void>();
 
   loading = signal(true);
   errorMessage = signal('');
   successMessage = signal('');
-  companies = signal<PeerCompany[]>([]);
-  metrics = signal<ChartMetric[]>([]);
 
-  showAddCompany = signal(false);
-  newCompanyName = signal('');
-  newCompanyIndustry = signal('');
-  newCompanyCountry = signal('');
+  company = signal<PeerCompany | null>(null);
+  savedYears = signal<number[]>([]);
+  year = signal<number>(defaultYear());
+  phase = signal<Phase>('upload');
 
-  expandedCompanyId = signal<string | null>(null);
-  companyData = signal<PeerData[]>([]);
-  dataLoading = signal(false);
+  selectedFile = signal<File | null>(null);
+  extracting = signal(false);
+  extractResult = signal<PeerExtractResult | null>(null);
+  editableValues = signal<Record<string, number | null>>({});
+  saving = signal(false);
 
-  showAddPeriod = signal(false);
-  entryMode = signal<EntryMode>('manual');
-  periodValue = signal(currentMonthValue());
-  periodMetricValues = signal<Record<string, number | null>>({});
-  templateMetricKeys = signal<Set<string>>(new Set());
-  dataSource = signal('');
-  sourceLink = signal('');
-  dataConfidence = signal<string>('self_reported');
-  notes = signal('');
-  submittingPeriod = signal(false);
-  downloadingTemplate = signal(false);
-  uploadedFileName = signal('');
-  uploadParseError = signal('');
+  compareLoading = signal(false);
+  compareResult = signal<PeerCompareYearResult | null>(null);
 
-  confidenceLabels = CONFIDENCE_LABELS;
-
-  metricGroups(): string[] {
-    return Array.from(new Set(this.metrics().map((m) => m.group)));
-  }
-
-  metricsInGroup(group: string): ChartMetric[] {
-    return this.metrics().filter((m) => m.group === group);
+  yearOptions(): number[] {
+    const current = new Date().getFullYear();
+    return [current, current - 1, current - 2, current - 3, current - 4];
   }
 
   async ngOnInit(): Promise<void> {
-    this.metrics.set(await this.chartApi.listMetrics());
-    await this.refresh();
-  }
-
-  async refresh(): Promise<void> {
     this.loading.set(true);
     this.errorMessage.set('');
     try {
-      this.companies.set(await this.peerApi.listCompanies());
+      const company = await this.peerApi.getDefaultCompany();
+      this.company.set(company);
+      await this.refreshSavedYears();
+      this.selectYear(this.savedYears()[0] ?? defaultYear());
     } catch {
-      this.errorMessage.set('Could not load peer companies.');
+      this.errorMessage.set('Could not load peer comparison data.');
     } finally {
       this.loading.set(false);
     }
   }
 
-  openAddCompany(): void {
-    this.showAddCompany.set(true);
-    this.newCompanyName.set('');
-    this.newCompanyIndustry.set('');
-    this.newCompanyCountry.set('');
+  private async refreshSavedYears(): Promise<void> {
+    const company = this.company();
+    if (!company) return;
+    const rows = await this.peerApi.listData(company.id);
+    const years = Array.from(new Set(rows.map((r) => new Date(`${r.period}T00:00:00`).getFullYear()))).sort((a, b) => b - a);
+    this.savedYears.set(years);
   }
 
-  async saveCompany(): Promise<void> {
-    if (!this.newCompanyName().trim()) return;
-    try {
-      await this.peerApi.createCompany({
-        name: this.newCompanyName().trim(),
-        industry: this.newCompanyIndustry().trim() || null,
-        country: this.newCompanyCountry().trim() || null
-      });
-      this.showAddCompany.set(false);
-      this.successMessage.set('Peer company added.');
-      await this.refresh();
-    } catch (err: any) {
-      this.errorMessage.set(err?.error?.detail ?? 'Could not add this peer company.');
+  hasDataFor(y: number): boolean {
+    return this.savedYears().includes(y);
+  }
+
+  selectYear(y: number): void {
+    this.year.set(y);
+    this.errorMessage.set('');
+    this.successMessage.set('');
+    this.selectedFile.set(null);
+    this.extractResult.set(null);
+    if (this.hasDataFor(y)) {
+      this.phase.set('compare');
+      void this.loadCompare(y);
+    } else {
+      this.phase.set('upload');
     }
   }
 
-  async deleteCompany(company: PeerCompany): Promise<void> {
-    try {
-      await this.peerApi.deleteCompany(company.id);
-      if (this.expandedCompanyId() === company.id) this.expandedCompanyId.set(null);
-      this.successMessage.set('Peer company removed.');
-      await this.refresh();
-    } catch {
-      this.errorMessage.set('Could not remove this peer company.');
-    }
+  reupload(): void {
+    this.phase.set('upload');
+    this.extractResult.set(null);
+    this.selectedFile.set(null);
+    this.successMessage.set('');
   }
 
-  async toggleExpand(company: PeerCompany): Promise<void> {
-    if (this.expandedCompanyId() === company.id) {
-      this.expandedCompanyId.set(null);
+  onFileChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    this.errorMessage.set('');
+    if (file && !file.name.toLowerCase().endsWith('.pdf')) {
+      this.errorMessage.set('Please upload a PDF file.');
+      this.selectedFile.set(null);
       return;
     }
-    this.expandedCompanyId.set(company.id);
-    this.showAddPeriod.set(false);
-    this.dataLoading.set(true);
-    try {
-      this.companyData.set(await this.peerApi.listData(company.id));
-    } finally {
-      this.dataLoading.set(false);
-    }
+    this.selectedFile.set(file);
   }
 
-  expandedCompany(): PeerCompany | undefined {
-    return this.companies().find((c) => c.id === this.expandedCompanyId());
-  }
-
-  openAddPeriod(): void {
-    this.showAddPeriod.set(true);
-    this.entryMode.set('manual');
-    this.periodValue.set(currentMonthValue());
-    this.periodMetricValues.set({});
-    this.templateMetricKeys.set(new Set());
-    this.dataSource.set('');
-    this.sourceLink.set('');
-    this.dataConfidence.set('self_reported');
-    this.notes.set('');
-    this.uploadedFileName.set('');
-    this.uploadParseError.set('');
-  }
-
-  setEntryMode(mode: EntryMode): void {
-    this.entryMode.set(mode);
-  }
-
-  setMetricValue(key: string, value: string): void {
-    const values = { ...this.periodMetricValues() };
-    values[key] = value === '' ? null : Number(value);
-    this.periodMetricValues.set(values);
-  }
-
-  hasAnyMetricValue(): boolean {
-    return Object.values(this.periodMetricValues()).some((v) => v !== null && v !== undefined);
-  }
-
-  toggleTemplateMetric(key: string): void {
-    const set = new Set(this.templateMetricKeys());
-    if (set.has(key)) {
-      set.delete(key);
-    } else {
-      set.add(key);
-    }
-    this.templateMetricKeys.set(set);
-  }
-
-  isTemplateMetricSelected(key: string): boolean {
-    return this.templateMetricKeys().has(key);
-  }
-
-  async downloadTemplate(): Promise<void> {
-    const company = this.expandedCompany();
-    const keys = Array.from(this.templateMetricKeys());
-    if (!company || keys.length === 0) return;
-    this.downloadingTemplate.set(true);
+  async extract(): Promise<void> {
+    const company = this.company();
+    const file = this.selectedFile();
+    if (!company || !file) return;
+    this.extracting.set(true);
     this.errorMessage.set('');
     try {
-      await this.peerApi.downloadTemplate(company.id, company.name, `${this.periodValue()}-01`, keys);
-    } catch {
-      this.errorMessage.set('Could not download the template.');
+      const result = await this.peerApi.extractPdf(company.id, file, this.year());
+      this.extractResult.set(result);
+      const values: Record<string, number | null> = {};
+      for (const row of result.rows) values[row.key] = row.peer_value;
+      this.editableValues.set(values);
+      this.phase.set('review');
+    } catch (err: any) {
+      this.errorMessage.set(err?.message ?? 'Could not read this PDF. You can still enter figures by hand below.');
+      const rows = this.buildBlankRows();
+      this.extractResult.set(rows);
+      const values: Record<string, number | null> = {};
+      for (const row of rows.rows) values[row.key] = null;
+      this.editableValues.set(values);
+      this.phase.set('review');
     } finally {
-      this.downloadingTemplate.set(false);
+      this.extracting.set(false);
     }
   }
 
-  async onTemplateFileChange(event: Event): Promise<void> {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-    this.uploadedFileName.set(file.name);
-    this.uploadParseError.set('');
-    try {
-      const { rows } = await parseSpreadsheet(file);
-      // Template columns: metric_key, metric_label, unit, amara_raja_value, {peer}_value
-      const values: Record<string, number | null> = { ...this.periodMetricValues() };
-      let found = 0;
-      for (const row of rows) {
-        const key = String(row[0] ?? '').trim();
-        const peerRaw = row[4];
-        if (!key || peerRaw === '' || peerRaw === null || peerRaw === undefined) continue;
-        const num = Number(peerRaw);
-        if (Number.isNaN(num)) continue;
-        values[key] = num;
-        found += 1;
-      }
-      if (found === 0) {
-        this.uploadParseError.set(`No filled-in values found in ${this.expandedCompany()?.name ?? 'peer'}'s column -- check you filled the last column and re-download if needed.`);
-        return;
-      }
-      this.periodMetricValues.set(values);
-    } catch {
-      this.uploadParseError.set('Could not read this file. Make sure it is the downloaded .csv template.');
-    } finally {
-      input.value = '';
-    }
+  private buildBlankRows(): PeerExtractResult {
+    const company = this.company()!;
+    return { peer_company_id: company.id, peer_company_name: company.name, year: this.year(), source_filename: '', rows: [] };
   }
 
-  async savePeriodData(): Promise<void> {
-    const companyId = this.expandedCompanyId();
-    if (!companyId || !this.hasAnyMetricValue()) return;
-    this.submittingPeriod.set(true);
+  groupedRows(): { group: string; rows: PeerExtractRow[] }[] {
+    const rows = this.extractResult()?.rows ?? [];
+    const groups: { group: string; rows: PeerExtractRow[] }[] = [];
+    for (const row of rows) {
+      let bucket = groups.find((g) => g.group === row.group);
+      if (!bucket) {
+        bucket = { group: row.group, rows: [] };
+        groups.push(bucket);
+      }
+      bucket.rows.push(row);
+    }
+    return groups;
+  }
+
+  setPeerValue(key: string, value: string): void {
+    const values = { ...this.editableValues() };
+    values[key] = value === '' ? null : Number(value);
+    this.editableValues.set(values);
+  }
+
+  filledCount(): number {
+    return Object.values(this.editableValues()).filter((v) => v !== null && v !== undefined).length;
+  }
+
+  async saveComparison(): Promise<void> {
+    const company = this.company();
+    if (!company || this.filledCount() === 0) return;
+    this.saving.set(true);
     this.errorMessage.set('');
     try {
       const metrics: Record<string, number> = {};
-      for (const [key, value] of Object.entries(this.periodMetricValues())) {
+      for (const [key, value] of Object.entries(this.editableValues())) {
         if (value !== null && value !== undefined) metrics[key] = value;
       }
-      await this.peerApi.upsertData(companyId, {
-        period: `${this.periodValue()}-01`,
+      await this.peerApi.upsertData(company.id, {
+        period: `${this.year()}-01-01`,
         metrics,
-        data_source: this.dataSource().trim() || null,
-        source_link: this.sourceLink().trim() || null,
-        data_confidence: this.dataConfidence() || null,
-        notes: this.notes().trim() || null
+        data_source: this.extractResult()?.source_filename || 'Manual entry',
+        source_link: null,
+        data_confidence: 'self_reported',
+        notes: null
       });
-      this.showAddPeriod.set(false);
-      this.successMessage.set('Peer data saved.');
-      this.companyData.set(await this.peerApi.listData(companyId));
-      await this.refresh();
+      this.successMessage.set('Comparison saved.');
+      await this.refreshSavedYears();
+      this.phase.set('compare');
+      await this.loadCompare(this.year());
     } catch (err: any) {
-      this.errorMessage.set(err?.error?.detail ?? 'Could not save this period.');
+      this.errorMessage.set(err?.error?.detail ?? 'Could not save this comparison.');
     } finally {
-      this.submittingPeriod.set(false);
+      this.saving.set(false);
     }
   }
 
-  async deletePeriod(row: PeerData): Promise<void> {
-    const companyId = this.expandedCompanyId();
-    if (!companyId) return;
+  private async loadCompare(year: number): Promise<void> {
+    const company = this.company();
+    if (!company) return;
+    this.compareLoading.set(true);
+    this.errorMessage.set('');
     try {
-      await this.peerApi.deleteData(companyId, row.id);
-      this.companyData.set(await this.peerApi.listData(companyId));
-      await this.refresh();
+      this.compareResult.set(await this.peerApi.compareYear(company.id, year));
     } catch {
-      this.errorMessage.set('Could not delete this period.');
+      this.errorMessage.set('Could not load the comparison.');
+    } finally {
+      this.compareLoading.set(false);
     }
   }
 
-  metricLabel(key: string): string {
-    return this.metrics().find((m) => m.key === key)?.label ?? key;
+  barPct(value: number | null, max: number): number {
+    if (value === null || value === undefined) return 0;
+    return Math.max((value / max) * 100, value === 0 ? 0 : 2);
   }
 
-  metricUnit(key: string): string {
-    return this.metrics().find((m) => m.key === key)?.unit ?? '';
-  }
-
-  metricKeysFor(row: PeerData): string[] {
-    return Object.keys(row.metrics);
-  }
-
-  formatPeriod(period: string): string {
-    return new Date(`${period}T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  pairMax(a: number | null, b: number | null): number {
+    return Math.max(a ?? 0, b ?? 0, 0.0001);
   }
 }

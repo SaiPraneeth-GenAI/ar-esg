@@ -60,10 +60,9 @@ class ChartConfig(BaseModel):
     # breakdown
     dimension: str | None = None
 
-    # comparison
-    comparison_mode: str = "metrics"  # metrics | peers
-    metrics: list[str] | None = None  # comparison_mode == "metrics": 2-6 of our own metrics, current period
-    compare_peer_ids: list[uuid.UUID] | None = None  # comparison_mode == "peers": one metric, us + these peer companies
+    # comparison -- 2-6 of our own metrics, current period. Peer comparison
+    # is a separate, dedicated flow (see peers.py), not a Chart Builder config.
+    metrics: list[str] | None = None
 
     location_id: uuid.UUID | None = None
 
