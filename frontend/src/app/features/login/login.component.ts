@@ -1,7 +1,17 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../../core/supabase.service';
+
+// Short, concrete claims -- each one names an actual capability of the
+// platform (not generic marketing filler), cycled like a live product
+// ticker on the sign-in screen's brand panel.
+const PITCH_LINES = [
+  'Scope 1+2 emissions tracked to the exact calculation snapshot',
+  'One-click BRSR-ready PDF & PPTX exports, every dashboard tab',
+  'AI insights, guardrailed to your real numbers -- never invented',
+  'Live target tracking against every site, every metric'
+];
 
 @Component({
   selector: 'app-login',
@@ -10,7 +20,7 @@ import { SupabaseService } from '../../core/supabase.service';
   templateUrl: './login.component.html',
   styleUrl: './login.component.css'
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit, OnDestroy {
   private fb = inject(FormBuilder);
   private supabase = inject(SupabaseService);
   private router = inject(Router);
@@ -22,6 +32,20 @@ export class LoginComponent {
 
   loading = signal(false);
   errorMessage = signal('');
+
+  pitchLines = PITCH_LINES;
+  pitchIndex = signal(0);
+  private pitchTimer?: ReturnType<typeof setInterval>;
+
+  ngOnInit(): void {
+    this.pitchTimer = setInterval(() => {
+      this.pitchIndex.set((this.pitchIndex() + 1) % this.pitchLines.length);
+    }, 3600);
+  }
+
+  ngOnDestroy(): void {
+    if (this.pitchTimer) clearInterval(this.pitchTimer);
+  }
 
   async signIn(): Promise<void> {
     if (this.form.invalid) {

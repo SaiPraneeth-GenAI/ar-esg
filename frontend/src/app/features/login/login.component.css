@@ -22,6 +22,33 @@
   overflow: hidden;
 }
 
+/* A slow diagonal sheen drifting across the panel -- reads as "alive"
+   without competing with the chart or the pitch ticker for attention. */
+.brand-panel::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background: linear-gradient(115deg, transparent 40%, rgba(110, 231, 168, 0.09) 50%, transparent 60%);
+  animation: sheen-sweep 7s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes sheen-sweep {
+  0%,
+  100% {
+    transform: translateX(-15%);
+  }
+  50% {
+    transform: translateX(15%);
+  }
+}
+
+.brand-mark,
+.brand-content,
+.chart-motif {
+  position: relative;
+}
+
 .brand-mark {
   display: flex;
   align-items: center;
@@ -60,6 +87,80 @@
   width: 100%;
   max-width: 420px;
   height: auto;
+  color: #6ee7a8;
+}
+
+.chart-line {
+  stroke-dasharray: 520;
+  stroke-dashoffset: 520;
+  animation: draw-line 2s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards;
+}
+
+@keyframes draw-line {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.chart-area {
+  opacity: 0;
+  animation: fade-in-area 1.4s ease 1.4s forwards;
+}
+
+@keyframes fade-in-area {
+  to {
+    opacity: 1;
+  }
+}
+
+.chart-endpoint-pulse {
+  transform-origin: 300px 6px;
+  opacity: 0;
+  animation: pulse-ring 2.4s ease-out 2.1s infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(3.2);
+  }
+}
+
+/* Pitch ticker -- short capability claims crossfading in a stack, like a
+   live product ticker rather than a static tagline. */
+.pitch-ticker {
+  position: relative;
+  height: 1.6rem;
+  margin-top: 1.35rem;
+}
+
+.pitch-line {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #d7f5e4;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.pitch-line.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.pitch-line svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
   color: #6ee7a8;
 }
 
@@ -180,6 +281,27 @@ input:focus {
   border-radius: 8px;
   padding: 0.6rem 0.75rem;
   font-size: 0.875rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-panel::before,
+  .chart-line,
+  .chart-area,
+  .chart-endpoint-pulse {
+    animation: none;
+  }
+
+  .chart-line {
+    stroke-dashoffset: 0;
+  }
+
+  .chart-area {
+    opacity: 1;
+  }
+
+  .pitch-line {
+    transition: none;
+  }
 }
 
 @media (max-width: 860px) {

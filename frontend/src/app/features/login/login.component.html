@@ -11,16 +11,36 @@
     <div class="brand-content">
       <h1>Clarity for what your business leaves behind</h1>
       <p>Environmental, social, and governance data, tracked and reported with precision</p>
+
+      <div class="pitch-ticker" aria-live="polite">
+        @for (line of pitchLines; track line; let i = $index) {
+          <span class="pitch-line" [class.active]="i === pitchIndex()">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m4 10 4 4 8-9" />
+            </svg>
+            {{ line }}
+          </span>
+        }
+      </div>
     </div>
 
     <svg class="chart-motif" viewBox="0 0 300 90" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#6ee7a8" stop-opacity="0.45" />
+          <stop offset="100%" stop-color="#6ee7a8" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon class="chart-area" points="0,70 35,58 70,64 105,40 140,50 175,26 210,34 245,14 300,6 300,90 0,90" fill="url(#chartFill)" />
       <polyline
+        class="chart-line"
         points="0,70 35,58 70,64 105,40 140,50 175,26 210,34 245,14 300,6"
         stroke="currentColor"
         stroke-width="3"
         stroke-linecap="round"
         stroke-linejoin="round"
       />
+      <circle class="chart-endpoint-pulse" cx="300" cy="6" r="5" fill="none" stroke="#6ee7a8" stroke-width="2" />
       <circle cx="300" cy="6" r="5" fill="#fff" />
     </svg>
   </aside>
