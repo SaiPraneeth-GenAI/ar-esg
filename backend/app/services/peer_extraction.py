@@ -40,8 +40,23 @@ _KEYWORDS = [
     "essential indicators", "employee well-being", "environment",
 ]
 
-_MAX_PAGES = 20  # candidate pages considered -- deterministic filtering, no LLM cost
-_MAX_CHARS = 50_000  # hard cap on what ever reaches the LLM (~12-13k tokens worst case)
+# These, unlike _KEYWORDS above, are specific enough to BRSR's own section
+# structure that they essentially only ever appear INSIDE the BRSR section
+# of a combined annual+BRSR report -- generic words like "energy" or
+# "revenue" show up throughout a 300+ page annual report's financial
+# statements and MD&A long before the BRSR section starts, so scanning for
+# ANY keyword hit front-to-back (the old approach) exhausted the page
+# budget on false positives without ever reaching the real tables. These
+# anchors locate the section itself first.
+_SECTION_ANCHORS = [
+    "business responsibility and sustainability report", "brsr",
+    "principle 1", "principle 2", "principle 3", "principle 4", "principle 5",
+    "principle 6", "principle 7", "principle 8", "principle 9",
+    "essential indicators", "leadership indicators",
+]
+
+_MAX_PAGES = 45  # a real BRSR section usually runs 20-45 pages; cost is trivial (see below) so this is generous on purpose
+_MAX_CHARS = 150_000  # ~35-40k tokens worst case, still under $0.01/call at gpt-4o-mini pricing
 _WINDOW_RADIUS = 800  # chars of context kept around a keyword hit on pages with no table
 
 # gpt-4o-mini list pricing per 1M tokens, for the estimate in logs only --
@@ -106,25 +121,46 @@ def _format_page(page: "fitz.Page", page_number: int) -> str:
     return "\n".join(parts)
 
 
+def _page_texts(doc: "fitz.Document") -> list[str]:
+    return [page.get_text().lower() for page in doc]
+
+
+def _select_page_indices(page_texts: list[str]) -> tuple[list[int], str]:
+    """Picks which pages to send, in three tiers:
+    1. A real BRSR section, if one exists -- found via section-specific
+       anchors (not generic keywords, which false-positive throughout a
+       long annual report's financial sections). The section is
+       contiguous by construction (first anchor hit to last, +3 pages of
+       buffer for a table that spills past the final mention), so this is
+       the whole section, not a handful of scattered pages.
+    2. Otherwise, any page matching the broader keyword list, scanning the
+       WHOLE document (not stopping at the first _MAX_PAGES hits) so a
+       relevant page late in the document isn't dropped in favor of an
+       early false positive -- capped to _MAX_PAGES afterward.
+    3. Otherwise, the first _MAX_PAGES pages, so the model sees something
+       rather than nothing.
+    Returns (indices, mode) where mode is "section" | "keyword" | "fallback".
+    """
+    anchor_pages = [i for i, text in enumerate(page_texts) if any(a in text for a in _SECTION_ANCHORS)]
+    if anchor_pages:
+        start, end = anchor_pages[0], min(anchor_pages[-1] + 3, len(page_texts) - 1)
+        return list(range(start, end + 1))[:_MAX_PAGES], "section"
+
+    keyword_pages = [i for i, text in enumerate(page_texts) if any(k in text for k in _KEYWORDS)]
+    if keyword_pages:
+        return keyword_pages[:_MAX_PAGES], "keyword"
+
+    return list(range(min(_MAX_PAGES, len(page_texts)))), "fallback"
+
+
 def extract_relevant_text(pdf_bytes: bytes) -> tuple[str, dict]:
     """Text (tables extracted as structured rows where detected, windowed
-    text otherwise) for up to _MAX_PAGES pages whose text mentions a
-    BRSR/ESG-relevant term. Falls back to the first _MAX_PAGES pages if
-    nothing matches anywhere (better to show the model something than
-    nothing) -- that fallback is reported in the returned stats so it's
-    visible in logs, not silent. Returns (text, stats)."""
+    text otherwise) for the selected pages -- see _select_page_indices for
+    how those are chosen. Returns (text, stats)."""
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     total_pages = doc.page_count
-    matched_indices: list[int] = []
-    for i, page in enumerate(doc):
-        text = page.get_text().lower()
-        if any(k in text for k in _KEYWORDS):
-            matched_indices.append(i)
-        if len(matched_indices) >= _MAX_PAGES:
-            break
-
-    used_fallback = not matched_indices
-    indices = matched_indices if matched_indices else list(range(min(_MAX_PAGES, total_pages)))
+    page_texts = _page_texts(doc)
+    indices, mode = _select_page_indices(page_texts)
 
     chunks: list[str] = []
     total = 0
@@ -144,7 +180,8 @@ def extract_relevant_text(pdf_bytes: bytes) -> tuple[str, dict]:
         "candidate_pages": len(indices),
         "pages_sent": pages_sent,
         "chars_sent": len(text),
-        "used_fallback": used_fallback,
+        "selection_mode": mode,
+        "used_fallback": mode == "fallback",
     }
     return text, stats
 
@@ -218,10 +255,11 @@ def extract_metrics_from_pdf(pdf_bytes: bytes) -> dict[str, float | None]:
             usage["input_tokens"] / 1_000_000 * _INPUT_COST_PER_M + usage["output_tokens"] / 1_000_000 * _OUTPUT_COST_PER_M, 5
         )
 
+    found_count = sum(1 for v in extracted.values() if v is not None)
     logger.info(
-        "peer_extraction %s hash=%s total_pages=%s candidate_pages=%s pages_sent=%s chars_sent=%s "
-        "est_input_tokens=%s actual_input_tokens=%s output_tokens=%s total_tokens=%s est_cost_usd=%s",
-        "FULL_DOCUMENT_FALLBACK" if stats.get("used_fallback") else "FILTERED_EXTRACTION",
+        "peer_extraction mode=%s hash=%s total_pages=%s candidate_pages=%s pages_sent=%s chars_sent=%s "
+        "est_input_tokens=%s actual_input_tokens=%s output_tokens=%s total_tokens=%s est_cost_usd=%s found_count=%s/%s",
+        stats.get("selection_mode"),
         doc_hash[:12],
         stats.get("total_pages"),
         stats.get("candidate_pages"),
@@ -232,18 +270,20 @@ def extract_metrics_from_pdf(pdf_bytes: bytes) -> dict[str, float | None]:
         usage.get("output_tokens"),
         usage.get("total_tokens"),
         est_cost,
+        found_count,
+        len(extracted),
     )
 
-    found_count = sum(1 for v in extracted.values() if v is not None)
-    if usage and found_count > 0:
-        # A billed call that still found nothing is likely a fluke (a
-        # keyword-filtered excerpt that missed the real tables) rather than
-        # proof the document has no data -- caching it would make that bad
-        # result permanent for every future re-upload of this exact file
-        # until the next deploy. Only a call that found at least one value
-        # is trusted enough to skip re-running next time.
+    # A billed call that found only a couple of values is more likely a
+    # fluke -- the right pages weren't quite selected -- than proof the
+    # document really only reports 1-2 of these metrics. Caching it would
+    # make that weak result permanent for every re-upload of this exact
+    # file until the next deploy, so only a call that found a meaningful
+    # share is trusted enough to skip re-running next time.
+    should_cache = bool(usage) and found_count >= max(4, len(extracted) // 4)
+    if should_cache:
         _RESULT_CACHE[doc_hash] = extracted
-    logger.info("peer_extraction found_count=%s/%s cached=%s", found_count, len(extracted), bool(usage and found_count > 0))
+    logger.info("peer_extraction cached=%s", should_cache)
     return extracted
 
 
