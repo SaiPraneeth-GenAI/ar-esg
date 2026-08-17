@@ -34,7 +34,7 @@ from app.services.carbon_calculation import (
     trailing_buckets_for_mode,
 )
 from app.services.rollups import month_start
-from app.services.target_calculation import INTENSITY_METRIC_TYPES, classify_status, months_between, target_value_for_month
+from app.services.target_calculation import RATE_METRIC_KEYS, classify_status, months_between, target_value_for_month
 
 router = APIRouter(prefix="/carbon", tags=["carbon"])
 
@@ -374,10 +374,10 @@ def carbon_overview(
     insight = _build_insight(sources, current_totals["scope1_2_loc_tco2e"], prior_totals["scope1_2_loc_tco2e"], unresolved_count)
 
     scope1_2_target = _active_target_comparison(
-        db, current.tenant_id, location_id, "1_2_combined", "absolute_tco2e", current_months, current_totals["scope1_2_loc_tco2e"]
+        db, current.tenant_id, location_id, "scope1_2_tco2e", current_months, current_totals["scope1_2_loc_tco2e"]
     )
     intensity_target = _active_target_comparison(
-        db, current.tenant_id, location_id, "1_2_combined", "intensity_tco2e_per_mnah", current_months, current_totals["intensity"]
+        db, current.tenant_id, location_id, "ghg_intensity_production", current_months, current_totals["intensity"]
     )
 
     return CarbonOverview(
@@ -407,25 +407,24 @@ def carbon_overview(
 
 
 def _active_target_comparison(
-    db: Session, tenant_id, location_id, scope: str, metric_type: str, months: list[date], actual: float | None
+    db: Session, tenant_id, location_id, metric_key: str, months: list[date], actual: float | None
 ) -> TargetComparison | None:
     """Only ever reads an active target for the exact same boundary this
-    card already shows -- never substitutes a different location/scope
+    card already shows -- never substitutes a different location/metric
     target, and never fabricates a comparison when none has been
     declared (rule: targets are never auto-created). `months` is the same
     range the actual figure was aggregated over (one month, or a
-    quarter-to-date/year-to-date range): an absolute target's budget is
+    quarter-to-date/year-to-date range): a budget metric's total is
     summed across exactly those months so it's comparable to a multi-month
-    actual; an intensity target's value is a rate and stays constant
-    regardless of range length."""
+    actual; a rate metric's value stays constant regardless of range
+    length."""
     anchor_period = months[-1]
     target = (
         db.query(EmissionTarget)
         .filter(
             EmissionTarget.tenant_id == tenant_id,
             EmissionTarget.location_id == location_id,
-            EmissionTarget.scope == scope,
-            EmissionTarget.metric_type == metric_type,
+            EmissionTarget.metric_key == metric_key,
             EmissionTarget.status == "active",
             EmissionTarget.target_period_start <= anchor_period,
             EmissionTarget.target_period_end >= anchor_period,
@@ -435,14 +434,14 @@ def _active_target_comparison(
     if target is None or target.target_value is None:
         return None
     num_months = len(months_between(target.target_period_start, target.target_period_end))
-    if metric_type in INTENSITY_METRIC_TYPES:
+    if metric_key in RATE_METRIC_KEYS:
         range_target = target_value_for_month(
-            target.monthly_phasing, anchor_period, float(target.target_value), num_months, target.metric_type
+            target.monthly_phasing, anchor_period, float(target.target_value), num_months, target.metric_key
         )
     else:
         relevant = [m for m in months if target.target_period_start <= m <= target.target_period_end]
         monthly_targets = [
-            target_value_for_month(target.monthly_phasing, m, float(target.target_value), num_months, target.metric_type)
+            target_value_for_month(target.monthly_phasing, m, float(target.target_value), num_months, target.metric_key)
             for m in relevant
         ]
         monthly_targets = [t for t in monthly_targets if t is not None]

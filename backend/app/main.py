@@ -1,5 +1,13 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# No handler was configured anywhere, so custom loggers (e.g.
+# app/services/peer_extraction.py's token/cost telemetry) were silently
+# dropped instead of reaching Render's log stream -- this gives every
+# logger a stdout handler at INFO level.
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 
 from app.api.routes import (
     admin_emission_factors,

@@ -1,9 +1,13 @@
 """Target baseline computation and actual-vs-target status (Prompt 4's
-target-setting workflow). Boundary/metric extraction and status
+target-setting workflow). A target's metric is one of the Chart Builder's
+CHARTABLE_METRICS keys -- the exact same list the dashboards show -- so
+picking a target is just picking a metric, never assembling a scope/
+method/type boundary by hand. Boundary/metric extraction and status
 classification are pure functions; baseline/performance computation reads
-approved calculation snapshots through compute_period_totals -- the same
-function the dashboard overview uses, so a target's numbers can never
-drift from what the dashboard shows for the same period.
+approved calculation snapshots through compute_range_totals /
+compute_intensity_overview_range -- the same functions the dashboard and
+trend charts use, so a target's numbers can never drift from what's shown
+elsewhere for the same period.
 """
 
 import hashlib
@@ -14,11 +18,54 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.core.metrics_registry import CHARTABLE_METRICS
 from app.db.models import ProductionVolumeMapping
-from app.services.carbon_calculation import compute_period_totals
+from app.services.carbon_calculation import compute_period_totals_batch, compute_range_totals
+from app.services.intensity_calculation import (
+    compute_intensity_overview_batch,
+    compute_intensity_overview_range,
+    get_active_revenue_mapping,
+)
 
 BASELINE_READY_COMPLETENESS_PCT = 95.0
 STATUS_WATCH_MARGIN_PCT = 5.0
+
+# Targets are scoped to GHG + intensity for now -- Safety metrics need a
+# reduce-vs-increase direction concept the engine doesn't have yet
+# (Defensive Driving Training is "higher is better", unlike everything
+# here, which is a reduction target).
+TARGETABLE_METRIC_KEYS = [
+    "scope1_tco2e", "scope2_tco2e", "scope1_2_tco2e",
+    "ghg_intensity_production", "energy_per_production", "water_per_production", "waste_per_production",
+    "ghg_per_revenue", "energy_per_revenue", "water_per_revenue", "waste_per_revenue",
+]
+
+# metric_key -> field name on a compute_range_totals()/compute_period_totals() dict
+_GHG_ABSOLUTE_FIELD = {"scope1_tco2e": "scope1_tco2e", "scope2_tco2e": "scope2_loc_tco2e", "scope1_2_tco2e": "scope1_2_loc_tco2e"}
+_GHG_RATE_FIELD = {"ghg_intensity_production": "intensity", "ghg_per_revenue": "intensity_revenue"}
+# metric_key -> attribute name on an IntensityOverview
+_OTHER_RATE_FIELD = {
+    "energy_per_production": "energy_per_production",
+    "water_per_production": "water_per_production",
+    "waste_per_production": "waste_per_production",
+    "energy_per_revenue": "energy_per_revenue",
+    "water_per_revenue": "water_per_revenue",
+    "waste_per_revenue": "waste_per_revenue",
+}
+
+# A rate (tCO2e/MnAh, GJ/Cr, ...) is compared against the same annual
+# figure every month; a budget (a plain tCO2e total) is spread evenly
+# across months by default. Dividing a rate by the month count would be
+# meaningless -- see target_value_for_month.
+RATE_METRIC_KEYS = set(_GHG_RATE_FIELD) | set(_OTHER_RATE_FIELD)
+
+
+def metric_unit(metric_key: str) -> str:
+    return CHARTABLE_METRICS[metric_key]["unit"]
+
+
+def metric_label(metric_key: str) -> str:
+    return CHARTABLE_METRICS[metric_key]["label"]
 
 
 def months_between(start: date, end: date) -> list[date]:
@@ -34,69 +81,44 @@ def months_between(start: date, end: date) -> list[date]:
     return months
 
 
-def boundary_config_hash(
-    tenant_id: uuid.UUID,
-    location_id: uuid.UUID | None,
-    scope: str,
-    calculation_method: str | None,
-    metric_type: str,
-    production_mapping_id: uuid.UUID | None,
-) -> str:
-    """Detects when a target's boundary or denominator has moved under it.
-    Not a secret -- just a stable fingerprint, so sha256 with no salt is
-    fine."""
-    raw = "|".join(
-        [
-            str(tenant_id),
-            str(location_id or ""),
-            scope,
-            calculation_method or "",
-            metric_type,
-            str(production_mapping_id or ""),
-        ]
-    )
-    return hashlib.sha256(raw.encode()).hexdigest()
-
-
-INTENSITY_METRIC_TYPES = ("intensity_tco2e_per_mnah", "intensity_tco2e_per_revenue")
-
-
-def validate_metric_scope(scope: str, metric_type: str) -> str | None:
-    """Intensity is only defined for the combined Scope 1+2 location-based
-    boundary -- the only two denominators (production volume, revenue) the
-    platform tracks are both defined against that boundary. Returns an
-    error message, or None if valid."""
-    if metric_type in INTENSITY_METRIC_TYPES and scope != "1_2_combined":
-        return "Intensity targets are only supported for the Scope 1+2 (location-based) boundary."
+def denominator_mapping_id(db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, metric_key: str) -> uuid.UUID | None:
+    """The production or revenue mapping this metric's denominator depends
+    on, if any -- folded into boundary_config_hash so a later change to
+    that mapping is detectable."""
+    if metric_key.endswith("_per_production") or metric_key == "ghg_intensity_production":
+        mapping = get_active_production_mapping(db, tenant_id, location_id)
+        return mapping.id if mapping else None
+    if metric_key.endswith("_per_revenue"):
+        mapping = get_active_revenue_mapping(db, tenant_id, location_id)
+        return mapping.id if mapping else None
     return None
 
 
+def boundary_config_hash(tenant_id: uuid.UUID, location_id: uuid.UUID | None, metric_key: str, denominator_mapping_id: uuid.UUID | None) -> str:
+    """Detects when a target's boundary or denominator has moved under it.
+    Not a secret -- just a stable fingerprint, so sha256 with no salt is
+    fine."""
+    raw = "|".join([str(tenant_id), str(location_id or ""), metric_key, str(denominator_mapping_id or "")])
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
 def extract_metric_value(
-    totals: dict, scope: str, calculation_method: str | None, metric_type: str = "absolute_tco2e"
-) -> tuple[float | None, str | None]:
-    """Reads the one number a target boundary/metric combination refers to
-    out of a compute_period_totals() result. Returns (value, error) --
-    error is set when the boundary/metric combination has no defined
-    meaning (e.g. intensity for scope 1 alone). metric_type must be
-    checked first and independently of scope: an intensity target reads a
-    completely different number (a rate) than an absolute target reads
-    (a total) even for the identical scope/method boundary, so falling
-    through to the scope branches below for an intensity target would
-    silently return the absolute total instead."""
-    if metric_type in INTENSITY_METRIC_TYPES:
-        if scope != "1_2_combined":
-            return None, "Intensity is only defined for the Scope 1+2 combined boundary."
-        key = "intensity" if metric_type == "intensity_tco2e_per_mnah" else "intensity_revenue"
-        return totals[key], None
-    if scope == "1_2_combined":
-        return totals["scope1_2_loc_tco2e"], None
-    if scope == "1":
-        return totals["scope1_tco2e"], None
-    if scope == "2":
-        if calculation_method == "market_based":
-            return totals["scope2_mkt_tco2e"], None
-        return totals["scope2_loc_tco2e"], None
-    return None, f"Unknown scope boundary '{scope}'."
+    db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, metric_key: str, months: list[date]
+) -> tuple[float | None, float | None]:
+    """The metric's value aggregated across `months` (a single month, or a
+    whole baseline/target window), plus a completeness percentage where
+    that concept applies. Delegates entirely to the same range-aggregation
+    functions the dashboard's trend charts use -- an intensity's numerator
+    and denominator are each summed across the window and only then
+    divided, never averaged month-by-month (which would misweight months
+    with different production/revenue volume)."""
+    if metric_key in _GHG_ABSOLUTE_FIELD or metric_key in _GHG_RATE_FIELD:
+        totals = compute_range_totals(db, tenant_id, location_id, months)
+        field = _GHG_ABSOLUTE_FIELD.get(metric_key) or _GHG_RATE_FIELD.get(metric_key)
+        return totals[field], totals["completeness_pct"]
+    overview = compute_intensity_overview_range(db, tenant_id, location_id, months)
+    value = getattr(overview, _OTHER_RATE_FIELD[metric_key])
+    return value, (100.0 if value is not None else None)
 
 
 def get_active_production_mapping(db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None) -> ProductionVolumeMapping | None:
@@ -127,96 +149,68 @@ class BaselineResult:
 
 
 def compute_baseline(
-    db: Session,
-    tenant_id: uuid.UUID,
-    location_id: uuid.UUID | None,
-    scope: str,
-    calculation_method: str | None,
-    metric_type: str,
-    period_start: date,
-    period_end: date,
+    db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, metric_key: str, period_start: date, period_end: date
 ) -> BaselineResult:
     """Aggregates approved calculation snapshots across every month in the
     baseline window. A baseline is 'ready' only when every month reaches
-    the completeness threshold; short of that it's shown as provisional
-    and directs the user to the missing entries/factors rather than
-    presenting a misleading number (rule #5 in Prompt 4)."""
+    the completeness threshold (for metrics that track completeness);
+    short of that it's shown as provisional and directs the user to the
+    missing entries/factors rather than presenting a misleading number
+    (rule #5 in Prompt 4)."""
     months = months_between(period_start, period_end)
-    month_results: list[MonthBaseline] = []
-    total_emissions_kg = Decimal("0")
-    total_denominator = Decimal("0")
-    any_month_incomplete = False
-    any_data_at_all = False
-    denominator_key = "production_value" if metric_type == "intensity_tco2e_per_mnah" else "revenue_value"
-    denominator_label = "production volume" if metric_type == "intensity_tco2e_per_mnah" else "revenue"
+    is_ghg = metric_key in _GHG_ABSOLUTE_FIELD or metric_key in _GHG_RATE_FIELD
 
-    for m in months:
-        totals = compute_period_totals(db, tenant_id, location_id, m)
-        value, error = extract_metric_value(totals, scope, calculation_method, metric_type)
-        completeness = totals["completeness_pct"]
-        calc_ids = [r.id for r in totals["rows"]]
-
-        if totals["calculated_count"] > 0 or totals["unresolved_count"] > 0:
-            any_data_at_all = True
-        if completeness is None or completeness < BASELINE_READY_COMPLETENESS_PCT:
-            any_month_incomplete = True
-
-        month_results.append(MonthBaseline(period=m, value=value, completeness_pct=completeness, calculation_ids=calc_ids))
-
-        if metric_type == "absolute_tco2e" and value is not None:
-            total_emissions_kg += Decimal(str(value)) * 1000
-        elif metric_type in INTENSITY_METRIC_TYPES:
-            scope1_2 = totals["scope1_2_loc_tco2e"]
-            if scope1_2 is not None:
-                total_emissions_kg += Decimal(str(scope1_2)) * 1000
-            if totals[denominator_key]:
-                total_denominator += Decimal(str(totals[denominator_key]))
-
-    if not any_data_at_all:
-        return BaselineResult(
-            ready=False,
-            provisional=False,
-            baseline_value=None,
-            completeness_pct=None,
-            months=month_results,
-            message="Baseline not ready -- no approved activity data found in this period yet.",
-        )
-
-    if metric_type == "absolute_tco2e":
-        baseline_value = float(total_emissions_kg / 1000)
-    else:
-        if total_denominator <= 0:
-            return BaselineResult(
-                ready=False,
-                provisional=False,
-                baseline_value=None,
-                completeness_pct=None,
-                months=month_results,
-                message=f"Baseline not ready -- no approved {denominator_label} found in this period, so intensity can't be computed.",
+    if is_ghg:
+        by_month = compute_period_totals_batch(db, tenant_id, location_id, months)
+        field = _GHG_ABSOLUTE_FIELD.get(metric_key) or _GHG_RATE_FIELD.get(metric_key)
+        month_results = [
+            MonthBaseline(
+                period=m, value=by_month[m][field], completeness_pct=by_month[m]["completeness_pct"],
+                calculation_ids=[r.id for r in by_month[m]["rows"]],
             )
-        baseline_value = float(total_emissions_kg / 1000) / float(total_denominator)
+            for m in months
+        ]
+        range_totals = compute_range_totals(db, tenant_id, location_id, months, by_month=by_month)
+        baseline_value = range_totals[field]
+        overall_completeness = range_totals["completeness_pct"]
+        any_data = any(by_month[m]["calculated_count"] > 0 or by_month[m]["unresolved_count"] > 0 for m in months)
+        any_incomplete = any((by_month[m]["completeness_pct"] or 0) < BASELINE_READY_COMPLETENESS_PCT for m in months)
+    else:
+        overview_by_month = compute_intensity_overview_batch(db, tenant_id, location_id, months)
+        attr = _OTHER_RATE_FIELD[metric_key]
+        month_results = [
+            MonthBaseline(
+                period=m, value=getattr(overview_by_month[m], attr),
+                completeness_pct=(100.0 if getattr(overview_by_month[m], attr) is not None else None),
+            )
+            for m in months
+        ]
+        range_overview = compute_intensity_overview_range(db, tenant_id, location_id, months, by_month=overview_by_month)
+        baseline_value = getattr(range_overview, attr)
+        overall_completeness = 100.0 if baseline_value is not None else None
+        any_data = any(getattr(overview_by_month[m], attr) is not None for m in months)
+        any_incomplete = False  # no partial-month completeness concept for these metrics yet
 
-    overall_completeness = sum(m.completeness_pct or 0 for m in month_results) / len(month_results)
-
-    if any_month_incomplete:
+    if not any_data:
         return BaselineResult(
-            ready=True,
-            provisional=True,
-            baseline_value=baseline_value,
-            completeness_pct=overall_completeness,
-            months=month_results,
+            ready=False, provisional=False, baseline_value=None, completeness_pct=None, months=month_results,
+            message="Baseline not ready -- no approved data found in this period yet.",
+        )
+    if baseline_value is None:
+        return BaselineResult(
+            ready=False, provisional=False, baseline_value=None, completeness_pct=overall_completeness, months=month_results,
+            message="Baseline not ready -- some of the data needed to compute this metric is missing (e.g. production volume or revenue).",
+        )
+    if any_incomplete:
+        return BaselineResult(
+            ready=True, provisional=True, baseline_value=baseline_value, completeness_pct=overall_completeness, months=month_results,
             message=(
                 f"Baseline is provisional -- at least one month is below {BASELINE_READY_COMPLETENESS_PCT:.0f}% data "
                 "completeness. You can still activate it, but resolve the missing entries/factors first if possible."
             ),
         )
-
     return BaselineResult(
-        ready=True,
-        provisional=False,
-        baseline_value=baseline_value,
-        completeness_pct=overall_completeness,
-        months=month_results,
+        ready=True, provisional=False, baseline_value=baseline_value, completeness_pct=overall_completeness, months=month_results,
         message="Baseline is ready.",
     )
 
@@ -253,15 +247,15 @@ def validate_monthly_phasing(monthly_phasing: list[dict], target_value: float, t
 
 
 def target_value_for_month(
-    monthly_phasing: list[dict], period: date, target_value: float | None, num_months: int, metric_type: str = "absolute_tco2e"
+    monthly_phasing: list[dict], period: date, target_value: float | None, num_months: int, metric_key: str = "scope1_2_tco2e"
 ) -> float | None:
     """The month's target figure -- its explicit phased value if phasing
-    was set, otherwise derived from the annual target. An absolute target
-    is a budget, so it's spread evenly across months by default. An
-    intensity target is a rate (tCO2e/MnAh), not a budget -- dividing it
-    by the month count would compare each month's actual rate against a
-    twelfth of the rate, which is meaningless. Every month is compared
-    against the same annual intensity target instead."""
+    was set, otherwise derived from the annual target. A budget metric
+    (a plain tCO2e total) is spread evenly across months by default. A
+    rate metric (tCO2e/MnAh, GJ/Cr, ...) is compared against the same
+    annual figure every month -- dividing it by the month count would
+    compare each month's actual rate against a twelfth of the rate, which
+    is meaningless."""
     if monthly_phasing:
         for entry in monthly_phasing:
             if entry.get("period") == period.isoformat():
@@ -269,7 +263,7 @@ def target_value_for_month(
         return None
     if target_value is None:
         return None
-    if metric_type in INTENSITY_METRIC_TYPES:
+    if metric_key in RATE_METRIC_KEYS:
         return target_value
     if num_months == 0:
         return None

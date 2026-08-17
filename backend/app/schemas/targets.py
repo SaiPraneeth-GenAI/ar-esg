@@ -9,11 +9,16 @@ class MonthlyPhaseEntry(BaseModel):
     value: float
 
 
+class TargetableMetricOut(BaseModel):
+    key: str
+    label: str
+    unit: str
+    group: str  # "GHG" | "Intensity by production" | "Intensity by revenue"
+
+
 class BaselinePreviewRequest(BaseModel):
     location_id: uuid.UUID | None = None
-    scope: str  # '1' | '2' | '1_2_combined'
-    calculation_method: str | None = None
-    metric_type: str  # absolute_tco2e | intensity_tco2e_per_mnah
+    metric_key: str
     baseline_period_start: date
     baseline_period_end: date
 
@@ -35,9 +40,7 @@ class BaselinePreviewResponse(BaseModel):
 
 class TargetCreate(BaseModel):
     location_id: uuid.UUID | None = None
-    scope: str
-    calculation_method: str | None = None
-    metric_type: str
+    metric_key: str
     baseline_period_start: date
     baseline_period_end: date
     target_period_start: date
@@ -61,9 +64,7 @@ class TargetUpdate(BaseModel):
     """Draft-only edits -- any field may be updated up until activation."""
 
     location_id: uuid.UUID | None = None
-    scope: str | None = None
-    calculation_method: str | None = None
-    metric_type: str | None = None
+    metric_key: str | None = None
     baseline_period_start: date | None = None
     baseline_period_end: date | None = None
     target_period_start: date | None = None
@@ -83,9 +84,9 @@ class TargetOut(BaseModel):
     id: uuid.UUID
     location_id: uuid.UUID | None
     location_name: str | None
-    scope: str
-    calculation_method: str | None
-    metric_type: str
+    metric_key: str
+    metric_label: str
+    metric_unit: str
     baseline_period_start: date
     baseline_period_end: date
     baseline_value: float | None
@@ -120,5 +121,5 @@ class TargetMonthPerformance(BaseModel):
 
 class TargetPerformanceResponse(BaseModel):
     target_id: uuid.UUID
-    metric_type: str
+    metric_key: str
     months: list[TargetMonthPerformance]

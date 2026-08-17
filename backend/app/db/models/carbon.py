@@ -88,9 +88,9 @@ class EmissionTarget(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenant.id", ondelete="CASCADE"), nullable=False)
     location_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("location.id", ondelete="CASCADE"))
 
-    scope: Mapped[str] = mapped_column(String, nullable=False)  # '1' | '2' | '1_2_combined'
-    calculation_method: Mapped[str | None] = mapped_column(String)  # location_based | market_based
-    metric_type: Mapped[str] = mapped_column(String, nullable=False)  # absolute_tco2e | intensity_tco2e_per_mnah
+    # One of the Chart Builder's CHARTABLE_METRICS keys (GHG + intensity
+    # groups only for now -- see app/services/target_calculation.py).
+    metric_key: Mapped[str] = mapped_column(String, nullable=False)
 
     baseline_period_start: Mapped[date] = mapped_column(nullable=False)
     baseline_period_end: Mapped[date] = mapped_column(nullable=False)

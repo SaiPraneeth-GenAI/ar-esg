@@ -1,16 +1,21 @@
 """Unit tests for the DB-free pure functions in target_calculation.py --
-boundary hashing, metric extraction, monthly phasing validation and
-actual-vs-target status classification. No database required."""
+boundary hashing, monthly phasing validation, month-spreading, and
+actual-vs-target status classification. extract_metric_value/compute_baseline
+now delegate to compute_range_totals/compute_intensity_overview_range (real
+queries) so they're exercised via the API test suite instead, not here."""
 
 from datetime import date
 
 from app.services.target_calculation import (
+    RATE_METRIC_KEYS,
+    TARGETABLE_METRIC_KEYS,
+    _GHG_ABSOLUTE_FIELD,
+    _GHG_RATE_FIELD,
+    _OTHER_RATE_FIELD,
     boundary_config_hash,
     classify_status,
-    extract_metric_value,
     months_between,
     target_value_for_month,
-    validate_metric_scope,
     validate_monthly_phasing,
 )
 
@@ -26,74 +31,45 @@ def test_months_between_crosses_year_boundary():
 
 
 def test_boundary_config_hash_is_stable():
-    h1 = boundary_config_hash("t1", "l1", "1_2_combined", "location_based", "intensity_tco2e_per_mnah", "p1")
-    h2 = boundary_config_hash("t1", "l1", "1_2_combined", "location_based", "intensity_tco2e_per_mnah", "p1")
+    h1 = boundary_config_hash("t1", "l1", "ghg_intensity_production", "p1")
+    h2 = boundary_config_hash("t1", "l1", "ghg_intensity_production", "p1")
     assert h1 == h2
 
 
-def test_boundary_config_hash_changes_with_boundary():
-    h1 = boundary_config_hash("t1", "l1", "1_2_combined", "location_based", "intensity_tco2e_per_mnah", "p1")
-    h2 = boundary_config_hash("t1", "l2", "1_2_combined", "location_based", "intensity_tco2e_per_mnah", "p1")
+def test_boundary_config_hash_changes_with_location():
+    h1 = boundary_config_hash("t1", "l1", "ghg_intensity_production", "p1")
+    h2 = boundary_config_hash("t1", "l2", "ghg_intensity_production", "p1")
     assert h1 != h2
 
 
-def test_boundary_config_hash_changes_with_production_mapping():
+def test_boundary_config_hash_changes_with_denominator_mapping():
     # A later change to which data point feeds the intensity denominator
     # must be detectable, not silently absorbed into "the same" target.
-    h1 = boundary_config_hash("t1", None, "1_2_combined", "location_based", "intensity_tco2e_per_mnah", "p1")
-    h2 = boundary_config_hash("t1", None, "1_2_combined", "location_based", "intensity_tco2e_per_mnah", "p2")
+    h1 = boundary_config_hash("t1", None, "ghg_intensity_production", "p1")
+    h2 = boundary_config_hash("t1", None, "ghg_intensity_production", "p2")
     assert h1 != h2
 
 
-def test_validate_metric_scope_rejects_intensity_outside_combined_boundary():
-    error = validate_metric_scope("1", "intensity_tco2e_per_mnah")
-    assert error is not None
-    assert "Intensity" in error
+def test_boundary_config_hash_changes_with_metric():
+    h1 = boundary_config_hash("t1", None, "scope1_tco2e", None)
+    h2 = boundary_config_hash("t1", None, "scope2_tco2e", None)
+    assert h1 != h2
 
 
-def test_validate_metric_scope_allows_intensity_for_combined_boundary():
-    assert validate_metric_scope("1_2_combined", "intensity_tco2e_per_mnah") is None
+def test_targetable_metric_keys_have_no_gaps_or_overlaps():
+    # Every targetable metric must resolve to exactly one field/attribute
+    # lookup -- a metric present in more than one map, or in none, is a
+    # silent bug in extract_metric_value's dispatch.
+    ghg_keys = set(_GHG_ABSOLUTE_FIELD) | set(_GHG_RATE_FIELD)
+    other_keys = set(_OTHER_RATE_FIELD)
+    assert ghg_keys & other_keys == set()
+    assert ghg_keys | other_keys == set(TARGETABLE_METRIC_KEYS)
 
 
-def test_validate_metric_scope_allows_absolute_for_any_boundary():
-    assert validate_metric_scope("2", "absolute_tco2e") is None
-
-
-def test_extract_metric_value_combined_boundary():
-    totals = {"scope1_2_loc_tco2e": 42.5, "scope1_tco2e": 10.0, "scope2_loc_tco2e": 32.5, "scope2_mkt_tco2e": 30.0}
-    value, error = extract_metric_value(totals, "1_2_combined", None)
-    assert value == 42.5
-    assert error is None
-
-
-def test_extract_metric_value_scope2_market_based():
-    totals = {"scope1_2_loc_tco2e": 42.5, "scope1_tco2e": 10.0, "scope2_loc_tco2e": 32.5, "scope2_mkt_tco2e": 30.0}
-    value, error = extract_metric_value(totals, "2", "market_based")
-    assert value == 30.0
-    assert error is None
-
-
-def test_extract_metric_value_intensity_reads_intensity_not_absolute():
-    # Regression: extract_metric_value used to ignore metric_type entirely
-    # and always return the absolute total, so an intensity target's
-    # "actual" was compared against a target expressed as a rate --
-    # apples to oranges (17.9 tCO2e vs a 0.53 tCO2e/MnAh target).
-    totals = {"scope1_2_loc_tco2e": 17.9, "intensity": 0.511}
-    value, error = extract_metric_value(totals, "1_2_combined", None, "intensity_tco2e_per_mnah")
-    assert value == 0.511
-    assert error is None
-
-
-def test_extract_metric_value_intensity_outside_combined_boundary_errors():
-    value, error = extract_metric_value({}, "1", None, "intensity_tco2e_per_mnah")
-    assert value is None
-    assert error is not None
-
-
-def test_extract_metric_value_scope2_location_based_is_default():
-    totals = {"scope1_2_loc_tco2e": 42.5, "scope1_tco2e": 10.0, "scope2_loc_tco2e": 32.5, "scope2_mkt_tco2e": 30.0}
-    value, error = extract_metric_value(totals, "2", None)
-    assert value == 32.5
+def test_rate_metric_keys_are_exactly_the_intensity_metrics():
+    assert RATE_METRIC_KEYS == set(_GHG_RATE_FIELD) | set(_OTHER_RATE_FIELD)
+    assert "scope1_tco2e" not in RATE_METRIC_KEYS
+    assert "scope1_2_tco2e" not in RATE_METRIC_KEYS
 
 
 def test_validate_monthly_phasing_empty_list_is_valid():
@@ -131,15 +107,16 @@ def test_target_value_for_month_uses_phasing_when_present():
     assert target_value_for_month(phasing, date(2026, 1, 1), 120.0, 2) == 60.0
 
 
-def test_target_value_for_month_spreads_absolute_target_evenly_without_phasing():
-    assert target_value_for_month([], date(2026, 1, 1), 120.0, 12, "absolute_tco2e") == 10.0
+def test_target_value_for_month_spreads_budget_metric_evenly_without_phasing():
+    assert target_value_for_month([], date(2026, 1, 1), 120.0, 12, "scope1_2_tco2e") == 10.0
 
 
-def test_target_value_for_month_uses_intensity_target_as_is_not_divided():
-    # An intensity target is a rate, not a budget -- dividing 0.53
-    # tCO2e/MnAh by 12 months would compare each month against a
+def test_target_value_for_month_uses_rate_target_as_is_not_divided():
+    # A rate target (tCO2e/MnAh, GJ/Cr, ...) isn't a budget -- dividing
+    # 0.53 tCO2e/MnAh by 12 months would compare each month against a
     # twelfth of the rate, which is meaningless.
-    assert target_value_for_month([], date(2026, 1, 1), 0.53, 12, "intensity_tco2e_per_mnah") == 0.53
+    assert target_value_for_month([], date(2026, 1, 1), 0.53, 12, "ghg_intensity_production") == 0.53
+    assert target_value_for_month([], date(2026, 1, 1), 4.2, 12, "energy_per_revenue") == 4.2
 
 
 def test_classify_status_on_track_when_at_or_below_target():

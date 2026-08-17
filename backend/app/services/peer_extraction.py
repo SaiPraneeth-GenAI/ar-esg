@@ -42,7 +42,7 @@ _KEYWORDS = [
 
 _MAX_PAGES = 20  # candidate pages considered -- deterministic filtering, no LLM cost
 _MAX_CHARS = 50_000  # hard cap on what ever reaches the LLM (~12-13k tokens worst case)
-_WINDOW_RADIUS = 400  # chars of context kept around a keyword hit on pages with no table
+_WINDOW_RADIUS = 800  # chars of context kept around a keyword hit on pages with no table
 
 # gpt-4o-mini list pricing per 1M tokens, for the estimate in logs only --
 # not billed anywhere, purely so "is this actually working" is visible
@@ -234,8 +234,16 @@ def extract_metrics_from_pdf(pdf_bytes: bytes) -> dict[str, float | None]:
         est_cost,
     )
 
-    if usage:  # only cache a result that actually came from a real (billed) call
+    found_count = sum(1 for v in extracted.values() if v is not None)
+    if usage and found_count > 0:
+        # A billed call that still found nothing is likely a fluke (a
+        # keyword-filtered excerpt that missed the real tables) rather than
+        # proof the document has no data -- caching it would make that bad
+        # result permanent for every future re-upload of this exact file
+        # until the next deploy. Only a call that found at least one value
+        # is trusted enough to skip re-running next time.
         _RESULT_CACHE[doc_hash] = extracted
+    logger.info("peer_extraction found_count=%s/%s cached=%s", found_count, len(extracted), bool(usage and found_count > 0))
     return extracted
 
 

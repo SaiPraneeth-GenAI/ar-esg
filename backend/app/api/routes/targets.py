@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.auth import CurrentUser, require_roles
+from app.core.metrics_registry import CHARTABLE_METRICS
 from app.db.models import EmissionTarget, Location, User
 from app.db.session import get_db
 from app.schemas.targets import (
@@ -12,23 +13,25 @@ from app.schemas.targets import (
     BaselinePreviewRequest,
     BaselinePreviewResponse,
     TargetActivateRequest,
+    TargetableMetricOut,
     TargetCreate,
     TargetMonthPerformance,
     TargetOut,
     TargetPerformanceResponse,
     TargetUpdate,
 )
-from app.services.carbon_calculation import compute_period_totals
 from app.services.rollups import month_start
 from app.services.target_calculation import (
+    TARGETABLE_METRIC_KEYS,
     boundary_config_hash,
+    denominator_mapping_id,
     classify_status,
     compute_baseline,
     extract_metric_value,
-    get_active_production_mapping,
+    metric_label,
+    metric_unit,
     months_between,
     target_value_for_month,
-    validate_metric_scope,
     validate_monthly_phasing,
 )
 
@@ -54,6 +57,11 @@ def _get_tenant_target(db: Session, tenant_id: uuid.UUID, target_id: uuid.UUID) 
     return target
 
 
+def _validate_metric_key(metric_key: str) -> None:
+    if metric_key not in TARGETABLE_METRIC_KEYS:
+        raise HTTPException(status_code=422, detail="Unknown or unsupported target metric.")
+
+
 def _target_out(db: Session, target: EmissionTarget) -> TargetOut:
     location = db.get(Location, target.location_id) if target.location_id else None
     owner = db.get(User, target.owner_id) if target.owner_id else None
@@ -63,21 +71,20 @@ def _target_out(db: Session, target: EmissionTarget) -> TargetOut:
     if target.status == "active":
         now = datetime.now(timezone.utc)
         period = month_start(now.date())
-        totals = compute_period_totals(db, target.tenant_id, target.location_id, period)
-        actual, _ = extract_metric_value(totals, target.scope, target.calculation_method, target.metric_type)
+        value, _ = extract_metric_value(db, target.tenant_id, target.location_id, target.metric_key, [period])
         num_months = len(months_between(target.target_period_start, target.target_period_end))
         month_target = target_value_for_month(
-            target.monthly_phasing, period, float(target.target_value) if target.target_value is not None else None, num_months, target.metric_type
+            target.monthly_phasing, period, float(target.target_value) if target.target_value is not None else None, num_months, target.metric_key
         )
-        status_label = classify_status(actual, month_target)
+        status_label = classify_status(value, month_target)
 
     return TargetOut(
         id=target.id,
         location_id=target.location_id,
         location_name=location.name if location else None,
-        scope=target.scope,
-        calculation_method=target.calculation_method,
-        metric_type=target.metric_type,
+        metric_key=target.metric_key,
+        metric_label=metric_label(target.metric_key),
+        metric_unit=metric_unit(target.metric_key),
         baseline_period_start=target.baseline_period_start,
         baseline_period_end=target.baseline_period_end,
         baseline_value=float(target.baseline_value) if target.baseline_value is not None else None,
@@ -102,28 +109,30 @@ def _target_out(db: Session, target: EmissionTarget) -> TargetOut:
     )
 
 
+@router.get("/metrics", response_model=list[TargetableMetricOut])
+def list_targetable_metrics(current: CurrentUser = Depends(require_roles(*VIEW_ROLES))):
+    """The exact same metrics the dashboards show -- picking a target is
+    picking one of these, nothing else to configure."""
+    return [
+        TargetableMetricOut(key=k, label=CHARTABLE_METRICS[k]["label"], unit=CHARTABLE_METRICS[k]["unit"], group=CHARTABLE_METRICS[k]["group"])
+        for k in TARGETABLE_METRIC_KEYS
+    ]
+
+
 @router.post("/baseline-preview", response_model=BaselinePreviewResponse)
 def baseline_preview(
     payload: BaselinePreviewRequest,
     current: CurrentUser = Depends(require_roles(*MANAGE_ROLES)),
     db: Session = Depends(get_db),
 ):
-    """Read-only: computes what a baseline would be for a given boundary and
+    """Read-only: computes what a baseline would be for a given metric and
     period, without creating anything. Powers step 2 of the target wizard."""
     _get_tenant_location(db, current.tenant_id, payload.location_id)
-    scope_error = validate_metric_scope(payload.scope, payload.metric_type)
-    if scope_error:
-        raise HTTPException(status_code=422, detail=scope_error)
+    _validate_metric_key(payload.metric_key)
 
     result = compute_baseline(
-        db,
-        current.tenant_id,
-        payload.location_id,
-        payload.scope,
-        payload.calculation_method,
-        payload.metric_type,
-        month_start(payload.baseline_period_start),
-        month_start(payload.baseline_period_end),
+        db, current.tenant_id, payload.location_id, payload.metric_key,
+        month_start(payload.baseline_period_start), month_start(payload.baseline_period_end),
     )
     return BaselinePreviewResponse(
         ready=result.ready,
@@ -142,9 +151,7 @@ def create_target(
     db: Session = Depends(get_db),
 ):
     _get_tenant_location(db, current.tenant_id, payload.location_id)
-    scope_error = validate_metric_scope(payload.scope, payload.metric_type)
-    if scope_error:
-        raise HTTPException(status_code=422, detail=scope_error)
+    _validate_metric_key(payload.metric_key)
 
     phasing = [p.model_dump(mode="json") for p in payload.monthly_phasing]
     if phasing and payload.target_value is not None:
@@ -155,9 +162,7 @@ def create_target(
     target = EmissionTarget(
         tenant_id=current.tenant_id,
         location_id=payload.location_id,
-        scope=payload.scope,
-        calculation_method=payload.calculation_method,
-        metric_type=payload.metric_type,
+        metric_key=payload.metric_key,
         baseline_period_start=month_start(payload.baseline_period_start),
         baseline_period_end=month_start(payload.baseline_period_end),
         reduction_percentage=payload.reduction_percentage,
@@ -213,6 +218,8 @@ def update_target(
     updates = payload.model_dump(exclude_unset=True, exclude={"monthly_phasing"})
     if "location_id" in updates:
         _get_tenant_location(db, current.tenant_id, updates["location_id"])
+    if "metric_key" in updates and updates["metric_key"] is not None:
+        _validate_metric_key(updates["metric_key"])
     for field, value in updates.items():
         if field in ("baseline_period_start", "baseline_period_end", "target_period_start", "target_period_end") and value is not None:
             value = month_start(value)
@@ -220,10 +227,6 @@ def update_target(
 
     if payload.monthly_phasing is not None:
         target.monthly_phasing = [p.model_dump(mode="json") for p in payload.monthly_phasing]
-
-    scope_error = validate_metric_scope(target.scope, target.metric_type)
-    if scope_error:
-        raise HTTPException(status_code=422, detail=scope_error)
 
     target.updated_at = datetime.now(timezone.utc)
     db.commit()
@@ -253,7 +256,8 @@ def activate_target(
 ):
     """Locks the baseline to the exact calculation snapshots behind it and
     the boundary this target was defined against. A recalculation or a
-    boundary edit after this point can never silently move the target."""
+    denominator-mapping edit after this point can never silently move the
+    target."""
     target = _get_tenant_target(db, current.tenant_id, target_id)
     if target.status != "draft":
         raise HTTPException(status_code=409, detail="Only a draft target can be activated.")
@@ -269,16 +273,7 @@ def activate_target(
         if phasing_error:
             raise HTTPException(status_code=422, detail=phasing_error)
 
-    baseline = compute_baseline(
-        db,
-        current.tenant_id,
-        target.location_id,
-        target.scope,
-        target.calculation_method,
-        target.metric_type,
-        target.baseline_period_start,
-        target.baseline_period_end,
-    )
+    baseline = compute_baseline(db, current.tenant_id, target.location_id, target.metric_key, target.baseline_period_start, target.baseline_period_end)
     if not baseline.ready:
         raise HTTPException(status_code=422, detail=baseline.message)
 
@@ -287,8 +282,7 @@ def activate_target(
         .filter(
             EmissionTarget.tenant_id == current.tenant_id,
             EmissionTarget.location_id == target.location_id,
-            EmissionTarget.scope == target.scope,
-            EmissionTarget.metric_type == target.metric_type,
+            EmissionTarget.metric_key == target.metric_key,
             EmissionTarget.status == "active",
         )
         .first()
@@ -296,20 +290,17 @@ def activate_target(
     if existing_active is not None:
         raise HTTPException(
             status_code=409,
-            detail="An active target already exists for this boundary and metric. Archive it before activating a new one.",
+            detail="An active target already exists for this metric. Archive it before activating a new one.",
         )
 
-    prod_mapping = get_active_production_mapping(db, current.tenant_id, target.location_id)
+    denominator_id = denominator_mapping_id(db, current.tenant_id, target.location_id, target.metric_key)
     all_calc_ids = [str(cid) for m in baseline.months for cid in m.calculation_ids]
 
     target.baseline_value = baseline.baseline_value
     target.baseline_completeness_pct = baseline.completeness_pct
     target.baseline_calculation_ids = all_calc_ids
     target.baseline_locked_at = datetime.now(timezone.utc)
-    target.boundary_config_hash = boundary_config_hash(
-        current.tenant_id, target.location_id, target.scope, target.calculation_method, target.metric_type,
-        prod_mapping.id if prod_mapping else None,
-    )
+    target.boundary_config_hash = boundary_config_hash(current.tenant_id, target.location_id, target.metric_key, denominator_id)
     target.rationale = payload.rationale
     target.approved_by = current.id
     target.approved_at = datetime.now(timezone.utc)
@@ -370,21 +361,16 @@ def target_performance(
 
     out_months: list[TargetMonthPerformance] = []
     for period in months:
-        totals = compute_period_totals(db, current.tenant_id, target.location_id, period)
-        actual, _ = extract_metric_value(totals, target.scope, target.calculation_method, target.metric_type)
-        month_target = target_value_for_month(target.monthly_phasing, period, target_value, num_months, target.metric_type)
+        actual, completeness = extract_metric_value(db, current.tenant_id, target.location_id, target.metric_key, [period])
+        month_target = target_value_for_month(target.monthly_phasing, period, target_value, num_months, target.metric_key)
         variance_pct = None
         if actual is not None and month_target is not None and month_target != 0:
             variance_pct = (actual - month_target) / month_target * 100
         out_months.append(
             TargetMonthPerformance(
-                period=period,
-                actual=actual,
-                target=month_target,
-                variance_pct=variance_pct,
-                status=classify_status(actual, month_target),
-                completeness_pct=totals["completeness_pct"],
+                period=period, actual=actual, target=month_target, variance_pct=variance_pct,
+                status=classify_status(actual, month_target), completeness_pct=completeness,
             )
         )
 
-    return TargetPerformanceResponse(target_id=target.id, metric_type=target.metric_type, months=out_months)
+    return TargetPerformanceResponse(target_id=target.id, metric_key=target.metric_key, months=out_months)
