@@ -95,6 +95,19 @@
   gap: 0.5rem;
 }
 
+.metric-group-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #98a2b3;
+  font-weight: 600;
+  margin-top: 0.6rem;
+}
+
+.metric-group-label:first-child {
+  margin-top: 0;
+}
+
 .preset-btn {
   text-align: left;
   background: #fafbfc;

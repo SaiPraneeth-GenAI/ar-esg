@@ -4,8 +4,6 @@ import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { SupabaseService } from './supabase.service';
 
-export type TargetScope = '1' | '2' | '1_2_combined';
-export type TargetMetricType = 'absolute_tco2e' | 'intensity_tco2e_per_mnah' | 'intensity_tco2e_per_revenue';
 export type TargetStatus = 'draft' | 'active' | 'archived';
 
 export interface MonthlyPhaseEntry {
@@ -13,11 +11,16 @@ export interface MonthlyPhaseEntry {
   value: number;
 }
 
+export interface TargetableMetric {
+  key: string;
+  label: string;
+  unit: string;
+  group: string;
+}
+
 export interface BaselinePreviewRequest {
   location_id?: string | null;
-  scope: TargetScope;
-  calculation_method?: string | null;
-  metric_type: TargetMetricType;
+  metric_key: string;
   baseline_period_start: string;
   baseline_period_end: string;
 }
@@ -39,9 +42,7 @@ export interface BaselinePreviewResponse {
 
 export interface TargetCreate {
   location_id?: string | null;
-  scope: TargetScope;
-  calculation_method?: string | null;
-  metric_type: TargetMetricType;
+  metric_key: string;
   baseline_period_start: string;
   baseline_period_end: string;
   target_period_start: string;
@@ -59,9 +60,9 @@ export interface TargetOut {
   id: string;
   location_id: string | null;
   location_name: string | null;
-  scope: TargetScope;
-  calculation_method: string | null;
-  metric_type: TargetMetricType;
+  metric_key: string;
+  metric_label: string;
+  metric_unit: string;
   baseline_period_start: string;
   baseline_period_end: string;
   baseline_value: number | null;
@@ -96,7 +97,7 @@ export interface TargetMonthPerformance {
 
 export interface TargetPerformanceResponse {
   target_id: string;
-  metric_type: TargetMetricType;
+  metric_key: string;
   months: TargetMonthPerformance[];
 }
 
@@ -108,6 +109,11 @@ export class TargetApiService {
   private async authHeaders(): Promise<{ Authorization: string }> {
     const { data } = await this.supabase.client.auth.getSession();
     return { Authorization: `Bearer ${data.session?.access_token ?? ''}` };
+  }
+
+  async listMetrics(): Promise<TargetableMetric[]> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(this.http.get<TargetableMetric[]>(`${environment.apiBaseUrl}/targets/metrics`, { headers }));
   }
 
   async baselinePreview(payload: BaselinePreviewRequest): Promise<BaselinePreviewResponse> {

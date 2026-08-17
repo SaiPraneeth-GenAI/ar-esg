@@ -2,61 +2,10 @@ import { DecimalPipe } from '@angular/common';
 import { Component, EventEmitter, OnInit, Output, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AdminLocation, AdminUser, ApiService } from '../../../core/api.service';
-import {
-  BaselinePreviewResponse,
-  MonthlyPhaseEntry,
-  TargetApiService,
-  TargetMetricType,
-  TargetScope
-} from '../../../core/target-api.service';
+import { BaselinePreviewResponse, MonthlyPhaseEntry, TargetableMetric, TargetApiService } from '../../../core/target-api.service';
 
-interface Preset {
-  label: string;
-  description: string;
-  scope: TargetScope;
-  calculationMethod: string | null;
-  metricType: TargetMetricType;
-}
-
-const PRESETS: Preset[] = [
-  {
-    label: 'Intensity by production',
-    description: 'Scope 1+2 location-based, per Mn Ah of battery production -- the primary target most tenants track',
-    scope: '1_2_combined',
-    calculationMethod: 'location_based',
-    metricType: 'intensity_tco2e_per_mnah'
-  },
-  {
-    label: 'Intensity by revenue',
-    description: 'Scope 1+2 location-based, per INR crore of revenue',
-    scope: '1_2_combined',
-    calculationMethod: 'location_based',
-    metricType: 'intensity_tco2e_per_revenue'
-  },
-  {
-    label: 'Absolute guardrail',
-    description: 'Scope 1+2 location-based total (tCO2e) -- so production growth alone can\'t hide an absolute increase',
-    scope: '1_2_combined',
-    calculationMethod: 'location_based',
-    metricType: 'absolute_tco2e'
-  },
-  {
-    label: 'Disclosure target',
-    description: 'Scope 2 market-based total (tCO2e) -- shown beside, never instead of, location-based',
-    scope: '2',
-    calculationMethod: 'market_based',
-    metricType: 'absolute_tco2e'
-  }
-];
-
-function monthStr(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function addMonths(base: string, delta: number): string {
-  const [y, m] = base.split('-').map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return monthStr(d);
+function currentYear(): number {
+  return new Date().getFullYear();
 }
 
 @Component({
@@ -73,53 +22,48 @@ export class TargetWizardComponent implements OnInit {
   @Output() closed = new EventEmitter<void>();
   @Output() saved = new EventEmitter<void>();
 
-  presets = PRESETS;
-  // Just two screens the user actually interacts with: pick a target, then
-  // type its value. Baseline is still computed and locked underneath (the
-  // backend needs it to score performance later), but it's fetched
-  // automatically the instant a preset is picked instead of being a step
-  // the user has to read and understand.
+  // Two screens: pick a metric, then set its value. Baseline is computed
+  // and locked underneath (the backend needs it to score performance
+  // later), but it's fetched automatically the instant a metric+year is
+  // picked instead of being a step the user has to read and understand.
   step = signal<1 | 2>(1);
   submitting = signal(false);
   errorMessage = signal('');
 
   locations = signal<AdminLocation[]>([]);
   users = signal<AdminUser[]>([]);
+  metrics = signal<TargetableMetric[]>([]);
 
-  // Boundary (step 1)
-  locationId = signal<string>('');
-  scope = signal<TargetScope>('1_2_combined');
-  calculationMethod = signal<string | null>('location_based');
-  metricType = signal<TargetMetricType>('intensity_tco2e_per_mnah');
-
-  intensityDisabled = computed(() => this.scope() !== '1_2_combined');
-  customizeBoundary = signal(false);
-  showAdvanced = signal(false);
-  showBaselineMonths = signal(false);
-  showReductionHelper = signal(false);
-
-  metricUnit(): string {
-    if (this.metricType() === 'intensity_tco2e_per_mnah') return 'tCO2e/MnAh';
-    if (this.metricType() === 'intensity_tco2e_per_revenue') return 'tCO2e/Cr';
-    return 'tCO2e';
+  metricGroups(): string[] {
+    return Array.from(new Set(this.metrics().map((m) => m.group)));
   }
 
-  // Baseline -- computed silently as soon as a boundary is chosen
+  metricsInGroup(group: string): TargetableMetric[] {
+    return this.metrics().filter((m) => m.group === group);
+  }
+
+  locationId = signal<string>('');
+  metricKey = signal<string>('');
+  selectedMetric = computed(() => this.metrics().find((m) => m.key === this.metricKey()));
+
+  /** A GHG metric (Scope 1/2/1+2) is a budget -- a plain total, spread
+   * evenly across months by default. Every intensity metric is a rate --
+   * the same figure applies every month, so there's nothing to "spread". */
+  isRateMetric = computed(() => this.selectedMetric()?.group !== 'GHG');
+
   today = new Date();
-  baselineEnd = signal<string>(monthStr(new Date(this.today.getFullYear(), this.today.getMonth() - 1, 1)));
-  baselineStart = signal<string>(addMonths(monthStr(new Date(this.today.getFullYear(), this.today.getMonth() - 1, 1)), -11));
+  baselineYear = signal<number>(currentYear() - 1);
+  targetYear = signal<number>(currentYear() + 1);
   baselinePreview = signal<BaselinePreviewResponse | null>(null);
   baselineLoading = signal(false);
 
-  // Target (step 2)
-  targetStart = signal<string>(monthStr(this.today));
-  targetEnd = signal<string>(addMonths(monthStr(this.today), 11));
   reductionPercentage = signal<number | null>(10);
   targetValue = signal<number | null>(null);
   ownerId = signal<string>('');
   rationale = signal('');
   phaseMonthly = signal(false);
   phasedMonths = signal<MonthlyPhaseEntry[]>([]);
+  showReductionHelper = signal(false);
 
   /** What the % helper would produce -- shown as a suggestion, only
    * written into targetValue() when the user explicitly applies it. */
@@ -138,66 +82,63 @@ export class TargetWizardComponent implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
-    const [locations, users] = await Promise.all([this.api.listLocations(), this.api.listUsers()]);
+    const [locations, users, metrics] = await Promise.all([
+      this.api.listLocations(),
+      this.api.listUsers(),
+      this.targetApi.listMetrics()
+    ]);
     this.locations.set(locations);
     this.users.set(users);
+    this.metrics.set(metrics);
   }
 
-  selectedPresetLabel = signal<string | null>(null);
-
-  async applyPreset(preset: Preset): Promise<void> {
-    this.scope.set(preset.scope);
-    this.calculationMethod.set(preset.calculationMethod);
-    this.metricType.set(preset.metricType);
-    this.selectedPresetLabel.set(preset.label);
-    // A preset already fully specifies the boundary -- jump straight to
-    // entering the target value instead of making the user click through
-    // a form they've already answered via the card they just picked.
-    await this.goToStep2();
+  yearOptions(fromOffset: number, toOffset: number): number[] {
+    const y = currentYear();
+    const years: number[] = [];
+    for (let i = fromOffset; i <= toOffset; i++) years.push(y + i);
+    return years;
   }
 
-  onScopeChange(scope: TargetScope): void {
-    this.scope.set(scope);
-    this.selectedPresetLabel.set(null);
-    if (scope !== '1_2_combined' && this.metricType() !== 'absolute_tco2e') {
-      this.metricType.set('absolute_tco2e');
-    }
-    if (scope === '1') {
-      this.calculationMethod.set(null);
-    } else if (this.calculationMethod() === null) {
-      this.calculationMethod.set('location_based');
-    }
-  }
-
-  async goToStep2(): Promise<void> {
+  async selectMetric(key: string): Promise<void> {
+    this.metricKey.set(key);
     this.step.set(2);
+    this.phaseMonthly.set(false);
     this.regeneratePhasing();
     await this.refreshBaseline();
   }
 
+  backToStep1(): void {
+    this.step.set(1);
+  }
+
+  async onBaselineYearChange(year: number): Promise<void> {
+    this.baselineYear.set(year);
+    await this.refreshBaseline();
+  }
+
+  onTargetYearChange(year: number): void {
+    this.targetYear.set(year);
+    this.regeneratePhasing();
+  }
+
   async refreshBaseline(): Promise<void> {
+    if (!this.metricKey()) return;
     this.baselineLoading.set(true);
     this.errorMessage.set('');
     try {
       this.baselinePreview.set(
         await this.targetApi.baselinePreview({
           location_id: this.locationId() || null,
-          scope: this.scope(),
-          calculation_method: this.calculationMethod(),
-          metric_type: this.metricType(),
-          baseline_period_start: `${this.baselineStart()}-01`,
-          baseline_period_end: `${this.baselineEnd()}-01`
+          metric_key: this.metricKey(),
+          baseline_period_start: `${this.baselineYear()}-01-01`,
+          baseline_period_end: `${this.baselineYear()}-12-01`
         })
       );
     } catch {
-      this.errorMessage.set('Could not compute the baseline for this boundary.');
+      this.errorMessage.set('Could not compute the baseline for this metric.');
     } finally {
       this.baselineLoading.set(false);
     }
-  }
-
-  backToStep1(): void {
-    this.step.set(1);
   }
 
   applySuggestedValue(): void {
@@ -213,21 +154,17 @@ export class TargetWizardComponent implements OnInit {
     if (this.phaseMonthly()) this.regeneratePhasing();
   }
 
-  private monthsInTargetPeriod(): string[] {
-    const months: string[] = [];
-    let cursor = this.targetStart();
-    while (cursor <= this.targetEnd()) {
-      months.push(cursor);
-      cursor = addMonths(cursor, 1);
-    }
-    return months;
-  }
-
   regeneratePhasing(): void {
-    const months = this.monthsInTargetPeriod();
+    const year = this.targetYear();
     const target = this.targetValue();
-    const even = target !== null ? target / months.length : 0;
-    this.phasedMonths.set(months.map((m) => ({ period: `${m}-01`, value: Math.round(even * 1000) / 1000 })));
+    const rate = this.isRateMetric();
+    const perMonth = target !== null ? (rate ? target : target / 12) : 0;
+    this.phasedMonths.set(
+      Array.from({ length: 12 }, (_, i) => ({
+        period: `${year}-${String(i + 1).padStart(2, '0')}-01`,
+        value: Math.round(perMonth * 1000) / 1000
+      }))
+    );
   }
 
   updatePhaseValue(index: number, value: number): void {
@@ -245,16 +182,14 @@ export class TargetWizardComponent implements OnInit {
   private buildPayload() {
     return {
       location_id: this.locationId() || null,
-      scope: this.scope(),
-      calculation_method: this.calculationMethod(),
-      metric_type: this.metricType(),
-      baseline_period_start: `${this.baselineStart()}-01`,
-      baseline_period_end: `${this.baselineEnd()}-01`,
-      target_period_start: `${this.targetStart()}-01`,
-      target_period_end: `${this.targetEnd()}-01`,
+      metric_key: this.metricKey(),
+      baseline_period_start: `${this.baselineYear()}-01-01`,
+      baseline_period_end: `${this.baselineYear()}-12-01`,
+      target_period_start: `${this.targetYear()}-01-01`,
+      target_period_end: `${this.targetYear()}-12-01`,
       reduction_percentage: this.reductionPercentage(),
       target_value: this.targetValue(),
-      monthly_phasing: this.phaseMonthly() ? this.phasedMonths() : [],
+      monthly_phasing: this.phaseMonthly() && !this.isRateMetric() ? this.phasedMonths() : [],
       owner_id: this.ownerId() || null,
       rationale: this.rationale() || null
     };

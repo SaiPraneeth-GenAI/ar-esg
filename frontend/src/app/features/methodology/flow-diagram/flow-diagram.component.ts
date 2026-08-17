@@ -286,7 +286,7 @@ export class FlowDiagramComponent implements OnInit {
 
         'target-comparison':
           targets.length > 0
-            ? targets.map((t) => `${t.metric_type === 'intensity_tco2e_per_mnah' ? 'Intensity' : 'Absolute'}: ${t.current_status_label ?? 'Not enough data'}`)
+            ? targets.map((t) => `${t.metric_label}: ${t.current_status_label ?? 'Not enough data'}`)
             : ['No active targets'],
 
         'unresolved-queue': [`${unresolvedCount} ${unresolvedCount === 1 ? 'entry' : 'entries'} pending`],

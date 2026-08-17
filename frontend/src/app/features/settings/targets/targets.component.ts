@@ -62,21 +62,11 @@ export class TargetsComponent implements OnInit {
   }
 
   boundaryLabel(t: TargetOut): string {
-    const scopeLabel = t.scope === '1_2_combined' ? 'Scope 1+2' : `Scope ${t.scope}`;
-    const method = t.calculation_method ? ` (${t.calculation_method === 'location_based' ? 'location-based' : 'market-based'})` : '';
-    const metric =
-      t.metric_type === 'intensity_tco2e_per_mnah'
-        ? 'intensity by production'
-        : t.metric_type === 'intensity_tco2e_per_revenue'
-          ? 'intensity by revenue'
-          : 'absolute';
-    return `${scopeLabel}${method} -- ${metric}`;
+    return t.metric_label;
   }
 
   unit(t: TargetOut): string {
-    if (t.metric_type === 'intensity_tco2e_per_mnah') return 'tCO2e/MnAh';
-    if (t.metric_type === 'intensity_tco2e_per_revenue') return 'tCO2e/Cr';
-    return 'tCO2e';
+    return t.metric_unit;
   }
 
   statusClass(label: string | null): string {
