@@ -7,10 +7,12 @@ from app.api.routes import (
     admin_mapping_templates,
     admin_users,
     carbon,
+    charts,
     dashboard,
     entries,
     health,
     intensity,
+    internal,
     safety,
     targets,
 )
@@ -39,3 +41,5 @@ app.include_router(carbon.router)
 app.include_router(targets.router)
 app.include_router(intensity.router)
 app.include_router(safety.router)
+app.include_router(charts.router)
+app.include_router(internal.router)

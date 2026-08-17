@@ -45,6 +45,10 @@ export const routes: Routes = [
         loadComponent: () => import('./features/settings/targets/targets.component').then((m) => m.TargetsComponent)
       },
       {
+        path: 'charts',
+        loadComponent: () => import('./features/charts/charts.component').then((m) => m.ChartsComponent)
+      },
+      {
         path: 'settings/users',
         canActivate: [adminGuard],
         loadComponent: () =>

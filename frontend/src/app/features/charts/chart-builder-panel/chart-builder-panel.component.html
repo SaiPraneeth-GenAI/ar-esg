@@ -1,0 +1,85 @@
+<div class="panel-overlay" (click)="close()"></div>
+
+<aside class="slide-panel">
+  <header class="panel-header">
+    <h2>{{ editing ? 'Edit chart' : 'New chart' }}</h2>
+    <button type="button" class="close-btn" (click)="close()" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+      </svg>
+    </button>
+  </header>
+
+  <div class="panel-body">
+    @if (errorMessage()) {
+      <div class="banner error">{{ errorMessage() }}</div>
+    }
+
+    <label class="field">
+      <span class="field-label">Metric</span>
+      <select [ngModel]="metric()" (ngModelChange)="metric.set($event); onSettingChange()">
+        @for (group of metricGroups(); track group) {
+          <optgroup [label]="group">
+            @for (m of metricsInGroup(group); track m.key) {
+              <option [value]="m.key">{{ m.label }}</option>
+            }
+          </optgroup>
+        }
+      </select>
+    </label>
+
+    <div class="field-row">
+      <label class="field">
+        <span class="field-label">Period</span>
+        <select [ngModel]="periodMode()" (ngModelChange)="periodMode.set($event); onSettingChange()">
+          <option value="month">Monthly</option>
+          <option value="quarter">Quarterly</option>
+          <option value="ytd">YTD</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="field-label">Trailing periods</span>
+        <input type="number" min="2" max="24" [ngModel]="months()" (ngModelChange)="months.set($event); onSettingChange()" />
+      </label>
+    </div>
+
+    <label class="field">
+      <span class="field-label">Site</span>
+      <select [ngModel]="locationId()" (ngModelChange)="locationId.set($event); onSettingChange()">
+        <option value="">Company-wide</option>
+        @for (loc of locations(); track loc.id) {
+          <option [value]="loc.id">{{ loc.name }}</option>
+        }
+      </select>
+    </label>
+
+    <div class="preview-wrap">
+      <app-rich-trend-chart
+        title="Preview"
+        [series]="chartSeries()"
+        [points]="previewPoints()"
+        defaultSeriesKey="value"
+        [loading]="previewLoading()"
+        [decimals]="2"
+      ></app-rich-trend-chart>
+    </div>
+
+    <label class="field">
+      <span class="field-label">Chart name <span class="required">*</span></span>
+      <input type="text" [ngModel]="name()" (ngModelChange)="name.set($event)" placeholder="e.g. Water intensity, quarterly" />
+    </label>
+
+    <label class="field">
+      <span class="field-label">Description</span>
+      <textarea rows="2" [ngModel]="description()" (ngModelChange)="description.set($event)" placeholder="Optional"></textarea>
+    </label>
+
+    <div class="panel-actions">
+      <button type="button" class="primary-btn" [disabled]="!canSave() || submitting()" (click)="save()">
+        {{ submitting() ? 'Saving…' : editing ? 'Save changes' : 'Save chart' }}
+      </button>
+    </div>
+  </div>
+</aside>
