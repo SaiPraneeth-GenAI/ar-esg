@@ -95,6 +95,24 @@ export class RichTrendChartComponent implements OnChanges {
     return Math.min((value / this.maxValue()) * 100, 100);
   }
 
+  /** The target's actual number, shown once in the legend rather than on
+   * every bar/point -- putting it on each bar would either repeat the same
+   * figure N times (a flat/evenly-phased target, the common case) or risk
+   * colliding with the bar-value labels floating above the bars. Uses the
+   * most recent visible period's value; if the target varies across the
+   * range (custom monthly phasing), that's flagged so the single number
+   * shown isn't read as constant when it isn't. */
+  targetValueLabel(): string | null {
+    const values = this.activeTargetValues();
+    const nonNull = values.filter((v): v is number => v !== null);
+    if (nonNull.length === 0) return null;
+    const latest = [...values].reverse().find((v) => v !== null) as number;
+    const unit = this.currentSeries()?.unit ?? '';
+    const formatted = latest.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: this.decimals });
+    const varies = new Set(nonNull.map((v) => v.toFixed(this.decimals))).size > 1;
+    return varies ? `${formatted} ${unit} (latest period)` : `${formatted} ${unit}`;
+  }
+
   showYoY(): boolean {
     return this.compareYoY() && this.hasYoYData();
   }

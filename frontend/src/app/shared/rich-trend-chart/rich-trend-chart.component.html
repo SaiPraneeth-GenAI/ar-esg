@@ -91,7 +91,7 @@
           <span class="legend-item"><span class="legend-swatch swatch-prior"></span>Same period last year</span>
         }
         @if (hasTargetData()) {
-          <span class="legend-item"><span class="legend-swatch swatch-target"></span>Target</span>
+          <span class="legend-item"><span class="legend-swatch swatch-target"></span>Target: {{ targetValueLabel() }}</span>
         }
       </div>
     }
@@ -147,7 +147,7 @@
           <span class="legend-item"><span class="legend-swatch swatch-prior swatch-dashed"></span>Same period last year</span>
         }
         @if (hasTargetData()) {
-          <span class="legend-item"><span class="legend-swatch swatch-target-dashed"></span>Target</span>
+          <span class="legend-item"><span class="legend-swatch swatch-target-dashed"></span>Target: {{ targetValueLabel() }}</span>
         }
       </div>
     }
