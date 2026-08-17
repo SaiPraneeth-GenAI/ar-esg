@@ -172,7 +172,15 @@ export class PeerApiService {
     this.extractTimer = setInterval(() => this.extractElapsedSeconds.set(Math.floor((Date.now() - startedAt) / 1000)), 1000);
   }
 
-  async startExtraction(companyId: string, file: File, year: number): Promise<void> {
+  /** Returns the final result directly once the whole thing finishes (or
+   * null on error/timeout) -- a caller still on the page can await this
+   * and act immediately, rather than depending solely on a separate
+   * effect() noticing the extracting()/extractResult() signals change
+   * later, which is exactly the kind of two-signals-plus-a-phase-guard
+   * timing that's fragile to get right. The signals are still updated
+   * throughout (see pollJob/finishJob) so a caller that navigates away
+   * and back still recovers state from them alone, same as before. */
+  async startExtraction(companyId: string, file: File, year: number): Promise<PeerExtractResult | null> {
     this.uploading.set(true);
     this.uploadProgressPct.set(0);
     this.extracting.set(false);
@@ -194,11 +202,12 @@ export class PeerApiService {
 
       const stored: StoredExtractJob = { jobId: job.job_id, companyId, fileName: file.name, startedAt };
       localStorage.setItem(EXTRACT_JOB_STORAGE_KEY, JSON.stringify(stored));
-      this.pollJob(companyId, job.job_id);
+      return await this.pollJob(companyId, job.job_id);
     } catch (err: any) {
       this.uploading.set(false);
       this.extractError.set(err?.message ?? 'Could not read this PDF.');
       this.finishJob();
+      return null;
     }
   }
 
@@ -238,43 +247,54 @@ export class PeerApiService {
     });
   }
 
-  private pollJob(companyId: string, jobId: string): void {
+  /** Resolves once the job reaches done/error/gives-up -- with the result
+   * (or null). Callers that are still on the page can `await` this
+   * directly instead of relying purely on the signals + a separate
+   * effect() to notice the state changed later; a caller that navigates
+   * away doesn't need the promise at all since the signals themselves
+   * (extracting/extractResult) already carry the state independently. */
+  private pollJob(companyId: string, jobId: string): Promise<PeerExtractResult | null> {
     if (this.pollTimer) clearInterval(this.pollTimer);
-    let consecutiveFailures = 0;
-    // A single poll can fail transiently (a network blip, a momentary 5xx
-    // during a backend redeploy) -- giving up on the very first failed
-    // poll turned a one-off hiccup into "extraction silently abandoned,
-    // no error shown, no result, just stuck". Tolerate a few in a row
-    // (the job itself is unaffected server-side either way) before
-    // actually surfacing an error.
-    const MAX_CONSECUTIVE_FAILURES = 5;
-    const check = async () => {
-      try {
-        const headers = await this.authHeaders();
-        const job = await firstValueFrom(
-          this.http.get<PeerExtractJob>(`${environment.apiBaseUrl}/peers/${companyId}/extract/${jobId}`, { headers })
-        );
-        consecutiveFailures = 0;
-        if (job.status === 'done') {
-          console.info('[peer-extraction] job done', jobId, job.result);
-          this.extractResult.set(job.result ?? null);
+    return new Promise((resolve) => {
+      let consecutiveFailures = 0;
+      // A single poll can fail transiently (a network blip, a momentary
+      // 5xx during a backend redeploy) -- giving up on the very first
+      // failed poll turned a one-off hiccup into "extraction silently
+      // abandoned, no error shown, no result, just stuck". Tolerate a few
+      // in a row (the job itself is unaffected server-side either way)
+      // before actually surfacing an error.
+      const MAX_CONSECUTIVE_FAILURES = 5;
+      const check = async () => {
+        try {
+          const headers = await this.authHeaders();
+          const job = await firstValueFrom(
+            this.http.get<PeerExtractJob>(`${environment.apiBaseUrl}/peers/${companyId}/extract/${jobId}`, { headers })
+          );
+          consecutiveFailures = 0;
+          if (job.status === 'done') {
+            console.info('[peer-extraction] job done', jobId, job.result);
+            this.extractResult.set(job.result ?? null);
+            this.finishJob();
+            resolve(job.result ?? null);
+          } else if (job.status === 'error') {
+            console.warn('[peer-extraction] job error', jobId, job.error);
+            this.extractError.set(job.error ?? 'Could not read this PDF.');
+            this.finishJob();
+            resolve(null);
+          }
+          // "processing" -- keep polling, the interval below will fire again
+        } catch (err) {
+          consecutiveFailures++;
+          console.warn(`[peer-extraction] poll failed (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`, jobId, err);
+          if (consecutiveFailures < MAX_CONSECUTIVE_FAILURES) return; // try again on the next tick
+          this.extractError.set('Lost track of the extraction job -- please try uploading again.');
           this.finishJob();
-        } else if (job.status === 'error') {
-          console.warn('[peer-extraction] job error', jobId, job.error);
-          this.extractError.set(job.error ?? 'Could not read this PDF.');
-          this.finishJob();
+          resolve(null);
         }
-        // "processing" -- keep polling, the interval below will fire again
-      } catch (err) {
-        consecutiveFailures++;
-        console.warn(`[peer-extraction] poll failed (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`, jobId, err);
-        if (consecutiveFailures < MAX_CONSECUTIVE_FAILURES) return; // try again on the next tick
-        this.extractError.set('Lost track of the extraction job -- please try uploading again.');
-        this.finishJob();
-      }
-    };
-    void check();
-    this.pollTimer = setInterval(check, 4000);
+      };
+      void check();
+      this.pollTimer = setInterval(check, 4000);
+    });
   }
 
   private finishJob(): void {

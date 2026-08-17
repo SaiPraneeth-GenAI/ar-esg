@@ -153,10 +153,23 @@ export class PeerAnalysisComponent implements OnInit {
     const file = this.selectedFile();
     if (!company || !file) return;
     this.errorMessage.set('');
-    // Fire-and-forget: state lives on PeerApiService, so this keeps running
-    // (and the constructor's effect() picks up the result) even if the
-    // user navigates to another tab while it works.
-    void this.peerApi.startExtraction(company.id, file, this.year());
+    // Awaited directly: if this component is still mounted when the job
+    // finishes, transition right here -- no dependency on a separate
+    // effect() noticing the signals changed later. If the user navigates
+    // away and this component gets destroyed before the promise settles,
+    // that's fine too: the state lives on PeerApiService (a root
+    // singleton), so the constructor's effect() on whatever component
+    // instance exists when they come back still picks it up from the
+    // signals directly, independent of this awaited call ever resolving
+    // against a live instance.
+    const result = await this.peerApi.startExtraction(company.id, file, this.year());
+    if (result && this.phase() === 'upload') {
+      const values: Record<string, number | null> = {};
+      for (const row of result.rows) values[row.key] = row.peer_value;
+      this.editableValues.set(values);
+      this.year.set(result.year);
+      this.phase.set('review');
+    }
   }
 
   groupedRows(): { group: string; rows: PeerExtractRow[] }[] {
