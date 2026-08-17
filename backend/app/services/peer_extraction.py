@@ -1,17 +1,20 @@
 """BRSR PDF -> peer metric extraction via GPT-4o-mini.
 
-Brute-force by design: the whole document is converted to text
-(PyMuPDF, tables extracted as structured rows where detected), split
-into fixed-size chunks, and every chunk is sent to the model in
-parallel -- nothing is skipped by a keyword or section-detection guess
-that might miss the real tables in an unfamiliar report layout. Results
-from every chunk are merged (first non-null value found, in page
-order, wins per metric). Cost is trivial at gpt-4o-mini pricing even
-across a dozen chunks (~$0.01-0.05 for a 300+ page report, measured in
-production), and running the chunk calls concurrently keeps wall-clock
-time close to one chunk's latency rather than the sum of all of them.
-An identical PDF (by content hash) is never re-processed at all -- the
-cached result from its first upload is reused.
+Plain PyMuPDF text extraction throughout -- an earlier version also ran
+find_tables() per page for cleaner table structure, but that measured at
+~1.3s/page on a real annual report (~160x slower than plain text) and was
+the actual cause of this pipeline taking minutes; gpt-4o-mini reads a
+plain-text table well enough for this use case. A cheap full-document
+text pass finds the BRSR section by its real shape -- a cluster of many
+section-marker mentions close together, not a single stray reference
+elsewhere in the report (a combined annual+BRSR report's cover page or
+table of contents will often mention "BRSR" once, which is not the
+section itself) -- and only that section's pages are chunked and sent to
+the model, concurrently, so wall-clock time stays close to one chunk's
+latency rather than the sum of all of them. Cost is trivial at gpt-4o-mini
+pricing regardless (~$0.01-0.05 for a 300+ page report, measured in
+production). An identical PDF (by content hash) is never re-processed at
+all -- the cached result from its first upload is reused.
 """
 
 import hashlib
@@ -40,7 +43,7 @@ _MAX_CHUNKS = 14  # safety valve on a pathologically large upload -- ~2.1M chars
 # document whose total text stays under _MAX_CHUNKS x _CHARS_PER_CHUNK
 # (this one's did) never hit it and every page got scanned regardless.
 # This caps pages examined directly, checked BEFORE the expensive call.
-_MAX_PAGES_TO_SCAN = 60  # generous for any real BRSR section (typically 20-50 pages), while bounding worst-case chunking time
+_MAX_PAGES_TO_SCAN = 90  # covers a real BRSR section (measured at ~65 pages on a real report) plus buffer -- cheap now that chunking is plain text, not find_tables()
 # Fires several chunks at once rather than one at a time -- wall-clock
 # time is then close to a batch's latency, not the sum of every chunk.
 # Kept well below _MAX_CHUNKS (rather than one worker per chunk) since
@@ -63,49 +66,72 @@ _OUTPUT_COST_PER_M = 0.60
 # for this single-instance service, cleared on redeploy.
 _RESULT_CACHE: dict[str, dict[str, float | None]] = {}
 
-
-def _format_page(page: "fitz.Page", page_number: int) -> str:
-    """Tables as structured pipe-separated rows where detected (keeps a
-    dense table's row/column alignment intact, which plain text
-    extraction can scramble); the page's full plain text otherwise --
-    nothing windowed or trimmed, since the whole point of chunking the
-    entire document is not to guess what's relevant."""
-    parts = [f"--- Page {page_number} ---"]
-    try:
-        tables = page.find_tables()
-    except Exception:
-        tables = None
-
-    found_table = False
-    if tables is not None:
-        for table in tables:
-            rows = table.extract()
-            if not rows:
-                continue
-            found_table = True
-            for row in rows:
-                parts.append(" | ".join((str(cell).strip() if cell is not None else "") for cell in row))
-
-    if not found_table:
-        parts.append(page.get_text())
-
-    return "\n".join(parts)
+# BRSR (SEBI's standardized ESG disclosure format) uses fairly consistent
+# section terminology across companies. Used only to find WHERE the
+# _MAX_PAGES_TO_SCAN budget should start -- in a combined annual+BRSR
+# report, the BRSR section is often placed after the financial statements,
+# so capping the scan at literally "the first N pages" would reliably miss
+# it in exactly the same way the old unfiltered keyword scan did.
+_SECTION_ANCHORS = [
+    "business responsibility and sustainability report", "brsr",
+    "principle 1", "principle 2", "principle 3", "principle 4", "principle 5",
+    "principle 6", "principle 7", "principle 8", "principle 9",
+    "essential indicators", "leadership indicators",
+]
 
 
-def _chunk_document(pdf_bytes: bytes) -> tuple[list[str], int, int]:
-    """Every scanned page's text/tables, grouped into chunks of roughly
+_CLUSTER_GAP_PAGES = 15  # anchor hits within this many pages of each other count as the same section
+_CLUSTER_LEAD_IN = 2  # pages of buffer before the detected cluster starts
+_CLUSTER_LEAD_OUT = 6  # pages of buffer after the detected cluster ends (a table can spill past the last mention)
+
+
+def _find_scan_window(page_texts: list[str]) -> tuple[int, int]:
+    """Finds the BRSR section by its actual shape: a real section mentions
+    "BRSR" / "Principle N" / "Essential Indicators" repeatedly across many
+    consecutive pages, not once. A single stray mention (e.g. the cover
+    page saying "including our BRSR disclosures") is NOT that shape, so
+    picking "the first page that matches" (tried before, and confirmed
+    broken against a real report -- it locked onto page 1) is the wrong
+    algorithm entirely. This groups every matching page into clusters,
+    keeps the largest one (by page count, not span), and returns a window
+    around it. Falls back to (0, _MAX_PAGES_TO_SCAN) if nothing matches
+    anywhere, so a report with no recognizable markers still gets scanned
+    from the start rather than skipped entirely."""
+    hit_pages = [i for i, text in enumerate(page_texts) if any(a in text for a in _SECTION_ANCHORS)]
+    if not hit_pages:
+        return 0, min(len(page_texts), _MAX_PAGES_TO_SCAN)
+
+    clusters: list[list[int]] = [[hit_pages[0]]]
+    for p in hit_pages[1:]:
+        if p - clusters[-1][-1] <= _CLUSTER_GAP_PAGES:
+            clusters[-1].append(p)
+        else:
+            clusters.append([p])
+    best = max(clusters, key=len)
+
+    start = max(0, best[0] - _CLUSTER_LEAD_IN)
+    end = min(len(page_texts), best[-1] + _CLUSTER_LEAD_OUT, start + _MAX_PAGES_TO_SCAN)
+    return start, end
+
+
+def _chunk_document(pdf_bytes: bytes) -> tuple[list[str], int, int, int]:
+    """Every scanned page's text, grouped into chunks of roughly
     _CHARS_PER_CHUNK characters each -- a chunk boundary never splits a
-    single page's content. Returns (chunks, total_page_count, pages_scanned)."""
+    single page's content. The _MAX_PAGES_TO_SCAN budget is spent on the
+    BRSR section itself (see _find_scan_window), not blindly the first
+    pages of the document. Returns (chunks, total_page_count,
+    pages_scanned, scan_start_page)."""
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     total_pages = doc.page_count
-    pages_to_scan = min(total_pages, _MAX_PAGES_TO_SCAN)
+    page_texts = [page.get_text() for page in doc]  # cheap: ~3s for a 371-page report, measured
+    start, end = _find_scan_window([t.lower() for t in page_texts])
 
     chunks: list[str] = []
     current_parts: list[str] = []
     current_len = 0
     pages_scanned = 0
-    for i in range(pages_to_scan):
-        page_text = _format_page(doc[i], i + 1)
+    for i in range(start, end):
+        page_text = f"--- Page {i + 1} ---\n{page_texts[i]}"
         pages_scanned += 1
         if current_parts and current_len + len(page_text) > _CHARS_PER_CHUNK:
             chunks.append("\n\n".join(current_parts))
@@ -118,7 +144,7 @@ def _chunk_document(pdf_bytes: bytes) -> tuple[list[str], int, int]:
     if current_parts and len(chunks) < _MAX_CHUNKS:
         chunks.append("\n\n".join(current_parts))
     doc.close()
-    return chunks, total_pages, pages_scanned
+    return chunks, total_pages, pages_scanned, start
 
 
 def _call_ai(text: str) -> tuple[dict[str, float | None], dict]:
@@ -134,16 +160,19 @@ def _call_ai(text: str) -> tuple[dict[str, float | None], dict]:
     client = OpenAI(api_key=settings.openai_api_key, timeout=_CHUNK_TIMEOUT_SECONDS, max_retries=1)
     metric_lines = "\n".join(f"- {key}: {spec['label']} ({spec['unit']})" for key, spec in CHARTABLE_METRICS.items())
     prompt = (
-        "The text below is one section of a company's BRSR / annual report "
-        "(tables are shown as pipe-separated rows where detected). For each "
-        "metric listed, find the reported figure in the EXACT unit given and "
-        "return it as a plain number. Keep each value aligned with its "
-        "correct row/column label -- do not reuse one figure for multiple "
-        "metrics. This is only a section of the full report, so most or all "
-        "metrics may genuinely not appear here -- if a metric is not present "
-        "in THIS text, is reported in a different unit, or you are not "
-        "confident, return null for it -- never guess, never convert units, "
-        "never invent a value.\n\n"
+        "The text below is one section of a company's BRSR / annual report, "
+        "extracted directly from the PDF (tables may appear as loosely "
+        "aligned rows of numbers/labels rather than a clean grid -- read "
+        "them by their row/column position in the text, same as you would "
+        "looking at the original page). For each metric listed, find the "
+        "reported figure in the EXACT unit given and return it as a plain "
+        "number. Keep each value aligned with its correct row/column label "
+        "-- do not reuse one figure for multiple metrics. This is only a "
+        "section of the full report, so most or all metrics may genuinely "
+        "not appear here -- if a metric is not present in THIS text, is "
+        "reported in a different unit, or you are not confident, return "
+        "null for it -- never guess, never convert units, never invent a "
+        "value.\n\n"
         f"Metrics to find:\n{metric_lines}\n\n"
         f"Report section:\n{text}"
     )
@@ -190,11 +219,11 @@ def extract_metrics_from_pdf(pdf_bytes: bytes) -> tuple[dict[str, float | None],
         return cached, elapsed
 
     chunking_started_at = time.monotonic()
-    chunks, total_pages, pages_scanned = _chunk_document(pdf_bytes)
+    chunks, total_pages, pages_scanned, scan_start = _chunk_document(pdf_bytes)
     chunking_seconds = round(time.monotonic() - chunking_started_at, 1)
     logger.info(
-        "peer_extraction hash=%s CHUNKING_DONE seconds=%s total_pages=%s pages_scanned=%s chunks=%s",
-        doc_hash[:12], chunking_seconds, total_pages, pages_scanned, len(chunks),
+        "peer_extraction hash=%s CHUNKING_DONE seconds=%s total_pages=%s scan_start_page=%s pages_scanned=%s chunks=%s",
+        doc_hash[:12], chunking_seconds, total_pages, scan_start + 1, pages_scanned, len(chunks),
     )
     chars_sent = sum(len(c) for c in chunks)
 
