@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import CurrentUser, require_roles
 from app.core.carbon_mapping import get_carbon_mapping
-from app.db.models import Category, DataPoint, EmissionCalculation, EmissionTarget, Entry, Location, User
+from app.db.models import Category, DataPoint, EmissionCalculation, Entry, Location, User
 from app.db.session import get_db
 from app.schemas.carbon import (
     AiInsightOut,
@@ -38,11 +38,10 @@ from app.services.carbon_calculation import (
 from app.services.dashboard_insight import generate_dashboard_insight
 from app.services.rollups import month_start
 from app.services.target_calculation import (
-    RATE_METRIC_KEYS,
+    active_target_comparison,
+    active_targets_by_metric,
     all_target_comparisons,
-    classify_status,
-    months_between,
-    target_value_for_month,
+    target_value_for_bucket,
 )
 
 router = APIRouter(prefix="/carbon", tags=["carbon"])
@@ -340,7 +339,7 @@ def carbon_trend(
         all_months.update(months_in_range(py_start, py_end))
 
     by_month = compute_period_totals_batch(db, current.tenant_id, location_id, sorted(all_months))
-    targets_by_metric = _active_targets_by_metric(db, current.tenant_id, location_id, _TREND_TARGET_METRICS)
+    targets_by_metric = active_targets_by_metric(db, current.tenant_id, location_id, _TREND_TARGET_METRICS)
 
     points = []
     for (start, end), (py_start, py_end) in zip(buckets, prior_year_buckets):
@@ -363,12 +362,12 @@ def carbon_trend(
                 prior_year_scope2_location_based_tco2e=py_totals["scope2_loc_tco2e"],
                 prior_year_scope1_2_location_based_tco2e=py_totals["scope1_2_loc_tco2e"],
                 prior_year_intensity_tco2e_per_mnah=py_totals["intensity"],
-                target_scope1_tco2e=_target_value_for_bucket(targets_by_metric.get("scope1_tco2e"), "scope1_tco2e", bucket_months),
-                target_scope2_location_based_tco2e=_target_value_for_bucket(targets_by_metric.get("scope2_tco2e"), "scope2_tco2e", bucket_months),
-                target_scope1_2_location_based_tco2e=_target_value_for_bucket(
+                target_scope1_tco2e=target_value_for_bucket(targets_by_metric.get("scope1_tco2e"), "scope1_tco2e", bucket_months),
+                target_scope2_location_based_tco2e=target_value_for_bucket(targets_by_metric.get("scope2_tco2e"), "scope2_tco2e", bucket_months),
+                target_scope1_2_location_based_tco2e=target_value_for_bucket(
                     targets_by_metric.get("scope1_2_tco2e"), "scope1_2_tco2e", bucket_months
                 ),
-                target_intensity_tco2e_per_mnah=_target_value_for_bucket(
+                target_intensity_tco2e_per_mnah=target_value_for_bucket(
                     targets_by_metric.get("ghg_intensity_production"), "ghg_intensity_production", bucket_months
                 ),
             )
@@ -427,16 +426,16 @@ def carbon_overview(
 
     insight = _build_insight(sources, current_totals["scope1_2_loc_tco2e"], prior_totals["scope1_2_loc_tco2e"], unresolved_count)
 
-    scope1_2_target = _active_target_comparison(
+    scope1_2_target = active_target_comparison(
         db, current.tenant_id, location_id, "scope1_2_tco2e", current_months, current_totals["scope1_2_loc_tco2e"]
     )
-    intensity_target = _active_target_comparison(
+    intensity_target = active_target_comparison(
         db, current.tenant_id, location_id, "ghg_intensity_production", current_months, current_totals["intensity"]
     )
-    scope1_target = _active_target_comparison(
+    scope1_target = active_target_comparison(
         db, current.tenant_id, location_id, "scope1_tco2e", current_months, current_totals["scope1_tco2e"]
     )
-    scope2_target = _active_target_comparison(
+    scope2_target = active_target_comparison(
         db, current.tenant_id, location_id, "scope2_tco2e", current_months, current_totals["scope2_loc_tco2e"]
     )
     all_targets = [
@@ -460,6 +459,10 @@ def carbon_overview(
         prior_intensity_tco2e_per_mnah=prior_totals["intensity"],
         prior_year_scope1_2_location_based_tco2e=prior_year_totals["scope1_2_loc_tco2e"],
         prior_year_intensity_tco2e_per_mnah=prior_year_totals["intensity"],
+        prior_scope1_tco2e=prior_totals["scope1_tco2e"],
+        prior_year_scope1_tco2e=prior_year_totals["scope1_tco2e"],
+        prior_scope2_location_based_tco2e=prior_totals["scope2_loc_tco2e"],
+        prior_year_scope2_location_based_tco2e=prior_year_totals["scope2_loc_tco2e"],
         production_value=current_totals["production_value"],
         production_unit=current_totals["production_unit"],
         intensity_tco2e_per_mnah=current_totals["intensity"],
@@ -551,95 +554,7 @@ def carbon_ai_insight(
     return AiInsightOut(insight=insight)
 
 
-def _target_value_for_bucket(target: EmissionTarget | None, metric_key: str, months: list[date]) -> float | None:
-    """The metric's target figure for exactly this bucket -- None (not
-    substituted with anything) when the target doesn't apply here, either
-    because there is no active target for this metric/location or because
-    this bucket falls outside the target's own period (e.g. a 2027 target
-    contributes nothing to a 2026 bucket). `months` is the same range the
-    actual figure was aggregated over: a budget metric's total is summed
-    across exactly those months so it's comparable to a multi-month
-    actual; a rate metric's value stays constant regardless of range
-    length."""
-    if target is None or target.target_value is None:
-        return None
-    anchor_period = months[-1]
-    if not (target.target_period_start <= anchor_period <= target.target_period_end):
-        return None
-    num_months = len(months_between(target.target_period_start, target.target_period_end))
-    if metric_key in RATE_METRIC_KEYS:
-        return target_value_for_month(target.monthly_phasing, anchor_period, float(target.target_value), num_months, metric_key)
-    relevant = [m for m in months if target.target_period_start <= m <= target.target_period_end]
-    monthly_targets = [
-        target_value_for_month(target.monthly_phasing, m, float(target.target_value), num_months, metric_key)
-        for m in relevant
-    ]
-    monthly_targets = [t for t in monthly_targets if t is not None]
-    return sum(monthly_targets) if monthly_targets else None
-
-
-def _active_target_comparison(
-    db: Session, tenant_id, location_id, metric_key: str, months: list[date], actual: float | None
-) -> TargetComparison | None:
-    """Only ever reads an active target for the exact same boundary this
-    card already shows -- never substitutes a different location/metric
-    target, and never fabricates a comparison when none has been
-    declared (rule: targets are never auto-created). Returns None only
-    when there's truly no active target for this metric/location -- a
-    target that exists but whose period doesn't cover this month (not
-    started yet, or already ended) still returns a comparison, carrying
-    that status instead of a fabricated actual-vs-target number, so the
-    card can say "Not started yet" instead of the misleading "No target
-    set" (a real target was declared -- it's just not in force yet)."""
-    target = (
-        db.query(EmissionTarget)
-        .filter(
-            EmissionTarget.tenant_id == tenant_id,
-            EmissionTarget.location_id == location_id,
-            EmissionTarget.metric_key == metric_key,
-            EmissionTarget.status == "active",
-        )
-        .first()
-    )
-    if target is None:
-        return None
-    anchor_period = months[-1]
-    if anchor_period < target.target_period_start:
-        return TargetComparison(
-            target_id=target.id,
-            target_value=float(target.target_value) if target.target_value is not None else None,
-            status="Not started yet",
-        )
-    if anchor_period > target.target_period_end:
-        return TargetComparison(
-            target_id=target.id,
-            target_value=float(target.target_value) if target.target_value is not None else None,
-            status="Target period ended",
-        )
-    range_target = _target_value_for_bucket(target, metric_key, months)
-    if range_target is None:
-        return None
-    return TargetComparison(target_id=target.id, target_value=range_target, status=classify_status(actual, range_target))
-
-
 _TREND_TARGET_METRICS = ["scope1_tco2e", "scope2_tco2e", "scope1_2_tco2e", "ghg_intensity_production"]
-
-
-def _active_targets_by_metric(db: Session, tenant_id, location_id, metric_keys: list[str]) -> dict[str, EmissionTarget]:
-    """One query for every active target this trend chart could need a
-    reference line for -- targets are few (at most one per metric per
-    location), so this is never worth batching per-bucket."""
-    targets = (
-        db.query(EmissionTarget)
-        .filter(
-            EmissionTarget.tenant_id == tenant_id,
-            EmissionTarget.location_id == location_id,
-            EmissionTarget.metric_key.in_(metric_keys),
-            EmissionTarget.status == "active",
-        )
-        .all()
-    )
-    return {t.metric_key: t for t in targets}
 
 
 def _build_insight(sources: list[CarbonOverviewSource], current_total: float | None, prior_total: float | None, unresolved_count: int) -> str | None:

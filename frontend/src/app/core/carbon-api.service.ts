@@ -42,6 +42,10 @@ export interface CarbonOverview {
   prior_intensity_tco2e_per_mnah: number | null;
   prior_year_scope1_2_location_based_tco2e: number | null;
   prior_year_intensity_tco2e_per_mnah: number | null;
+  prior_scope1_tco2e: number | null;
+  prior_year_scope1_tco2e: number | null;
+  prior_scope2_location_based_tco2e: number | null;
+  prior_year_scope2_location_based_tco2e: number | null;
   production_value: number | null;
   production_unit: string | null;
   intensity_tco2e_per_mnah: number | null;

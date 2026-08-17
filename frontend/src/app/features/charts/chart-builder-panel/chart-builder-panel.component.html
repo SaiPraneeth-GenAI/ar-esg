@@ -17,7 +17,7 @@
     }
 
     @if (step() === 1) {
-      <p class="panel-hint">What question do you want to answer?</p>
+      <p class="panel-hint">What do you want to see?</p>
       <div class="question-list">
         @for (q of questions; track q.type) {
           <button type="button" class="question-btn" (click)="selectQuestion(q.type)">

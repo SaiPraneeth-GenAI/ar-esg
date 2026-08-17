@@ -138,11 +138,41 @@
   display: block;
 }
 
+.target-trigger:hover {
+  background: #fafbfc;
+}
+
 .target-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.target-top-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.expand-chevron {
+  width: 16px;
+  height: 16px;
+  color: #98a2b3;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.target-card.expanded .expand-chevron {
+  transform: rotate(180deg);
+  color: #0e2c21;
+}
+
+.expand-hint {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.72rem;
+  color: #98a2b3;
 }
 
 .target-boundary {

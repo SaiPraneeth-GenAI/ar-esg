@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
+import { TargetComparison } from './carbon-api.service';
 import { SupabaseService } from './supabase.service';
 
 export type PeriodMode = 'month' | 'quarter' | 'ytd';
@@ -20,7 +21,7 @@ export function priorPeriodLabel(mode: PeriodMode): string {
 export function priorYearLabel(mode: PeriodMode): string {
   if (mode === 'quarter') return 'same quarter last year';
   if (mode === 'ytd') return 'same period last year';
-  return 'last year';
+  return 'same month last year';
 }
 
 export function showsPriorPeriod(mode: PeriodMode): boolean {
@@ -87,6 +88,14 @@ export interface IntensityOverview {
   prior_year_waste_mt: number | null;
   prior_year_production_mnah: number | null;
   prior_year_revenue_inr_cr: number | null;
+  ghg_per_production_target: TargetComparison | null;
+  energy_per_production_target: TargetComparison | null;
+  water_per_production_target: TargetComparison | null;
+  waste_per_production_target: TargetComparison | null;
+  ghg_per_revenue_target: TargetComparison | null;
+  energy_per_revenue_target: TargetComparison | null;
+  water_per_revenue_target: TargetComparison | null;
+  waste_per_revenue_target: TargetComparison | null;
 }
 
 export interface IntensityTrendPoint {
@@ -109,6 +118,14 @@ export interface IntensityTrendPoint {
   prior_year_energy_per_revenue: number | null;
   prior_year_water_per_revenue: number | null;
   prior_year_waste_per_revenue: number | null;
+  target_ghg_per_production: number | null;
+  target_energy_per_production: number | null;
+  target_water_per_production: number | null;
+  target_waste_per_production: number | null;
+  target_ghg_per_revenue: number | null;
+  target_energy_per_revenue: number | null;
+  target_water_per_revenue: number | null;
+  target_waste_per_revenue: number | null;
 }
 
 @Injectable({ providedIn: 'root' })

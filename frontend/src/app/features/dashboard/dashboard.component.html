@@ -46,8 +46,37 @@
           <span class="status-dot"></span>
           {{ unresolvedCount() }} unresolved {{ unresolvedCount() === 1 ? 'entry' : 'entries' }}
         </a>
+
+        <div class="download-group">
+          <button
+            type="button"
+            class="download-btn"
+            [disabled]="downloadingFormat() !== null"
+            (click)="downloadReport('pdf')"
+            title="Download the full dashboard (all tabs) as a PDF"
+          >
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 3v10m0 0-3.5-3.5M10 13l3.5-3.5" />
+              <path d="M4 15v1a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1" />
+            </svg>
+            {{ downloadingFormat() === 'pdf' ? 'Preparing…' : 'Download PDF' }}
+          </button>
+          <button
+            type="button"
+            class="download-btn secondary"
+            [disabled]="downloadingFormat() !== null"
+            (click)="downloadReport('pptx')"
+            title="Download the full dashboard (all tabs) as a PowerPoint"
+          >
+            {{ downloadingFormat() === 'pptx' ? 'Preparing…' : 'PPTX' }}
+          </button>
+        </div>
       </div>
     </div>
+
+    @if (downloadError()) {
+      <p class="download-error">{{ downloadError() }}</p>
+    }
 
     <nav class="tabs">
       <button type="button" class="tab" [class.active]="activeTab() === 'absolute'" (click)="setTab('absolute')">Absolute Metrics</button>

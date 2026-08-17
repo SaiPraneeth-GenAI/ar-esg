@@ -50,9 +50,14 @@
                 <span class="target-boundary">{{ boundaryLabel(t) }}</span>
                 <span class="target-location">{{ t.location_name ?? 'Org-wide' }}</span>
               </div>
-              @if (t.status === 'active') {
-                <span class="status-pill" [class]="statusClass(t.current_status_label)">{{ t.current_status_label }}</span>
-              }
+              <div class="target-top-right">
+                @if (t.status === 'active') {
+                  <span class="status-pill" [class]="statusClass(t.current_status_label)">{{ t.current_status_label }}</span>
+                }
+                <svg class="expand-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 8 10 12 14 8" />
+                </svg>
+              </div>
             </div>
             <div class="target-values">
               @if (t.baseline_value !== null) {
@@ -65,6 +70,7 @@
             @if (t.rationale && t.status !== 'draft') {
               <p class="target-rationale">{{ t.rationale }}</p>
             }
+            <span class="expand-hint">{{ expandedId() === t.id ? 'Hide' : 'Show' }} monthly performance</span>
           </button>
 
           <div class="target-actions">

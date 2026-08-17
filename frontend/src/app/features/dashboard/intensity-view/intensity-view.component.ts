@@ -1,5 +1,7 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, Input, OnChanges, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { TargetComparison } from '../../../core/carbon-api.service';
 import {
   IntensityApiService,
   IntensityOverview,
@@ -17,6 +19,7 @@ interface IntensityMetric {
   prior: number | null;
   priorYear: number | null;
   unit: string;
+  target: TargetComparison | null;
 }
 
 const TREND_MONTHS = 6;
@@ -24,7 +27,7 @@ const TREND_MONTHS = 6;
 @Component({
   selector: 'app-intensity-view',
   standalone: true,
-  imports: [DecimalPipe, RichTrendChartComponent],
+  imports: [DecimalPipe, RouterLink, RichTrendChartComponent],
   templateUrl: './intensity-view.component.html',
   styleUrl: './intensity-view.component.css'
 })
@@ -44,11 +47,16 @@ export class IntensityViewComponent implements OnChanges {
 
   chartSeries(): ChartSeriesDef[] {
     const denomUnit = this.mode === 'production' ? 'Mn Ah' : 'INR Cr';
+    // "per production"/"per revenue" is spelled out in the label itself
+    // (not just implied by the unit) -- Production and Revenue tabs
+    // otherwise show identically-named series ("GHG emissions") and it's
+    // easy to lose track of which tab's chart is on screen.
+    const context = this.mode === 'production' ? 'per production' : 'per revenue';
     return [
-      { key: 'ghg', label: 'GHG emissions', unit: `tCO2e/${denomUnit}`, tracked: true },
-      { key: 'energy', label: 'Energy consumption', unit: `GJ/${denomUnit}`, tracked: true },
-      { key: 'water', label: 'Water withdrawal', unit: `KL/${denomUnit}`, tracked: true },
-      { key: 'waste', label: 'Waste generated', unit: `MT/${denomUnit}`, tracked: true }
+      { key: 'ghg', label: `GHG emissions (${context})`, unit: `tCO2e/${denomUnit}`, tracked: true },
+      { key: 'energy', label: `Energy consumption (${context})`, unit: `GJ/${denomUnit}`, tracked: true },
+      { key: 'water', label: `Water withdrawal (${context})`, unit: `KL/${denomUnit}`, tracked: true },
+      { key: 'waste', label: `Waste generated (${context})`, unit: `MT/${denomUnit}`, tracked: true }
     ];
   }
 
@@ -93,30 +101,54 @@ export class IntensityViewComponent implements OnChanges {
         current: (ov as any)[`ghg_${suffix}`],
         prior: (ov as any)[`prior_ghg_${suffix}`],
         priorYear: (ov as any)[`prior_year_ghg_${suffix}`],
-        unit: `tCO2e/${denomUnit}`
+        unit: `tCO2e/${denomUnit}`,
+        target: (ov as any)[`ghg_${suffix}_target`]
       },
       {
         label: 'Energy consumption',
         current: (ov as any)[`energy_${suffix}`],
         prior: (ov as any)[`prior_energy_${suffix}`],
         priorYear: (ov as any)[`prior_year_energy_${suffix}`],
-        unit: `GJ/${denomUnit}`
+        unit: `GJ/${denomUnit}`,
+        target: (ov as any)[`energy_${suffix}_target`]
       },
       {
         label: 'Water withdrawal',
         current: (ov as any)[`water_${suffix}`],
         prior: (ov as any)[`prior_water_${suffix}`],
         priorYear: (ov as any)[`prior_year_water_${suffix}`],
-        unit: `KL/${denomUnit}`
+        unit: `KL/${denomUnit}`,
+        target: (ov as any)[`water_${suffix}_target`]
       },
       {
         label: 'Waste generated',
         current: (ov as any)[`waste_${suffix}`],
         prior: (ov as any)[`prior_waste_${suffix}`],
         priorYear: (ov as any)[`prior_year_waste_${suffix}`],
-        unit: `MT/${denomUnit}`
+        unit: `MT/${denomUnit}`,
+        target: (ov as any)[`waste_${suffix}_target`]
       }
     ];
+  }
+
+  cardTargetClass(target: TargetComparison | null): string {
+    if (!target) return '';
+    if (target.status === 'On track') return 'card-target-met';
+    if (target.status === 'Watch' || target.status === 'Off track') return 'card-target-exceeded';
+    return '';
+  }
+
+  targetStatusClass(status: string): string {
+    switch (status) {
+      case 'On track':
+        return 'status-green';
+      case 'Watch':
+        return 'status-amber';
+      case 'Off track':
+        return 'status-red';
+      default:
+        return 'status-neutral';
+    }
   }
 
   priorLabel(): string {
@@ -166,6 +198,12 @@ export class IntensityViewComponent implements OnChanges {
             energy: (p as any)[`prior_year_energy${suffix}`],
             water: (p as any)[`prior_year_water${suffix}`],
             waste: (p as any)[`prior_year_waste${suffix}`]
+          },
+          targetValuesBySeries: {
+            ghg: (p as any)[`target_ghg${suffix}`],
+            energy: (p as any)[`target_energy${suffix}`],
+            water: (p as any)[`target_water${suffix}`],
+            waste: (p as any)[`target_waste${suffix}`]
           }
         }))
       );

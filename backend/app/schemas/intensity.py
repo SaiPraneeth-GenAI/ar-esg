@@ -2,6 +2,8 @@ from datetime import date
 
 from pydantic import BaseModel
 
+from app.schemas.carbon import TargetComparison
+
 
 class IntensityOverviewOut(BaseModel):
     period: date
@@ -50,6 +52,16 @@ class IntensityOverviewOut(BaseModel):
     prior_year_waste_mt: float | None = None
     prior_year_production_mnah: float | None = None
     prior_year_revenue_inr_cr: float | None = None
+    # Active target comparisons -- None (not a fabricated "no target"
+    # placeholder) when nothing's been declared for that metric/location.
+    ghg_per_production_target: TargetComparison | None = None
+    energy_per_production_target: TargetComparison | None = None
+    water_per_production_target: TargetComparison | None = None
+    waste_per_production_target: TargetComparison | None = None
+    ghg_per_revenue_target: TargetComparison | None = None
+    energy_per_revenue_target: TargetComparison | None = None
+    water_per_revenue_target: TargetComparison | None = None
+    waste_per_revenue_target: TargetComparison | None = None
 
 
 class IntensityTrendPoint(BaseModel):
@@ -72,3 +84,11 @@ class IntensityTrendPoint(BaseModel):
     prior_year_energy_per_revenue: float | None = None
     prior_year_water_per_revenue: float | None = None
     prior_year_waste_per_revenue: float | None = None
+    target_ghg_per_production: float | None = None
+    target_energy_per_production: float | None = None
+    target_water_per_production: float | None = None
+    target_waste_per_production: float | None = None
+    target_ghg_per_revenue: float | None = None
+    target_energy_per_revenue: float | None = None
+    target_water_per_revenue: float | None = None
+    target_waste_per_revenue: float | None = None

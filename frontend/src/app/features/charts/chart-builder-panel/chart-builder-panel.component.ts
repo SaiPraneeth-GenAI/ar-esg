@@ -20,30 +20,32 @@ interface QuestionOption {
   example: string;
 }
 
+// Plain, field-first wording -- no "analysis"/"composition"/jargon. Each
+// option answers one everyday question a non-analyst would actually ask.
 const QUESTIONS: QuestionOption[] = [
   {
     type: 'trend',
     icon: '📈',
-    title: 'Trend analysis',
-    blurb: 'How has this changed over time?',
-    bullets: ['Track a metric month to month', 'Spot patterns, peaks, and valleys', 'Compare against last year'],
-    example: 'e.g. "Monthly GHG intensity, last 12 months"'
+    title: 'See it over time',
+    blurb: 'Is this going up or down, month by month?',
+    bullets: ['Watch one number change over months', 'See which months were high or low', 'Compare with last year'],
+    example: 'e.g. "GHG intensity, month by month"'
   },
   {
     type: 'breakdown',
     icon: '🥧',
-    title: 'Breakdown analysis',
-    blurb: 'What are the parts of a whole?',
-    bullets: ['See what makes up a total', 'Find the biggest contributor', 'Understand composition'],
-    example: 'e.g. "What share of emissions comes from grid electricity vs fuel?"'
+    title: 'See what makes it up',
+    blurb: 'What is this total made of?',
+    bullets: ['See where a total comes from', 'Find the biggest single source', 'Compare the pieces to each other'],
+    example: 'e.g. "How much comes from electricity vs. fuel?"'
   },
   {
     type: 'comparison',
     icon: '📊',
-    title: 'Comparison analysis',
-    blurb: 'How do a few things stack up side by side?',
-    bullets: ['Compare several metrics at once', 'See them as bars, side by side', 'Spot which one stands out'],
-    example: 'e.g. "Scope 1 vs Scope 2 vs GHG intensity, this month"'
+    title: 'Compare a few things',
+    blurb: 'How do a few numbers stack up side by side?',
+    bullets: ['Put a few numbers next to each other', 'See them as simple bars', 'Spot which one is highest'],
+    example: 'e.g. "Scope 1 vs. Scope 2, this month"'
   }
 ];
 

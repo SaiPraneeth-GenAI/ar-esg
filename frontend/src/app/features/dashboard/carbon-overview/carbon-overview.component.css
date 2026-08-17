@@ -110,6 +110,20 @@
   padding: 1.1rem 1.2rem;
 }
 
+/* Whole-card target status -- replaces a small dot with a colored box so
+   exceedance is visible at a glance, not just on close inspection. */
+.carbon-card.card-target-exceeded {
+  background: #fef3f2;
+  border-color: #fda29b;
+  border-left: 4px solid #f04438;
+}
+
+.carbon-card.card-target-met {
+  background: #f2fbf6;
+  border-color: #a6e9c5;
+  border-left: 4px solid #12b76a;
+}
+
 .card-top {
   display: flex;
   align-items: center;

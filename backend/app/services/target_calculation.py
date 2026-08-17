@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.metrics_registry import CHARTABLE_METRICS
 from app.db.models import EmissionTarget, ProductionVolumeMapping
+from app.schemas.carbon import TargetComparison
 from app.services.carbon_calculation import compute_period_totals_batch, compute_range_totals
 from app.services.intensity_calculation import (
     compute_intensity_overview_batch,
@@ -373,6 +374,95 @@ def all_target_comparisons(db: Session, tenant_id: uuid.UUID, location_id: uuid.
             )
         )
     return results
+
+
+def target_value_for_bucket(target: EmissionTarget | None, metric_key: str, months: list[date]) -> float | None:
+    """The metric's target figure for exactly this bucket -- None (not
+    substituted with anything) when the target doesn't apply here, either
+    because there is no active target for this metric/location or because
+    this bucket falls outside the target's own period (e.g. a 2027 target
+    contributes nothing to a 2026 bucket). `months` is the same range the
+    actual figure was aggregated over: a budget metric's total is summed
+    across exactly those months so it's comparable to a multi-month
+    actual; a rate metric's value stays constant regardless of range
+    length. Shared by every dashboard tab's target badge and trend-line
+    logic so they can never disagree with each other."""
+    if target is None or target.target_value is None:
+        return None
+    anchor_period = months[-1]
+    if not (target.target_period_start <= anchor_period <= target.target_period_end):
+        return None
+    num_months = len(months_between(target.target_period_start, target.target_period_end))
+    if metric_key in RATE_METRIC_KEYS:
+        return target_value_for_month(target.monthly_phasing, anchor_period, float(target.target_value), num_months, metric_key)
+    relevant = [m for m in months if target.target_period_start <= m <= target.target_period_end]
+    monthly_targets = [
+        target_value_for_month(target.monthly_phasing, m, float(target.target_value), num_months, metric_key)
+        for m in relevant
+    ]
+    monthly_targets = [t for t in monthly_targets if t is not None]
+    return sum(monthly_targets) if monthly_targets else None
+
+
+def active_targets_by_metric(db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, metric_keys: list[str]) -> dict[str, EmissionTarget]:
+    """One query for every active target a trend chart could need a
+    reference line for -- targets are few (at most one per metric per
+    location), so this is never worth batching per-bucket."""
+    targets = (
+        db.query(EmissionTarget)
+        .filter(
+            EmissionTarget.tenant_id == tenant_id,
+            EmissionTarget.location_id == location_id,
+            EmissionTarget.metric_key.in_(metric_keys),
+            EmissionTarget.status == "active",
+        )
+        .all()
+    )
+    return {t.metric_key: t for t in targets}
+
+
+def active_target_comparison(
+    db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, metric_key: str, months: list[date], actual: float | None
+) -> TargetComparison | None:
+    """Only ever reads an active target for the exact same boundary the
+    caller already shows -- never substitutes a different location/metric
+    target, and never fabricates a comparison when none has been
+    declared (rule: targets are never auto-created). Returns None only
+    when there's truly no active target for this metric/location -- a
+    target that exists but whose period doesn't cover this month (not
+    started yet, or already ended) still returns a comparison, carrying
+    that status instead of a fabricated actual-vs-target number, so a
+    card can say "Not started yet" instead of a misleading "No target
+    set" (a real target was declared -- it's just not in force yet)."""
+    target = (
+        db.query(EmissionTarget)
+        .filter(
+            EmissionTarget.tenant_id == tenant_id,
+            EmissionTarget.location_id == location_id,
+            EmissionTarget.metric_key == metric_key,
+            EmissionTarget.status == "active",
+        )
+        .first()
+    )
+    if target is None:
+        return None
+    anchor_period = months[-1]
+    if anchor_period < target.target_period_start:
+        return TargetComparison(
+            target_id=target.id,
+            target_value=float(target.target_value) if target.target_value is not None else None,
+            status="Not started yet",
+        )
+    if anchor_period > target.target_period_end:
+        return TargetComparison(
+            target_id=target.id,
+            target_value=float(target.target_value) if target.target_value is not None else None,
+            status="Target period ended",
+        )
+    range_target = target_value_for_bucket(target, metric_key, months)
+    if range_target is None:
+        return None
+    return TargetComparison(target_id=target.id, target_value=range_target, status=classify_status(actual, range_target))
 
 
 def classify_status(actual: float | None, target: float | None) -> str:

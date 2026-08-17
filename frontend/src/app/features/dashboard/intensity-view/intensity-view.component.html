@@ -25,10 +25,9 @@
 
     <div class="metric-cards">
       @for (m of metrics(); track m.label) {
-        <div class="metric-card">
+        <div class="metric-card" [class]="cardTargetClass(m.target)">
           <div class="card-top">
             <span class="card-label">{{ m.label }}</span>
-            <span class="status-dot" [class]="'status-' + comparisonStatus(m.current, m.prior)"></span>
           </div>
           @if (m.current !== null) {
             <div class="card-value">{{ m.current | number: '1.2-4' }}<span class="card-unit">{{ m.unit }}</span></div>
@@ -40,6 +39,16 @@
             <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.priorYear)">
               {{ comparisonLabel(m.current, m.priorYear, priorYearLabelText()) }}
             </div>
+            @if (m.target) {
+              <div class="target-comparison">
+                <span class="status-pill" [class]="targetStatusClass(m.target.status)">{{ m.target.status }}</span>
+                @if (m.target.target_value !== null) {
+                  vs target {{ m.target.target_value | number: '1.2-4' }} {{ m.unit }}
+                }
+              </div>
+            } @else {
+              <a class="target-link" routerLink="/admin/targets">No target set</a>
+            }
           } @else {
             <div class="card-empty">Data required</div>
           }

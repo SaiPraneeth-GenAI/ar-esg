@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { AdminLocation, ApiService } from '../../core/api.service';
 import { CarbonApiService } from '../../core/carbon-api.service';
 import { PeriodMode } from '../../core/intensity-api.service';
+import { ReportFormat, ReportsApiService } from '../../core/reports-api.service';
 import { AbsoluteMetricsViewComponent } from './absolute-metrics-view/absolute-metrics-view.component';
 import { IntensityViewComponent } from './intensity-view/intensity-view.component';
 import { SafetyViewComponent } from './safety-view/safety-view.component';
@@ -34,6 +35,7 @@ export interface PickerOption {
 export class DashboardComponent implements OnInit {
   private api = inject(ApiService);
   private carbonApi = inject(CarbonApiService);
+  private reportsApi = inject(ReportsApiService);
 
   period = signal(currentMonthValue());
   periodMode = signal<PeriodMode>('month');
@@ -41,6 +43,9 @@ export class DashboardComponent implements OnInit {
   activeTab = signal<TabId>('absolute');
   locations = signal<AdminLocation[]>([]);
   unresolvedCount = signal(0);
+
+  downloadingFormat = signal<ReportFormat | null>(null);
+  downloadError = signal('');
 
   async ngOnInit(): Promise<void> {
     this.locations.set(await this.api.listLocations());
@@ -62,6 +67,19 @@ export class DashboardComponent implements OnInit {
 
   onFiltersChange(): void {
     void this.refreshUnresolvedBadge();
+  }
+
+  async downloadReport(format: ReportFormat): Promise<void> {
+    if (this.downloadingFormat()) return;
+    this.downloadingFormat.set(format);
+    this.downloadError.set('');
+    try {
+      await this.reportsApi.downloadDashboardReport(format, this.period(), this.periodMode(), this.effectiveLocationId() ?? undefined);
+    } catch {
+      this.downloadError.set('Could not generate the report. Please try again.');
+    } finally {
+      this.downloadingFormat.set(null);
+    }
   }
 
   formatMonth(): string {

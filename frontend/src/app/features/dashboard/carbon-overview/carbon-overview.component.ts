@@ -1,7 +1,7 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, Input, OnChanges, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { CarbonApiService, CarbonOverview, CarbonOverviewSource, EmissionCalculationOut } from '../../../core/carbon-api.service';
+import { CarbonApiService, CarbonOverview, CarbonOverviewSource, EmissionCalculationOut, TargetComparison } from '../../../core/carbon-api.service';
 import { PeriodMode, formatBucketLabel, priorPeriodLabel, priorYearLabel, showsPriorPeriod } from '../../../core/intensity-api.service';
 import { PieChartComponent, PieSlice } from '../../../shared/pie-chart/pie-chart.component';
 import { ChartPoint, ChartSeriesDef, RichTrendChartComponent } from '../../../shared/rich-trend-chart/rich-trend-chart.component';
@@ -320,6 +320,18 @@ export class CarbonOverviewComponent implements OnChanges {
       default:
         return 'status-neutral';
     }
+  }
+
+  /** The whole card is colored by target status, not a small dot -- On
+   * track is the only "good" state; Watch and Off track both read as
+   * exceeding the target, just at different severity. A target that
+   * hasn't started/ended yet, or doesn't exist, leaves the card neutral
+   * since there's nothing to judge it against. */
+  cardTargetClass(target: TargetComparison | null | undefined): string {
+    if (!target) return '';
+    if (target.status === 'On track') return 'card-target-met';
+    if (target.status === 'Watch' || target.status === 'Off track') return 'card-target-exceeded';
+    return '';
   }
 
   completenessStatus(pct: number | null): 'green' | 'amber' | 'red' | 'neutral' {

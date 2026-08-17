@@ -16,8 +16,26 @@ from app.services.carbon_calculation import (
 )
 from app.services.intensity_calculation import compute_intensity_overview_batch, compute_intensity_overview_range
 from app.services.rollups import month_start
+from app.services.target_calculation import active_target_comparison, active_targets_by_metric, target_value_for_bucket
 
 router = APIRouter(prefix="/intensity", tags=["intensity"])
+
+# intensity.py's own field names don't all match the targetable metric_key
+# registry (e.g. this route's "ghg_per_production" is target-tracked under
+# the key "ghg_intensity_production", the same underlying figure carbon.py's
+# dashboard tile also shows) -- this maps each tile to its real metric_key.
+_PRODUCTION_METRIC_KEYS = {
+    "ghg": "ghg_intensity_production",
+    "energy": "energy_per_production",
+    "water": "water_per_production",
+    "waste": "waste_per_production",
+}
+_REVENUE_METRIC_KEYS = {
+    "ghg": "ghg_per_revenue",
+    "energy": "energy_per_revenue",
+    "water": "water_per_revenue",
+    "waste": "waste_per_revenue",
+}
 
 
 @router.get("/overview", response_model=IntensityOverviewOut)
@@ -42,6 +60,31 @@ def intensity_overview(
     current_ov = compute_intensity_overview_range(db, current.tenant_id, location_id, current_months)
     prior_ov = compute_intensity_overview_range(db, current.tenant_id, location_id, prior_months)
     prior_year_ov = compute_intensity_overview_range(db, current.tenant_id, location_id, prior_year_months)
+
+    ghg_per_production_target = active_target_comparison(
+        db, current.tenant_id, location_id, _PRODUCTION_METRIC_KEYS["ghg"], current_months, current_ov.ghg_per_production
+    )
+    energy_per_production_target = active_target_comparison(
+        db, current.tenant_id, location_id, _PRODUCTION_METRIC_KEYS["energy"], current_months, current_ov.energy_per_production
+    )
+    water_per_production_target = active_target_comparison(
+        db, current.tenant_id, location_id, _PRODUCTION_METRIC_KEYS["water"], current_months, current_ov.water_per_production
+    )
+    waste_per_production_target = active_target_comparison(
+        db, current.tenant_id, location_id, _PRODUCTION_METRIC_KEYS["waste"], current_months, current_ov.waste_per_production
+    )
+    ghg_per_revenue_target = active_target_comparison(
+        db, current.tenant_id, location_id, _REVENUE_METRIC_KEYS["ghg"], current_months, current_ov.ghg_per_revenue
+    )
+    energy_per_revenue_target = active_target_comparison(
+        db, current.tenant_id, location_id, _REVENUE_METRIC_KEYS["energy"], current_months, current_ov.energy_per_revenue
+    )
+    water_per_revenue_target = active_target_comparison(
+        db, current.tenant_id, location_id, _REVENUE_METRIC_KEYS["water"], current_months, current_ov.water_per_revenue
+    )
+    waste_per_revenue_target = active_target_comparison(
+        db, current.tenant_id, location_id, _REVENUE_METRIC_KEYS["waste"], current_months, current_ov.waste_per_revenue
+    )
 
     return IntensityOverviewOut(
         period=current_ov.period,
@@ -90,6 +133,14 @@ def intensity_overview(
         prior_year_waste_mt=prior_year_ov.waste_mt,
         prior_year_production_mnah=prior_year_ov.production_mnah,
         prior_year_revenue_inr_cr=prior_year_ov.revenue_inr_cr,
+        ghg_per_production_target=ghg_per_production_target,
+        energy_per_production_target=energy_per_production_target,
+        water_per_production_target=water_per_production_target,
+        waste_per_production_target=waste_per_production_target,
+        ghg_per_revenue_target=ghg_per_revenue_target,
+        energy_per_revenue_target=energy_per_revenue_target,
+        water_per_revenue_target=water_per_revenue_target,
+        waste_per_revenue_target=waste_per_revenue_target,
     )
 
 
@@ -120,10 +171,13 @@ def intensity_trend(
         all_months.update(months_in_range(py_start, py_end))
 
     by_month = compute_intensity_overview_batch(db, current.tenant_id, location_id, sorted(all_months))
+    all_metric_keys = list(_PRODUCTION_METRIC_KEYS.values()) + list(_REVENUE_METRIC_KEYS.values())
+    targets_by_metric = active_targets_by_metric(db, current.tenant_id, location_id, all_metric_keys)
 
     points = []
     for (start, end), (py_start, py_end) in zip(buckets, prior_year_buckets):
-        ov = compute_intensity_overview_range(db, current.tenant_id, location_id, months_in_range(start, end), by_month=by_month)
+        bucket_months = months_in_range(start, end)
+        ov = compute_intensity_overview_range(db, current.tenant_id, location_id, bucket_months, by_month=by_month)
         py_ov = compute_intensity_overview_range(
             db, current.tenant_id, location_id, months_in_range(py_start, py_end), by_month=by_month
         )
@@ -148,6 +202,30 @@ def intensity_trend(
                 prior_year_energy_per_revenue=py_ov.energy_per_revenue,
                 prior_year_water_per_revenue=py_ov.water_per_revenue,
                 prior_year_waste_per_revenue=py_ov.waste_per_revenue,
+                target_ghg_per_production=target_value_for_bucket(
+                    targets_by_metric.get(_PRODUCTION_METRIC_KEYS["ghg"]), _PRODUCTION_METRIC_KEYS["ghg"], bucket_months
+                ),
+                target_energy_per_production=target_value_for_bucket(
+                    targets_by_metric.get(_PRODUCTION_METRIC_KEYS["energy"]), _PRODUCTION_METRIC_KEYS["energy"], bucket_months
+                ),
+                target_water_per_production=target_value_for_bucket(
+                    targets_by_metric.get(_PRODUCTION_METRIC_KEYS["water"]), _PRODUCTION_METRIC_KEYS["water"], bucket_months
+                ),
+                target_waste_per_production=target_value_for_bucket(
+                    targets_by_metric.get(_PRODUCTION_METRIC_KEYS["waste"]), _PRODUCTION_METRIC_KEYS["waste"], bucket_months
+                ),
+                target_ghg_per_revenue=target_value_for_bucket(
+                    targets_by_metric.get(_REVENUE_METRIC_KEYS["ghg"]), _REVENUE_METRIC_KEYS["ghg"], bucket_months
+                ),
+                target_energy_per_revenue=target_value_for_bucket(
+                    targets_by_metric.get(_REVENUE_METRIC_KEYS["energy"]), _REVENUE_METRIC_KEYS["energy"], bucket_months
+                ),
+                target_water_per_revenue=target_value_for_bucket(
+                    targets_by_metric.get(_REVENUE_METRIC_KEYS["water"]), _REVENUE_METRIC_KEYS["water"], bucket_months
+                ),
+                target_waste_per_revenue=target_value_for_bucket(
+                    targets_by_metric.get(_REVENUE_METRIC_KEYS["waste"]), _REVENUE_METRIC_KEYS["waste"], bucket_months
+                ),
             )
         )
     return points

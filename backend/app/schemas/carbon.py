@@ -136,6 +136,10 @@ class CarbonOverview(BaseModel):
     prior_intensity_tco2e_per_mnah: float | None
     prior_year_scope1_2_location_based_tco2e: float | None = None
     prior_year_intensity_tco2e_per_mnah: float | None = None
+    prior_scope1_tco2e: float | None = None
+    prior_year_scope1_tco2e: float | None = None
+    prior_scope2_location_based_tco2e: float | None = None
+    prior_year_scope2_location_based_tco2e: float | None = None
     production_value: float | None
     production_unit: str | None
     intensity_tco2e_per_mnah: float | None

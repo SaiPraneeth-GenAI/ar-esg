@@ -23,10 +23,9 @@
     </div>
   } @else if (overview()) {
     <div class="carbon-cards">
-      <div class="carbon-card">
+      <div class="carbon-card" [class]="cardTargetClass(overview()!.scope1_2_target)">
         <div class="card-top">
           <span class="card-label">Scope 1+2 (location-based)</span>
-          <span class="status-dot" [class]="'status-' + comparisonStatus(overview()!.scope1_2_location_based_tco2e, overview()!.prior_scope1_2_location_based_tco2e)"></span>
         </div>
         @if (overview()!.scope1_2_location_based_tco2e !== null) {
           <div class="card-value">{{ overview()!.scope1_2_location_based_tco2e | number: '1.1-2' }}<span class="card-unit">tCO2e</span></div>
@@ -53,10 +52,9 @@
         }
       </div>
 
-      <div class="carbon-card">
+      <div class="carbon-card" [class]="cardTargetClass(overview()!.intensity_target)">
         <div class="card-top">
           <span class="card-label">Specific GHG emissions</span>
-          <span class="status-dot" [class]="'status-' + comparisonStatus(overview()!.intensity_tco2e_per_mnah, overview()!.prior_intensity_tco2e_per_mnah)"></span>
         </div>
         @if (overview()!.intensity_tco2e_per_mnah !== null) {
           <div class="card-value">{{ overview()!.intensity_tco2e_per_mnah | number: '1.3-3' }}<span class="card-unit">tCO2e/MnAh</span></div>
@@ -83,12 +81,20 @@
         }
       </div>
 
-      <div class="carbon-card">
+      <div class="carbon-card" [class]="cardTargetClass(overview()!.scope1_target)">
         <div class="card-top">
           <span class="card-label">Scope 1</span>
         </div>
         @if (overview()!.scope1_tco2e !== null) {
           <div class="card-value">{{ overview()!.scope1_tco2e | number: '1.1-2' }}<span class="card-unit">tCO2e</span></div>
+          @if (showPrior()) {
+            <div class="card-comparison" [class]="'comparison-' + comparisonStatus(overview()!.scope1_tco2e, overview()!.prior_scope1_tco2e)">
+              {{ comparisonLabel(overview()!.scope1_tco2e, overview()!.prior_scope1_tco2e, priorLabel()) }}
+            </div>
+          }
+          <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(overview()!.scope1_tco2e, overview()!.prior_year_scope1_tco2e)">
+            {{ comparisonLabel(overview()!.scope1_tco2e, overview()!.prior_year_scope1_tco2e, priorYearLabelText()) }}
+          </div>
           @if (overview()!.scope1_target) {
             <div class="target-comparison">
               <span class="status-pill" [class]="targetStatusClass(overview()!.scope1_target!.status)">{{ overview()!.scope1_target!.status }}</span>
@@ -104,12 +110,20 @@
         }
       </div>
 
-      <div class="carbon-card">
+      <div class="carbon-card" [class]="cardTargetClass(overview()!.scope2_target)">
         <div class="card-top">
           <span class="card-label">Scope 2 (location-based)</span>
         </div>
         @if (overview()!.scope2_location_based_tco2e !== null) {
           <div class="card-value">{{ overview()!.scope2_location_based_tco2e | number: '1.1-2' }}<span class="card-unit">tCO2e</span></div>
+          @if (showPrior()) {
+            <div class="card-comparison" [class]="'comparison-' + comparisonStatus(overview()!.scope2_location_based_tco2e, overview()!.prior_scope2_location_based_tco2e)">
+              {{ comparisonLabel(overview()!.scope2_location_based_tco2e, overview()!.prior_scope2_location_based_tco2e, priorLabel()) }}
+            </div>
+          }
+          <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(overview()!.scope2_location_based_tco2e, overview()!.prior_year_scope2_location_based_tco2e)">
+            {{ comparisonLabel(overview()!.scope2_location_based_tco2e, overview()!.prior_year_scope2_location_based_tco2e, priorYearLabelText()) }}
+          </div>
           @if (overview()!.scope2_market_based_tco2e !== null) {
             <div class="card-comparison comparison-neutral">Market-based: {{ overview()!.scope2_market_based_tco2e | number: '1.1-2' }} tCO2e</div>
           }
