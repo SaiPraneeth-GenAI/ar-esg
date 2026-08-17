@@ -169,9 +169,13 @@
       <div class="targets-strip">
         <span class="targets-strip-label">Targets tracked</span>
         @for (t of overview()!.all_targets; track t.target_id) {
-          <span class="target-chip">
+          <span class="target-chip" [title]="targetTooltip(t)">
             <span class="status-pill" [class]="targetStatusClass(t.status)">{{ t.status }}</span>
-            {{ t.label }}: {{ t.actual !== null ? (t.actual | number: '1.2-2') : '—' }} vs {{ t.target_value | number: '1.2-2' }} {{ t.unit }}
+            <span class="target-chip-label">{{ t.label }}</span>
+            <span class="target-bar">
+              <span class="target-bar-fill" [class]="targetStatusClass(t.status)" [style.width.%]="targetFillPct(t)"></span>
+              <span class="target-bar-goal" [style.left.%]="targetGoalPct(t)"></span>
+            </span>
           </span>
         }
       </div>

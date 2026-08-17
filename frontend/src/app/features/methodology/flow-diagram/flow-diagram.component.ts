@@ -1,6 +1,7 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, ElementRef, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { AdminLocation, ApiService } from '../../../core/api.service';
 import { CarbonApiService, EmissionCalculationOut } from '../../../core/carbon-api.service';
 import { IntensityApiService, PeriodMode } from '../../../core/intensity-api.service';
 import { SafetyApiService } from '../../../core/safety-api.service';
@@ -168,6 +169,7 @@ export class FlowDiagramComponent implements OnInit {
   private intensityApi = inject(IntensityApiService);
   private safetyApi = inject(SafetyApiService);
   private targetApi = inject(TargetApiService);
+  private api = inject(ApiService);
 
   @ViewChild('svgEl') svgEl!: ElementRef<SVGSVGElement>;
 
@@ -177,6 +179,8 @@ export class FlowDiagramComponent implements OnInit {
   loading = signal(true);
   period = signal(currentPeriod());
   periodMode = signal<PeriodMode>('month');
+  locations = signal<AdminLocation[]>([]);
+  locationId = signal('');
 
   viewBox = signal({ x: 0, y: 0, w: 2020, h: 1010 });
   private panStart: { x: number; y: number; vb: { x: number; y: number; w: number; h: number } } | null = null;
@@ -195,18 +199,25 @@ export class FlowDiagramComponent implements OnInit {
   private extraLines: Record<string, string[]> = {};
 
   async ngOnInit(): Promise<void> {
+    this.locations.set(await this.api.listLocations());
+    await this.load();
+  }
+
+  async setLocation(value: string): Promise<void> {
+    this.locationId.set(value);
     await this.load();
   }
 
   async load(): Promise<void> {
     this.loading.set(true);
     try {
+      const loc = this.locationId() || undefined;
       const [carbon, intensity, safety, targets, allCalcs] = await Promise.all([
-        this.carbonApi.getOverview(this.period(), undefined, this.periodMode()),
-        this.intensityApi.getOverview(this.period(), undefined, this.periodMode()),
-        this.safetyApi.getOverview(this.period(), undefined, this.periodMode()),
+        this.carbonApi.getOverview(this.period(), loc, this.periodMode()),
+        this.intensityApi.getOverview(this.period(), loc, this.periodMode()),
+        this.safetyApi.getOverview(this.period(), loc, this.periodMode()),
         this.targetApi.list('active'),
-        this.carbonApi.getCalculations(this.period(), { periodMode: this.periodMode() })
+        this.carbonApi.getCalculations(this.period(), { periodMode: this.periodMode(), locationId: loc })
       ]);
 
       const byName = (name: string) => allCalcs.filter((c) => c.data_point_name === name);
@@ -456,7 +467,11 @@ export class FlowDiagramComponent implements OnInit {
 
     if (node.sourceName) {
       try {
-        const evidence = await this.carbonApi.getCalculations(this.period(), { dataPointName: node.sourceName, periodMode: this.periodMode() });
+        const evidence = await this.carbonApi.getCalculations(this.period(), {
+          dataPointName: node.sourceName,
+          periodMode: this.periodMode(),
+          locationId: this.locationId() || undefined
+        });
         this.detail.update((d) => (d ? { ...d, loading: false, evidence } : d));
       } catch {
         this.detail.update((d) => (d ? { ...d, loading: false } : d));

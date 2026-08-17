@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
-import { ApiService } from '../../core/api.service';
+import { AdminLocation, ApiService } from '../../core/api.service';
 import { EntriesApiService, EntryCategory } from '../../core/entries-api.service';
 import { SupabaseService } from '../../core/supabase.service';
 import { ApprovalQueueComponent } from './approval-queue/approval-queue.component';
@@ -16,7 +17,7 @@ function currentMonthValue(): string {
 @Component({
   selector: 'app-data-entry',
   standalone: true,
-  imports: [CategoryPickerComponent, EntryFormComponent, ApprovalQueueComponent, BulkUploadWizardComponent],
+  imports: [FormsModule, CategoryPickerComponent, EntryFormComponent, ApprovalQueueComponent, BulkUploadWizardComponent],
   templateUrl: './data-entry.component.html',
   styleUrl: './data-entry.component.css'
 })
@@ -37,6 +38,7 @@ export class DataEntryComponent implements OnInit {
   activeTab = signal<'submit' | 'approve'>('submit');
   categories = signal<EntryCategory[]>([]);
   selectedCategory = signal<EntryCategory | null>(null);
+  locations = signal<AdminLocation[]>([]);
   locationId = signal('');
   initialPeriod = signal<string | null>(null);
   showBulkUploadAll = signal(false);
@@ -52,6 +54,7 @@ export class DataEntryComponent implements OnInit {
 
       const [categories, locations] = await Promise.all([this.entriesApi.listCategories(), this.api.listLocations()]);
       this.categories.set(categories);
+      this.locations.set(locations);
       if (locations.length) {
         this.locationId.set(locations[0].id);
       }

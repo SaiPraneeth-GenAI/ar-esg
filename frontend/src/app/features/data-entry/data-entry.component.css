@@ -21,6 +21,32 @@
   margin: 0.25rem 0 1.5rem;
 }
 
+.header-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.85rem;
+  flex-shrink: 0;
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #667085;
+}
+
+.control select {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  min-width: 160px;
+  color: #101828;
+}
+
 .primary-btn {
   background: #0e2c21;
   color: #fff;

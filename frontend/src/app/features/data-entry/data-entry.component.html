@@ -4,9 +4,21 @@
       <h1>Data Entry</h1>
       <p class="subtitle">Log monthly readings, or review what's waiting on your approval</p>
     </div>
-    @if (canSubmit() && !selectedCategory() && !showBulkUploadAll() && activeTab() === 'submit') {
-      <button type="button" class="primary-btn" (click)="openBulkUploadAll()">⇪ Bulk upload</button>
-    }
+    <div class="header-actions">
+      @if (locations().length) {
+        <label class="control">
+          <span class="control-label">Site</span>
+          <select [ngModel]="locationId()" (ngModelChange)="locationId.set($event)">
+            @for (loc of locations(); track loc.id) {
+              <option [value]="loc.id">{{ loc.name }}</option>
+            }
+          </select>
+        </label>
+      }
+      @if (canSubmit() && !selectedCategory() && !showBulkUploadAll() && activeTab() === 'submit') {
+        <button type="button" class="primary-btn" (click)="openBulkUploadAll()">⇪ Bulk upload</button>
+      }
+    </div>
   </header>
 
   @if (errorMessage()) {

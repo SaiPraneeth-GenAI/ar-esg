@@ -1,7 +1,7 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, ElementRef, Input, OnChanges, SimpleChanges, ViewChild, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { CarbonApiService, CarbonOverview, CarbonOverviewSource, EmissionCalculationOut, TargetComparison } from '../../../core/carbon-api.service';
+import { CarbonApiService, CarbonOverview, CarbonOverviewSource, EmissionCalculationOut, TargetComparison, TargetStatusOut } from '../../../core/carbon-api.service';
 import { PeriodMode, formatBucketLabel, priorPeriodLabel, priorYearLabel, showsPriorPeriod } from '../../../core/intensity-api.service';
 import { PieChartComponent, PieSlice } from '../../../shared/pie-chart/pie-chart.component';
 import { ChartPoint, ChartSeriesDef, RichTrendChartComponent } from '../../../shared/rich-trend-chart/rich-trend-chart.component';
@@ -342,6 +342,27 @@ export class CarbonOverviewComponent implements OnChanges {
       default:
         return 'status-neutral';
     }
+  }
+
+  /** Position of the actual and the goal on a shared bar, scaled to whichever
+   * of the two is larger plus headroom -- lets the chip show "how close" at a
+   * glance instead of spelling out two numbers side by side. */
+  private targetBarScale(t: TargetStatusOut): number {
+    return Math.max(t.target_value, t.actual ?? 0, 0.0001) * 1.15;
+  }
+
+  targetFillPct(t: TargetStatusOut): number {
+    if (t.actual === null) return 0;
+    return Math.min((t.actual / this.targetBarScale(t)) * 100, 100);
+  }
+
+  targetGoalPct(t: TargetStatusOut): number {
+    return Math.min((t.target_value / this.targetBarScale(t)) * 100, 100);
+  }
+
+  targetTooltip(t: TargetStatusOut): string {
+    const actualStr = t.actual !== null ? t.actual.toFixed(2) : 'no data yet';
+    return `${t.label}: ${actualStr} vs goal ${t.target_value.toFixed(2)} ${t.unit} -- ${t.status}`;
   }
 
   /** The whole card is colored by target status, not a small dot -- On

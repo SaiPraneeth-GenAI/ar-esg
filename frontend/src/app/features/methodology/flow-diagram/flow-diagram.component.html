@@ -21,6 +21,14 @@
           }
         </select>
       }
+      @if (locations().length) {
+        <select class="period-input site-input" [ngModel]="locationId()" (ngModelChange)="setLocation($event)" aria-label="Site">
+          <option value="">All plants</option>
+          @for (loc of locations(); track loc.id) {
+            <option [value]="loc.id">{{ loc.name }}</option>
+          }
+        </select>
+      }
     </div>
     <div class="toolbar-group">
       <button type="button" class="tool-btn" (click)="play()" [disabled]="playing()">

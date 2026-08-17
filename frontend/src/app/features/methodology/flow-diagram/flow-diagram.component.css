@@ -64,6 +64,10 @@
   background: #fff;
 }
 
+.site-input {
+  margin-left: 0.6rem;
+}
+
 .tool-btn {
   background: #0e2c21;
   color: #fff;

@@ -73,6 +73,16 @@
   transition: stroke-dasharray 0.3s ease;
 }
 
+.donut-svg g circle {
+  transition: stroke-width 0.15s ease, filter 0.15s ease;
+  cursor: pointer;
+}
+
+.donut-svg g circle:hover {
+  stroke-width: 19;
+  filter: drop-shadow(0 3px 5px rgba(16, 24, 40, 0.3));
+}
+
 .donut-center {
   position: absolute;
   inset: 0;
