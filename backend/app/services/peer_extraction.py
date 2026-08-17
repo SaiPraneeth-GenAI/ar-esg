@@ -36,8 +36,10 @@ _KEYWORDS = [
     "essential indicators", "employee well-being", "environment",
 ]
 
-_MAX_PAGES = 15  # keeps a single vision call fast and cheap
-_RENDER_DPI = 150
+_MAX_PAGES = 8  # this service runs on a 512MB instance -- each rendered
+# page is held in memory simultaneously (they all go in one vision call),
+# so this and _RENDER_DPI directly trade off against an OOM kill.
+_RENDER_DPI = 110
 
 
 def select_relevant_pages(pdf_bytes: bytes) -> list[bytes]:
@@ -60,6 +62,7 @@ def select_relevant_pages(pdf_bytes: bytes) -> list[bytes]:
     for i in indices:
         pix = doc[i].get_pixmap(matrix=matrix)
         images.append(pix.tobytes("png"))
+        pix = None  # release before rendering the next page
     doc.close()
     return images
 
@@ -89,7 +92,7 @@ def extract_metrics_via_ai(page_images: list[bytes]) -> dict[str, float | None]:
     content: list[dict] = [{"type": "text", "text": prompt}]
     for img in page_images:
         b64 = base64.b64encode(img).decode()
-        content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "high"}})
+        content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "auto"}})
 
     schema = {
         "type": "object",

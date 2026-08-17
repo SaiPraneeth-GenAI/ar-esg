@@ -59,6 +59,13 @@ class PeerExtractOut(BaseModel):
     rows: list[PeerExtractRow]
 
 
+class PeerExtractJobOut(BaseModel):
+    job_id: str
+    status: str  # "processing" | "done" | "error"
+    result: PeerExtractOut | None = None
+    error: str | None = None
+
+
 class PeerCompareYearMetric(BaseModel):
     key: str
     label: str

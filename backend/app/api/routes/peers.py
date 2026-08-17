@@ -9,6 +9,7 @@ registry uses, so they plug directly into the comparison machinery. This is
 a per-year snapshot comparison (not a trend) -- comparison periods are
 always the peer's full reporting year, stored as Jan 1 of that year."""
 
+import threading
 import uuid
 from datetime import date, datetime, timezone
 
@@ -20,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.api.routes.charts import CHARTABLE_METRICS, get_metric_data
 from app.core.auth import CurrentUser, require_roles
 from app.db.models import PeerCompany, PeerData, User
-from app.db.session import get_db
+from app.db.session import SessionLocal, get_db
 from app.schemas.peers import (
     PeerCompanyCreate,
     PeerCompanyOut,
@@ -29,6 +30,7 @@ from app.schemas.peers import (
     PeerCompareYearOut,
     PeerDataCreate,
     PeerDataOut,
+    PeerExtractJobOut,
     PeerExtractOut,
     PeerExtractRow,
 )
@@ -38,6 +40,16 @@ router = APIRouter(prefix="/peers", tags=["peers"])
 
 CONFIDENCE_LEVELS = ("verified", "self_reported", "estimated")
 DEFAULT_PEER_NAME = "Exide Industries"
+
+# PDF extraction (page rendering + a vision AI call over ~15 images) can
+# comfortably run past a minute, long enough for a browser or intermediate
+# proxy to drop a single held-open request. So extraction runs as a
+# fire-and-poll background job instead of one long synchronous call.
+# In-process only (fine for this single-instance service) -- a job started
+# just before a redeploy would need to be re-run, same as any in-flight
+# request would.
+_EXTRACT_JOBS: dict[str, dict] = {}
+_EXTRACT_JOBS_LOCK = threading.Lock()
 
 
 def _get_owned_company(db: Session, current: CurrentUser, company_id: uuid.UUID) -> PeerCompany:
@@ -130,7 +142,34 @@ def _data_out(db: Session, row: PeerData) -> PeerDataOut:
     )
 
 
-@router.post("/{company_id}/extract", response_model=PeerExtractOut)
+def _run_extraction_job(job_id: str, pdf_bytes: bytes, year: int, company_id: uuid.UUID, company_name: str, filename: str, user: CurrentUser) -> None:
+    try:
+        page_images = select_relevant_pages(pdf_bytes)
+        extracted = extract_metrics_via_ai(page_images)
+        db = SessionLocal()
+        try:
+            rows = [
+                PeerExtractRow(
+                    key=key,
+                    label=spec["label"],
+                    unit=spec["unit"],
+                    group=spec["group"],
+                    amara_raja_value=_self_year_value(key, year, user, db),
+                    peer_value=extracted.get(key),
+                )
+                for key, spec in CHARTABLE_METRICS.items()
+            ]
+        finally:
+            db.close()
+        result = PeerExtractOut(peer_company_id=company_id, peer_company_name=company_name, year=year, source_filename=filename, rows=rows)
+        with _EXTRACT_JOBS_LOCK:
+            _EXTRACT_JOBS[job_id] = {"status": "done", "result": result}
+    except Exception as exc:
+        with _EXTRACT_JOBS_LOCK:
+            _EXTRACT_JOBS[job_id] = {"status": "error", "error": str(exc) or "Could not read this PDF."}
+
+
+@router.post("/{company_id}/extract", response_model=PeerExtractJobOut)
 async def extract_peer_pdf(
     company_id: uuid.UUID,
     year: int = Form(...),
@@ -139,29 +178,48 @@ async def extract_peer_pdf(
     db: Session = Depends(get_db),
 ):
     """Upload one year's BRSR/annual report PDF; GPT-4o-mini extracts the
-    comparable figures. Returns a review row per metric (Amara Raja's own
-    value alongside the extracted peer value) -- nothing is saved yet, the
-    caller confirms/edits and calls POST /{company_id}/data to save."""
+    comparable figures. Rendering ~15 pages and running a vision call
+    routinely takes over a minute, long enough for a browser or proxy to
+    drop a single held-open request -- so this starts the work in a
+    background thread and returns a job id immediately; the caller polls
+    GET /{company_id}/extract/{job_id} for the result. Nothing is saved
+    yet either way -- the caller confirms/edits and calls
+    POST /{company_id}/data to save."""
     company = _get_owned_company(db, current, company_id)
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(status_code=422, detail="Upload a PDF file.")
 
     pdf_bytes = await file.read()
-    page_images = select_relevant_pages(pdf_bytes)
-    extracted = extract_metrics_via_ai(page_images)
+    job_id = str(uuid.uuid4())
+    with _EXTRACT_JOBS_LOCK:
+        _EXTRACT_JOBS[job_id] = {"status": "processing"}
 
-    rows = [
-        PeerExtractRow(
-            key=key,
-            label=spec["label"],
-            unit=spec["unit"],
-            group=spec["group"],
-            amara_raja_value=_self_year_value(key, year, current, db),
-            peer_value=extracted.get(key),
-        )
-        for key, spec in CHARTABLE_METRICS.items()
-    ]
-    return PeerExtractOut(peer_company_id=company.id, peer_company_name=company.name, year=year, source_filename=file.filename or "report.pdf", rows=rows)
+    user_snapshot = CurrentUser(id=current.id, email=current.email, roles=current.roles, tenant_id=current.tenant_id)
+    threading.Thread(
+        target=_run_extraction_job,
+        args=(job_id, pdf_bytes, year, company.id, company.name, file.filename or "report.pdf", user_snapshot),
+        daemon=True,
+    ).start()
+    return PeerExtractJobOut(job_id=job_id, status="processing")
+
+
+@router.get("/{company_id}/extract/{job_id}", response_model=PeerExtractJobOut)
+def get_extraction_job(
+    company_id: uuid.UUID,
+    job_id: str,
+    current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
+    db: Session = Depends(get_db),
+):
+    _get_owned_company(db, current, company_id)
+    with _EXTRACT_JOBS_LOCK:
+        job = _EXTRACT_JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Extraction job not found -- it may have expired after a server restart, try uploading again.")
+    if job["status"] == "done":
+        return PeerExtractJobOut(job_id=job_id, status="done", result=job["result"])
+    if job["status"] == "error":
+        return PeerExtractJobOut(job_id=job_id, status="error", error=job["error"])
+    return PeerExtractJobOut(job_id=job_id, status="processing")
 
 
 @router.post("/{company_id}/data", response_model=PeerDataOut)
