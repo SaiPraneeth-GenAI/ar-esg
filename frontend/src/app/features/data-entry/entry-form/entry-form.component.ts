@@ -108,8 +108,19 @@ export class EntryFormComponent implements OnChanges {
     }
   }
 
+  /** Only "Submitted" (awaiting a decision) is locked -- editing an
+   * Approved value is allowed, but see onFieldBlur/flushPendingEdits:
+   * the backend sends it back to Draft when that happens, so a
+   * correction always needs a fresh Submit -> Approve before it can
+   * affect any calculated figure. */
   isLocked(field: FieldState): boolean {
-    return field.entry?.status === 'Submitted' || field.entry?.status === 'Approved';
+    return field.entry?.status === 'Submitted';
+  }
+
+  /** True once an edit to a currently-Approved value has actually been
+   * typed -- used to warn before the field reverts to Draft on save. */
+  editingApproved(field: FieldState): boolean {
+    return field.entry?.status === 'Approved';
   }
 
   updateField(index: number, patch: Partial<FieldState>): void {

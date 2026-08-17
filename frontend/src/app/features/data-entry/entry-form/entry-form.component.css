@@ -339,6 +339,12 @@ input[type='number']:focus {
   color: #344054;
 }
 
+.approved-edit-hint {
+  margin: -0.3rem 0 0.6rem;
+  font-size: 0.76rem;
+  color: #b54708;
+}
+
 .link-btn {
   background: none;
   border: none;

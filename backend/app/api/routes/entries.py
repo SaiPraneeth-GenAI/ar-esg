@@ -300,8 +300,8 @@ def _upsert_one(
         .filter(Entry.data_point_id == data_point_id, Entry.location_id == location_id, Entry.period == period)
         .first()
     )
-    if entry is not None and entry.status not in ("Draft", "Rejected"):
-        raise HTTPException(status_code=409, detail=f"Entry for this field is already {entry.status.lower()}")
+    if entry is not None and entry.status == "Submitted":
+        raise HTTPException(status_code=409, detail="Entry for this field is already submitted and awaiting approval")
 
     if entry is None:
         entry = Entry(
@@ -321,15 +321,24 @@ def _upsert_one(
         write_audit(db, entry.id, current.email, audit_action or "created", None, str(value))
     else:
         old_value = str(entry.value) if entry.value is not None else None
+        was_approved = entry.status == "Approved"
         entry.value = value
         entry.note = note
         entry.meter_id = meter_id
         entry.method_of_entry = method_of_entry
-        entry.status = target_status
+        # Editing an already-approved entry sends it back to Draft rather
+        # than silently rewriting an approved figure in place -- the
+        # correction has to go through Submit -> Approve again before it
+        # can affect any calculated snapshot, dashboard figure, or target
+        # baseline (rule #10: never a live sum, calculation snapshots
+        # only). The prior approved calculation stays exactly as it was
+        # until that happens.
+        entry.status = "Draft" if was_approved else target_status
         entry.submitted_by = current.id
         db.commit()
         db.refresh(entry)
-        write_audit(db, entry.id, current.email, audit_action or "edited", old_value, str(value))
+        edit_action = "edited_after_approval" if was_approved else (audit_action or "edited")
+        write_audit(db, entry.id, current.email, edit_action, old_value, str(value))
 
     return entry
 
@@ -761,7 +770,7 @@ def bulk_import(
             .filter(Entry.data_point_id == dp.id, Entry.location_id == payload.location_id, Entry.period == period)
             .first()
         )
-        if existing is not None and existing.status not in ("Draft", "Rejected"):
+        if existing is not None and existing.status == "Submitted":
             results.append(
                 BulkImportRowResult(
                     row_index=row.row_index,
@@ -769,7 +778,7 @@ def bulk_import(
                     data_point_name=row.data_point_name,
                     period=period,
                     value=value,
-                    message=f"An entry for this field and period is already {existing.status.lower()}",
+                    message="An entry for this field and period is already submitted and awaiting approval",
                 )
             )
             continue
