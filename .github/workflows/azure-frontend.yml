@@ -1,0 +1,43 @@
+name: Deploy frontend to Azure Static Web Apps
+
+# Manual trigger only, on purpose -- see azure-backend.yml for why.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # set-env.js (already used by Render's build) writes environment.prod.ts
+      # from these same three values -- keeping the Angular app's runtime
+      # config identical in shape regardless of which host built it.
+      - name: Build (production)
+        working-directory: frontend
+        env:
+          SUPABASE_URL: ${{ secrets.FRONTEND_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.FRONTEND_SUPABASE_ANON_KEY }}
+          API_BASE_URL: ${{ vars.AZURE_BACKEND_URL }}
+        run: npm run build:prod
+
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: frontend/dist/frontend/browser
+          skip_app_build: true

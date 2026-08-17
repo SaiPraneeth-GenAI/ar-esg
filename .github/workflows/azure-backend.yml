@@ -1,0 +1,48 @@
+name: Deploy backend to Azure Container Apps
+
+# Manual trigger only, on purpose -- this is prep for a deliberate cutover,
+# not an auto-deploy-on-push pipeline like the current Render setup. Flip
+# the `on:` block to `push: { branches: [main], paths: ['backend/**'] }`
+# once Azure is the system of record and Render is being retired.
+on:
+  workflow_dispatch: {}
+
+env:
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  CONTAINER_APP_NAME: ${{ vars.AZURE_CONTAINER_APP_NAME }}
+  ACR_LOGIN_SERVER: ${{ vars.AZURE_ACR_LOGIN_SERVER }}
+  IMAGE_NAME: envigo-backend
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        run: az acr login --name $(echo "$ACR_LOGIN_SERVER" | cut -d'.' -f1)
+
+      - name: Build and push image
+        working-directory: backend
+        run: |
+          IMAGE_TAG="${ACR_LOGIN_SERVER}/${IMAGE_NAME}:${{ github.sha }}"
+          docker build -t "$IMAGE_TAG" -t "${ACR_LOGIN_SERVER}/${IMAGE_NAME}:latest" .
+          docker push "$IMAGE_TAG"
+          docker push "${ACR_LOGIN_SERVER}/${IMAGE_NAME}:latest"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+
+      - name: Deploy new image to Container App
+        run: |
+          az containerapp update \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "$IMAGE_TAG"
