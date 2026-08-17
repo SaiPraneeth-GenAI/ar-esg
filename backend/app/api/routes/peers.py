@@ -9,7 +9,9 @@ registry uses, so they plug directly into the comparison machinery. This is
 a per-year snapshot comparison (not a trend) -- comparison periods are
 always the peer's full reporting year, stored as Jan 1 of that year."""
 
+import logging
 import threading
+import time
 import uuid
 from datetime import date, datetime, timezone
 
@@ -18,7 +20,10 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.routes.charts import CHARTABLE_METRICS, get_metric_data
+from app.api.routes.carbon import carbon_trend
+from app.api.routes.charts import CHARTABLE_METRICS
+from app.api.routes.intensity import intensity_trend
+from app.api.routes.safety import safety_trend
 from app.core.auth import CurrentUser, require_roles
 from app.db.models import PeerCompany, PeerData, User
 from app.db.session import SessionLocal, get_db
@@ -37,6 +42,7 @@ from app.schemas.peers import (
 from app.services.peer_extraction import extract_metrics_from_pdf
 
 router = APIRouter(prefix="/peers", tags=["peers"])
+logger = logging.getLogger("peers")
 
 CONFIDENCE_LEVELS = ("verified", "self_reported", "estimated")
 DEFAULT_PEER_NAME = "Exide Industries"
@@ -67,12 +73,38 @@ def _validate_metrics(metrics: dict[str, float]) -> None:
         raise HTTPException(status_code=422, detail=f"Unknown metric(s): {', '.join(unknown)}")
 
 
-def _self_year_value(key: str, year: int, current: CurrentUser, db: Session) -> float | None:
-    """Amara Raja's own full-calendar-year figure for `key` -- the same
-    computation the dashboard uses, anchored at December so the 'ytd' bucket
-    covers the whole year rather than a partial one."""
-    data = get_metric_data(metric=key, period=date(year, 12, 1), period_mode="ytd", months=1, location_id=None, current=current, db=db)
-    return data.points[-1].value if data.points else None
+def _self_year_values_batch(year: int, current: CurrentUser, db: Session) -> dict[str, float | None]:
+    """Amara Raja's own full-calendar-year figure for all 16
+    CHARTABLE_METRICS -- the same computation the dashboard uses, anchored
+    at December so the 'ytd' bucket covers the whole year rather than a
+    partial one. Calls each of the three underlying trend functions
+    (carbon/intensity/safety) exactly ONCE and reads every metric that
+    shares that source off the single resulting row -- calling
+    get_metric_data() once per metric key independently re-ran the same
+    trend computation (and its DB queries) up to 7 times for metrics that
+    share one source, which is what was actually behind the multi-second
+    delay after PDF extraction itself had already finished."""
+    started_at = time.monotonic()
+    period = date(year, 12, 1)
+
+    carbon_rows = carbon_trend(period=period, months=1, location_id=None, period_mode="ytd", current=current, db=db)
+    carbon_row = carbon_rows[-1] if carbon_rows else None
+    intensity_rows = intensity_trend(period=period, months=1, location_id=None, period_mode="ytd", current=current, db=db)
+    intensity_row = intensity_rows[-1] if intensity_rows else None
+    safety_rows = safety_trend(period=period, months=1, location_id=None, period_mode="ytd", current=current, db=db)
+    safety_row = safety_rows[-1] if safety_rows else None
+
+    values: dict[str, float | None] = {}
+    for key, spec in CHARTABLE_METRICS.items():
+        if spec["source"] == "carbon":
+            values[key] = getattr(carbon_row, spec["field"]) if carbon_row else None
+        elif spec["source"] == "intensity":
+            values[key] = getattr(intensity_row, spec["field"]) if intensity_row else None
+        else:
+            values[key] = safety_row.values.get(spec["field"]) if safety_row else None
+
+    logger.info("peers self_year_values_batch year=%s elapsed_seconds=%s", year, round(time.monotonic() - started_at, 2))
+    return values
 
 
 @router.get("/default-company", response_model=PeerCompanyOut)
@@ -147,13 +179,14 @@ def _run_extraction_job(job_id: str, pdf_bytes: bytes, year: int, company_id: uu
         extracted, elapsed_seconds = extract_metrics_from_pdf(pdf_bytes)
         db = SessionLocal()
         try:
+            self_values = _self_year_values_batch(year, user, db)
             rows = [
                 PeerExtractRow(
                     key=key,
                     label=spec["label"],
                     unit=spec["unit"],
                     group=spec["group"],
-                    amara_raja_value=_self_year_value(key, year, user, db),
+                    amara_raja_value=self_values.get(key),
                     peer_value=extracted.get(key),
                 )
                 for key, spec in CHARTABLE_METRICS.items()
@@ -311,6 +344,7 @@ def compare_year(
     if row is None:
         raise HTTPException(status_code=404, detail=f"No peer data saved for {year} yet.")
 
+    self_values = _self_year_values_batch(year, current, db)
     groups: dict[str, list[PeerCompareYearMetric]] = {}
     for key, spec in CHARTABLE_METRICS.items():
         groups.setdefault(spec["group"], []).append(
@@ -318,7 +352,7 @@ def compare_year(
                 key=key,
                 label=spec["label"],
                 unit=spec["unit"],
-                amara_raja_value=_self_year_value(key, year, current, db),
+                amara_raja_value=self_values.get(key),
                 peer_value=row.metrics.get(key),
             )
         )
