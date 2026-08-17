@@ -35,12 +35,21 @@
             <div class="banner error">{{ peerApi.extractError() }}</div>
           }
 
-          @if (peerApi.extracting()) {
+          @if (peerApi.uploading()) {
+            <div class="reading-status">
+              <div class="upload-progress-ring">{{ peerApi.uploadProgressPct() }}%</div>
+              <div>
+                <span class="reading-title">Uploading {{ peerApi.extractFileName() }}…</span>
+                <p class="reading-hint">Sending the file to be read -- large reports can take a minute or two depending on your connection.</p>
+                <div class="upload-progress-bar"><div class="upload-progress-fill" [style.width.%]="peerApi.uploadProgressPct()"></div></div>
+              </div>
+            </div>
+          } @else if (peerApi.extracting()) {
             <div class="reading-status">
               <span class="spinner"></span>
               <div>
                 <span class="reading-title">Reading {{ peerApi.extractFileName() }}… {{ peerApi.extractElapsedSeconds() }}s</span>
-                <p class="reading-hint">This runs in the background -- feel free to switch tabs and come back, it'll keep going.</p>
+                <p class="reading-hint">Upload complete -- AI is reading the report now. This runs in the background -- feel free to switch tabs and come back.</p>
               </div>
             </div>
           } @else {

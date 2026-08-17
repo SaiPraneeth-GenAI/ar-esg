@@ -252,6 +252,39 @@
   }
 }
 
+.upload-progress-ring {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #127a45;
+  border: 3px solid #eaecf0;
+  border-top-color: #127a45;
+  font-variant-numeric: tabular-nums;
+}
+
+.upload-progress-bar {
+  margin-top: 0.5rem;
+  width: 100%;
+  max-width: 320px;
+  height: 6px;
+  border-radius: 999px;
+  background: #eaecf0;
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  background: #127a45;
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
 /* Review table */
 
 .review-group {

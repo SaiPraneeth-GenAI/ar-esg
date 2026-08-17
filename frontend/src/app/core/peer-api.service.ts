@@ -129,10 +129,20 @@ export class PeerApiService {
 
   // Extraction state lives here (a root-provided singleton), not on the
   // component, so it survives the user navigating to another tab and back.
-  // The server-side work (rendering ~8 pages and a vision AI call) runs as
-  // a background job there too -- this just starts it and polls, so
-  // there's no single long-held HTTP request for a flaky connection or a
-  // proxy timeout to kill.
+  // The server-side work runs as a background job there too -- this just
+  // starts it and polls, so there's no single long-held HTTP request for
+  // a flaky connection or a proxy timeout to kill.
+  //
+  // Two distinct phases, tracked separately and never conflated: uploading
+  // (the browser sending the file over the user's own connection -- for a
+  // ~30MB BRSR PDF this can genuinely take 30-60+ seconds on an average
+  // connection, and no backend fix changes that) and extracting (the
+  // server actually reading it, which after a data-race with a bad
+  // deploy is confirmed independently at ~10-15s). Showing one merged
+  // "Reading report... Xs" timer across both made a slow home connection
+  // look identical to a slow extraction, which it never was.
+  uploading = signal(false);
+  uploadProgressPct = signal(0);
   extracting = signal(false);
   extractError = signal('');
   extractResult = signal<PeerExtractResult | null>(null);
@@ -163,35 +173,69 @@ export class PeerApiService {
   }
 
   async startExtraction(companyId: string, file: File, year: number): Promise<void> {
-    this.extracting.set(true);
+    this.uploading.set(true);
+    this.uploadProgressPct.set(0);
+    this.extracting.set(false);
     this.extractError.set('');
     this.extractResult.set(null);
     this.extractFileName.set(file.name);
-    const startedAt = Date.now();
-    this.startElapsedTimer(startedAt);
 
     try {
       const { data } = await this.supabase.client.auth.getSession();
       const form = new FormData();
       form.append('file', file);
       form.append('year', String(year));
-      const response = await fetch(`${environment.apiBaseUrl}/peers/${companyId}/extract`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${data.session?.access_token ?? ''}` },
-        body: form
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new Error(body?.detail ?? 'Could not extract this PDF.');
-      }
-      const job: PeerExtractJob = await response.json();
+      const job = await this.uploadWithProgress(companyId, form, data.session?.access_token ?? '');
+
+      this.uploading.set(false);
+      this.extracting.set(true);
+      const startedAt = Date.now(); // processing timer starts once the upload itself is done
+      this.startElapsedTimer(startedAt);
+
       const stored: StoredExtractJob = { jobId: job.job_id, companyId, fileName: file.name, startedAt };
       localStorage.setItem(EXTRACT_JOB_STORAGE_KEY, JSON.stringify(stored));
       this.pollJob(companyId, job.job_id);
     } catch (err: any) {
+      this.uploading.set(false);
       this.extractError.set(err?.message ?? 'Could not read this PDF.');
       this.finishJob();
     }
+  }
+
+  /** fetch() doesn't expose upload progress -- XMLHttpRequest is the only
+   * browser API that does, needed here specifically because a ~30MB PDF's
+   * upload time is the dominant, user-visible cost on an average
+   * connection, and showing nothing for 30-60s reads as broken. */
+  private uploadWithProgress(companyId: string, form: FormData, token: string): Promise<PeerExtractJob> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${environment.apiBaseUrl}/peers/${companyId}/extract`);
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          this.uploadProgressPct.set(Math.round((event.loaded / event.total) * 100));
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch {
+            reject(new Error('Unexpected response from the server.'));
+          }
+          return;
+        }
+        let detail = 'Could not extract this PDF.';
+        try {
+          detail = JSON.parse(xhr.responseText)?.detail ?? detail;
+        } catch {
+          // response wasn't JSON -- keep the default message
+        }
+        reject(new Error(detail));
+      };
+      xhr.onerror = () => reject(new Error('Upload failed -- check your connection and try again.'));
+      xhr.send(form);
+    });
   }
 
   private pollJob(companyId: string, jobId: string): void {
@@ -220,6 +264,7 @@ export class PeerApiService {
   }
 
   private finishJob(): void {
+    this.uploading.set(false);
     this.extracting.set(false);
     if (this.extractTimer) {
       clearInterval(this.extractTimer);
@@ -234,6 +279,7 @@ export class PeerApiService {
 
   clearExtraction(): void {
     this.finishJob();
+    this.uploadProgressPct.set(0);
     this.extractError.set('');
     this.extractResult.set(null);
     this.extractFileName.set('');
