@@ -30,6 +30,17 @@ logger = logging.getLogger("peer_extraction")
 
 _CHARS_PER_CHUNK = 150_000  # ~35-40k tokens/chunk, comfortably under gpt-4o-mini's context
 _MAX_CHUNKS = 14  # safety valve on a pathologically large upload -- ~2.1M chars / a ~500+ page document
+# find_tables() (called once per page, unconditionally, to catch dense
+# tables) is genuinely slow on a page with real table structure -- across
+# a 300+ page annual report full of financial-statement tables, that adds
+# up to minutes on this instance's limited CPU, and it all runs BEFORE any
+# OpenAI call (and therefore before _CHUNK_TIMEOUT_SECONDS/
+# _JOB_TIMEOUT_SECONDS even apply). The old char-budget check in the
+# chunking loop below only breaks AFTER a chunk boundary is flushed, so a
+# document whose total text stays under _MAX_CHUNKS x _CHARS_PER_CHUNK
+# (this one's did) never hit it and every page got scanned regardless.
+# This caps pages examined directly, checked BEFORE the expensive call.
+_MAX_PAGES_TO_SCAN = 60  # generous for any real BRSR section (typically 20-50 pages), while bounding worst-case chunking time
 # Fires several chunks at once rather than one at a time -- wall-clock
 # time is then close to a batch's latency, not the sum of every chunk.
 # Kept well below _MAX_CHUNKS (rather than one worker per chunk) since
@@ -81,18 +92,21 @@ def _format_page(page: "fitz.Page", page_number: int) -> str:
     return "\n".join(parts)
 
 
-def _chunk_document(pdf_bytes: bytes) -> tuple[list[str], int]:
-    """Every page's text/tables, grouped into chunks of roughly
+def _chunk_document(pdf_bytes: bytes) -> tuple[list[str], int, int]:
+    """Every scanned page's text/tables, grouped into chunks of roughly
     _CHARS_PER_CHUNK characters each -- a chunk boundary never splits a
-    single page's content. Returns (chunks, total_page_count)."""
+    single page's content. Returns (chunks, total_page_count, pages_scanned)."""
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     total_pages = doc.page_count
+    pages_to_scan = min(total_pages, _MAX_PAGES_TO_SCAN)
 
     chunks: list[str] = []
     current_parts: list[str] = []
     current_len = 0
-    for i, page in enumerate(doc):
-        page_text = _format_page(page, i + 1)
+    pages_scanned = 0
+    for i in range(pages_to_scan):
+        page_text = _format_page(doc[i], i + 1)
+        pages_scanned += 1
         if current_parts and current_len + len(page_text) > _CHARS_PER_CHUNK:
             chunks.append("\n\n".join(current_parts))
             current_parts = []
@@ -104,7 +118,7 @@ def _chunk_document(pdf_bytes: bytes) -> tuple[list[str], int]:
     if current_parts and len(chunks) < _MAX_CHUNKS:
         chunks.append("\n\n".join(current_parts))
     doc.close()
-    return chunks, total_pages
+    return chunks, total_pages, pages_scanned
 
 
 def _call_ai(text: str) -> tuple[dict[str, float | None], dict]:
@@ -175,7 +189,13 @@ def extract_metrics_from_pdf(pdf_bytes: bytes) -> tuple[dict[str, float | None],
         logger.info("peer_extraction CACHE_HIT hash=%s elapsed_seconds=%s -- 0 LLM calls", doc_hash[:12], elapsed)
         return cached, elapsed
 
-    chunks, total_pages = _chunk_document(pdf_bytes)
+    chunking_started_at = time.monotonic()
+    chunks, total_pages, pages_scanned = _chunk_document(pdf_bytes)
+    chunking_seconds = round(time.monotonic() - chunking_started_at, 1)
+    logger.info(
+        "peer_extraction hash=%s CHUNKING_DONE seconds=%s total_pages=%s pages_scanned=%s chunks=%s",
+        doc_hash[:12], chunking_seconds, total_pages, pages_scanned, len(chunks),
+    )
     chars_sent = sum(len(c) for c in chunks)
 
     merged: dict[str, float | None] = {key: None for key in CHARTABLE_METRICS}
@@ -220,9 +240,11 @@ def extract_metrics_from_pdf(pdf_bytes: bytes) -> tuple[dict[str, float | None],
     elapsed = round(time.monotonic() - started_at, 1)
 
     logger.info(
-        "peer_extraction hash=%s elapsed_seconds=%s total_pages=%s chunks=%s billed_chunks=%s timed_out_chunks=%s chars_sent=%s "
+        "peer_extraction hash=%s elapsed_seconds=%s chunking_seconds=%s total_pages=%s pages_scanned=%s chunks=%s "
+        "billed_chunks=%s timed_out_chunks=%s chars_sent=%s "
         "input_tokens=%s output_tokens=%s total_tokens=%s est_cost_usd=%s found_count=%s/%s",
-        doc_hash[:12], elapsed, total_pages, len(chunks), billed_chunks, timed_out_chunks, chars_sent,
+        doc_hash[:12], elapsed, chunking_seconds, total_pages, pages_scanned, len(chunks),
+        billed_chunks, timed_out_chunks, chars_sent,
         total_input_tokens, total_output_tokens, total_tokens, est_cost, found_count, len(merged),
     )
 
