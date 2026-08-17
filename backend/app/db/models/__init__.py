@@ -3,6 +3,7 @@ from app.db.models.chart import SavedChart
 from app.db.models.config_tenancy import Category, DataPoint, Location, Tenant, User
 from app.db.models.intensity import RevenueMapping
 from app.db.models.mapping_template import MappingTemplate
+from app.db.models.peer import PeerCompany, PeerData
 from app.db.models.output import (
     ComplianceReport,
     EmailLog,
@@ -45,4 +46,6 @@ __all__ = [
     "EmissionTarget",
     "RevenueMapping",
     "SavedChart",
+    "PeerCompany",
+    "PeerData",
 ]

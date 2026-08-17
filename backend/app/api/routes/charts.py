@@ -233,10 +233,16 @@ def _validate_config(config) -> None:
         if config.dimension not in BREAKDOWN_DIMENSIONS:
             raise HTTPException(status_code=422, detail="Unknown breakdown dimension.")
     elif config.question_type == "comparison":
-        if not config.metrics or not (2 <= len(config.metrics) <= 6):
-            raise HTTPException(status_code=422, detail="Pick between 2 and 6 metrics to compare.")
-        if any(m not in CHARTABLE_METRICS for m in config.metrics):
-            raise HTTPException(status_code=422, detail="Unknown metric.")
+        if config.comparison_mode == "peers":
+            if config.metric not in CHARTABLE_METRICS:
+                raise HTTPException(status_code=422, detail="Unknown metric.")
+            if not config.compare_peer_ids:
+                raise HTTPException(status_code=422, detail="Pick at least one peer to compare against.")
+        else:
+            if not config.metrics or not (2 <= len(config.metrics) <= 6):
+                raise HTTPException(status_code=422, detail="Pick between 2 and 6 metrics to compare.")
+            if any(m not in CHARTABLE_METRICS for m in config.metrics):
+                raise HTTPException(status_code=422, detail="Unknown metric.")
     else:
         raise HTTPException(status_code=422, detail="Unknown question type.")
 

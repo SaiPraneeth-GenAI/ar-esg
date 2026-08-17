@@ -149,6 +149,40 @@
   font-style: italic;
 }
 
+.mode-toggle {
+  display: flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 0.2rem;
+  gap: 0.15rem;
+  background: #f2f4f7;
+  border-radius: 9px;
+}
+
+.mode-btn {
+  border: none;
+  background: transparent;
+  padding: 0.4rem 0.85rem;
+  border-radius: 7px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #667085;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.mode-btn.active {
+  background: #fff;
+  color: #101828;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+
+.muted-text {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #98a2b3;
+}
+
 .metric-checkboxes {
   display: flex;
   flex-direction: column;

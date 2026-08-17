@@ -1,0 +1,164 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <h1>Peer Companies</h1>
+      <p class="subtitle">Track other companies' published ESG figures to benchmark against in Chart Builder's Comparison charts.</p>
+    </div>
+    <button type="button" class="primary-btn" (click)="openAddCompany()">+ Add peer company</button>
+  </header>
+
+  @if (errorMessage()) {
+    <div class="banner error">{{ errorMessage() }}</div>
+  }
+  @if (successMessage()) {
+    <div class="banner success">{{ successMessage() }}</div>
+  }
+
+  @if (showAddCompany()) {
+    <div class="add-company-card">
+      <div class="field-row">
+        <label class="field">
+          <span class="field-label">Company name <span class="required">*</span></span>
+          <input type="text" [ngModel]="newCompanyName()" (ngModelChange)="newCompanyName.set($event)" placeholder="e.g. Exide Industries" />
+        </label>
+        <label class="field">
+          <span class="field-label">Industry</span>
+          <input type="text" [ngModel]="newCompanyIndustry()" (ngModelChange)="newCompanyIndustry.set($event)" placeholder="e.g. Battery" />
+        </label>
+        <label class="field">
+          <span class="field-label">Country</span>
+          <input type="text" [ngModel]="newCompanyCountry()" (ngModelChange)="newCompanyCountry.set($event)" placeholder="e.g. India" />
+        </label>
+      </div>
+      <div class="card-actions">
+        <button type="button" class="secondary-btn" (click)="showAddCompany.set(false)">Cancel</button>
+        <button type="button" class="primary-btn" [disabled]="!newCompanyName().trim()" (click)="saveCompany()">Add company</button>
+      </div>
+    </div>
+  }
+
+  @if (loading()) {
+    <p class="muted">Loading…</p>
+  } @else if (companies().length === 0) {
+    <div class="empty-state">
+      <p>No peer companies yet. Add one -- Exide, Tata Chemicals, an industry average -- and enter their published figures to compare against.</p>
+    </div>
+  } @else {
+    <div class="company-list">
+      @for (company of companies(); track company.id) {
+        <div class="company-card" [class.expanded]="expandedCompanyId() === company.id">
+          <button type="button" class="company-trigger" (click)="toggleExpand(company)">
+            <div>
+              <span class="company-name">{{ company.name }}</span>
+              <span class="company-meta">{{ company.industry || 'Industry not set' }}{{ company.country ? ' · ' + company.country : '' }}</span>
+            </div>
+            <span class="period-count">{{ company.period_count }} {{ company.period_count === 1 ? 'period' : 'periods' }}</span>
+          </button>
+
+          <div class="company-actions">
+            <button type="button" class="link-btn danger-link" (click)="deleteCompany(company)">Remove company</button>
+          </div>
+
+          @if (expandedCompanyId() === company.id) {
+            <div class="company-detail">
+              @if (dataLoading()) {
+                <p class="muted">Loading periods…</p>
+              } @else {
+                @if (companyData().length === 0) {
+                  <p class="muted">No data entered yet for {{ company.name }}.</p>
+                } @else {
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Period</th>
+                        <th>Metrics entered</th>
+                        <th>Source</th>
+                        <th>Confidence</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (row of companyData(); track row.id) {
+                        <tr>
+                          <td>{{ formatPeriod(row.period) }}</td>
+                          <td>
+                            @for (key of metricKeysFor(row); track key) {
+                              <span class="metric-chip">{{ metricLabel(key) }}: {{ row.metrics[key] | number: '1.0-3' }} {{ metricUnit(key) }}</span>
+                            }
+                          </td>
+                          <td>{{ row.data_source || '—' }}</td>
+                          <td>{{ row.data_confidence ? confidenceLabels[row.data_confidence] : '—' }}</td>
+                          <td><button type="button" class="link-btn danger-link" (click)="deletePeriod(row)">Delete</button></td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                }
+
+                @if (!showAddPeriod()) {
+                  <button type="button" class="link-btn" (click)="openAddPeriod()">+ Add a period's data</button>
+                } @else {
+                  <div class="add-period-form">
+                    <label class="field">
+                      <span class="field-label">Period</span>
+                      <input type="month" [ngModel]="periodValue()" (ngModelChange)="periodValue.set($event)" />
+                    </label>
+
+                    <div class="metric-inputs">
+                      @for (group of metricGroups(); track group) {
+                        <div class="metric-group-label">{{ group }}</div>
+                        <div class="metric-input-row-group">
+                          @for (m of metricsInGroup(group); track m.key) {
+                            <label class="metric-input-row">
+                              <span>{{ m.label }}</span>
+                              <div class="metric-input-value">
+                                <input type="number" step="any" [ngModel]="periodMetricValues()[m.key]" (ngModelChange)="setMetricValue(m.key, $event)" />
+                                <span class="metric-input-unit">{{ m.unit }}</span>
+                              </div>
+                            </label>
+                          }
+                        </div>
+                      }
+                    </div>
+
+                    <div class="field-row">
+                      <label class="field">
+                        <span class="field-label">Data source</span>
+                        <input type="text" [ngModel]="dataSource()" (ngModelChange)="dataSource.set($event)" placeholder="e.g. BRSR 2026" />
+                      </label>
+                      <label class="field">
+                        <span class="field-label">Confidence</span>
+                        <select [ngModel]="dataConfidence()" (ngModelChange)="dataConfidence.set($event)">
+                          <option value="verified">Verified</option>
+                          <option value="self_reported">Self-reported</option>
+                          <option value="estimated">Estimated</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <label class="field">
+                      <span class="field-label">Source link</span>
+                      <input type="text" [ngModel]="sourceLink()" (ngModelChange)="sourceLink.set($event)" placeholder="Optional URL" />
+                    </label>
+
+                    <label class="field">
+                      <span class="field-label">Notes</span>
+                      <textarea rows="2" [ngModel]="notes()" (ngModelChange)="notes.set($event)" placeholder="Optional"></textarea>
+                    </label>
+
+                    <div class="card-actions">
+                      <button type="button" class="secondary-btn" (click)="showAddPeriod.set(false)">Cancel</button>
+                      <button type="button" class="primary-btn" [disabled]="!hasAnyMetricValue() || submittingPeriod()" (click)="savePeriodData()">
+                        {{ submittingPeriod() ? 'Saving…' : 'Save period' }}
+                      </button>
+                    </div>
+                  </div>
+                }
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

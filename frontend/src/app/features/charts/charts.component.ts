@@ -1,6 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { BreakdownDimension, ChartApiService, ChartMetric, ChartMetricPoint, SavedChart } from '../../core/chart-api.service';
 import { PeriodMode } from '../../core/intensity-api.service';
+import { PeerApiService, PeerCompany } from '../../core/peer-api.service';
 import { PieChartComponent, PieSlice } from '../../shared/pie-chart/pie-chart.component';
 import { ChartPoint, ChartSeriesDef, RichTrendChartComponent } from '../../shared/rich-trend-chart/rich-trend-chart.component';
 import { ChartBuilderPanelComponent } from './chart-builder-panel/chart-builder-panel.component';
@@ -36,20 +37,27 @@ interface RenderedChart {
 })
 export class ChartsComponent implements OnInit {
   private chartApi = inject(ChartApiService);
+  private peerApi = inject(PeerApiService);
 
   loading = signal(true);
   errorMessage = signal('');
   rendered = signal<RenderedChart[]>([]);
   metrics = signal<ChartMetric[]>([]);
   dimensions = signal<BreakdownDimension[]>([]);
+  peerCompanies = signal<PeerCompany[]>([]);
 
   showBuilder = signal(false);
   editingChart = signal<SavedChart | null>(null);
 
   async ngOnInit(): Promise<void> {
-    const [metrics, dimensions] = await Promise.all([this.chartApi.listMetrics(), this.chartApi.listBreakdownDimensions()]);
+    const [metrics, dimensions, peerCompanies] = await Promise.all([
+      this.chartApi.listMetrics(),
+      this.chartApi.listBreakdownDimensions(),
+      this.peerApi.listCompanies()
+    ]);
     this.metrics.set(metrics);
     this.dimensions.set(dimensions);
+    this.peerCompanies.set(peerCompanies);
     await this.refresh();
   }
 
@@ -57,6 +65,10 @@ export class ChartsComponent implements OnInit {
     const cfg = chart.config;
     if (cfg.question_type === 'trend') return this.metrics().find((m) => m.key === cfg.metric)?.label ?? cfg.metric ?? '';
     if (cfg.question_type === 'breakdown') return this.dimensions().find((d) => d.key === cfg.dimension)?.label ?? cfg.dimension ?? '';
+    if (cfg.comparison_mode === 'peers') {
+      const metricLabel = this.metrics().find((m) => m.key === cfg.metric)?.label ?? cfg.metric ?? '';
+      return `${metricLabel} vs peers`;
+    }
     return (cfg.metrics ?? []).map((k) => this.metrics().find((m) => m.key === k)?.label ?? k).join(' vs ');
   }
 
@@ -90,6 +102,10 @@ export class ChartsComponent implements OnInit {
         const data = await this.chartApi.getBreakdownData(cfg.dimension, `${currentMonthValue()}-01`, cfg.period_mode, cfg.location_id ?? undefined);
         item.slices = data.slices.map((s) => ({ label: s.label, value: s.value }));
         item.unit = data.unit;
+      } else if (cfg.question_type === 'comparison' && cfg.comparison_mode === 'peers' && cfg.metric && cfg.compare_peer_ids) {
+        const data = await this.peerApi.compare(cfg.metric, `${currentMonthValue()}-01`, cfg.period_mode, cfg.compare_peer_ids, cfg.location_id ?? undefined);
+        item.series = [{ key: 'value', label: item.displayLabel, unit: data.unit, tracked: true }];
+        item.points = data.entries.map((e) => ({ period: e.name, label: e.name, valuesBySeries: { value: e.value } }));
       } else if (cfg.question_type === 'comparison' && cfg.metrics) {
         const results = await Promise.all(
           cfg.metrics.map((key) => this.chartApi.getMetricData(key, `${currentMonthValue()}-01`, cfg.period_mode, 1, cfg.location_id ?? undefined))

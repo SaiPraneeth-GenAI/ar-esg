@@ -6,10 +6,12 @@ import {
   ChartApiService,
   ChartConfig,
   ChartMetric,
+  ComparisonMode,
   QuestionType,
   SavedChart
 } from '../../../core/chart-api.service';
 import { PeriodMode } from '../../../core/intensity-api.service';
+import { PeerApiService, PeerCompany } from '../../../core/peer-api.service';
 import { PieChartComponent, PieSlice } from '../../../shared/pie-chart/pie-chart.component';
 import { ChartPoint, ChartSeriesDef, RichTrendChartComponent } from '../../../shared/rich-trend-chart/rich-trend-chart.component';
 
@@ -64,6 +66,7 @@ const QUESTIONS: QuestionOption[] = [
 export class ChartBuilderPanelComponent implements OnInit {
   private chartApi = inject(ChartApiService);
   private api = inject(ApiService);
+  private peerApi = inject(PeerApiService);
 
   @Input() editing: SavedChart | null = null;
   @Output() closed = new EventEmitter<void>();
@@ -75,6 +78,7 @@ export class ChartBuilderPanelComponent implements OnInit {
   metrics = signal<ChartMetric[]>([]);
   dimensions = signal<BreakdownDimension[]>([]);
   locations = signal<AdminLocation[]>([]);
+  peerCompanies = signal<PeerCompany[]>([]);
 
   questionType = signal<QuestionType>('trend');
 
@@ -86,7 +90,10 @@ export class ChartBuilderPanelComponent implements OnInit {
   dimension = signal<string>('ghg_total');
 
   // comparison
+  comparisonMode = signal<ComparisonMode>('metrics');
   comparisonMetrics = signal<Set<string>>(new Set(['scope1_tco2e', 'scope2_tco2e']));
+  comparePeerMetric = signal<string>('scope1_2_tco2e');
+  selectedPeerIds = signal<Set<string>>(new Set());
 
   // shared
   periodMode = signal<PeriodMode>('month');
@@ -115,6 +122,10 @@ export class ChartBuilderPanelComponent implements OnInit {
 
   trendChartSeries(): ChartSeriesDef[] {
     if (this.questionType() === 'comparison') {
+      if (this.comparisonMode() === 'peers') {
+        const unit = this.metrics().find((x) => x.key === this.comparePeerMetric())?.unit ?? '';
+        return [{ key: 'value', label: 'vs peers', unit, tracked: true }];
+      }
       const m = Array.from(this.comparisonMetrics())[0];
       const unit = this.metrics().find((x) => x.key === m)?.unit ?? '';
       return [{ key: 'value', label: 'Selected metrics', unit, tracked: true }];
@@ -138,15 +149,37 @@ export class ChartBuilderPanelComponent implements OnInit {
     return this.comparisonMetrics().has(key);
   }
 
+  setComparisonMode(mode: ComparisonMode): void {
+    this.comparisonMode.set(mode);
+    this.onSettingChange();
+  }
+
+  togglePeerSelection(id: string): void {
+    const set = new Set(this.selectedPeerIds());
+    if (set.has(id)) {
+      set.delete(id);
+    } else {
+      set.add(id);
+    }
+    this.selectedPeerIds.set(set);
+    this.onSettingChange();
+  }
+
+  isPeerSelected(id: string): boolean {
+    return this.selectedPeerIds().has(id);
+  }
+
   async ngOnInit(): Promise<void> {
-    const [metrics, dimensions, locations] = await Promise.all([
+    const [metrics, dimensions, locations, peerCompanies] = await Promise.all([
       this.chartApi.listMetrics(),
       this.chartApi.listBreakdownDimensions(),
-      this.api.listLocations()
+      this.api.listLocations(),
+      this.peerApi.listCompanies()
     ]);
     this.metrics.set(metrics);
     this.dimensions.set(dimensions);
     this.locations.set(locations);
+    this.peerCompanies.set(peerCompanies);
 
     if (this.editing) {
       this.name.set(this.editing.name);
@@ -155,9 +188,14 @@ export class ChartBuilderPanelComponent implements OnInit {
       this.periodMode.set(this.editing.config.period_mode);
       this.months.set(this.editing.config.months);
       this.locationId.set(this.editing.config.location_id ?? '');
-      if (this.editing.config.metric) this.metric.set(this.editing.config.metric);
+      this.comparisonMode.set(this.editing.config.comparison_mode ?? 'metrics');
+      if (this.editing.config.metric) {
+        this.metric.set(this.editing.config.metric);
+        this.comparePeerMetric.set(this.editing.config.metric);
+      }
       if (this.editing.config.dimension) this.dimension.set(this.editing.config.dimension);
       if (this.editing.config.metrics) this.comparisonMetrics.set(new Set(this.editing.config.metrics));
+      if (this.editing.config.compare_peer_ids) this.selectedPeerIds.set(new Set(this.editing.config.compare_peer_ids));
       this.step.set(2);
       await this.refreshPreview();
     }
@@ -198,6 +236,20 @@ export class ChartBuilderPanelComponent implements OnInit {
         const data = await this.chartApi.getBreakdownData(this.dimension(), `${currentMonthValue()}-01`, this.periodMode(), this.locationId() || undefined);
         this.breakdownSlices.set(data.slices.map((s) => ({ label: s.label, value: s.value })));
         this.breakdownUnit.set(data.unit);
+      } else if (this.comparisonMode() === 'peers') {
+        const peerIds = Array.from(this.selectedPeerIds());
+        if (peerIds.length === 0) {
+          this.trendPreviewPoints.set([]);
+        } else {
+          const data = await this.peerApi.compare(this.comparePeerMetric(), `${currentMonthValue()}-01`, this.periodMode(), peerIds, this.locationId() || undefined);
+          this.trendPreviewPoints.set(
+            data.entries.map((e) => ({
+              period: e.name,
+              label: e.name,
+              valuesBySeries: { value: e.value }
+            }))
+          );
+        }
       } else {
         const keys = Array.from(this.comparisonMetrics());
         const results = await Promise.all(
@@ -226,7 +278,10 @@ export class ChartBuilderPanelComponent implements OnInit {
 
   canSave(): boolean {
     if (!this.name().trim()) return false;
-    if (this.questionType() === 'comparison') return this.comparisonMetrics().size >= 2;
+    if (this.questionType() === 'comparison') {
+      if (this.comparisonMode() === 'peers') return this.selectedPeerIds().size >= 1;
+      return this.comparisonMetrics().size >= 2;
+    }
     return true;
   }
 
@@ -238,11 +293,16 @@ export class ChartBuilderPanelComponent implements OnInit {
       period_mode: this.periodMode(),
       months: this.months(),
       dimension: null,
+      comparison_mode: this.comparisonMode(),
       metrics: null,
+      compare_peer_ids: null,
       location_id: this.locationId() || null
     };
     if (this.questionType() === 'trend') return { ...base, metric: this.metric() };
     if (this.questionType() === 'breakdown') return { ...base, dimension: this.dimension() };
+    if (this.comparisonMode() === 'peers') {
+      return { ...base, metric: this.comparePeerMetric(), compare_peer_ids: Array.from(this.selectedPeerIds()) };
+    }
     return { ...base, metrics: Array.from(this.comparisonMetrics()) };
   }
 

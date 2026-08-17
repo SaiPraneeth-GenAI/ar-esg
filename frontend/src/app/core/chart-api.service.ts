@@ -48,6 +48,8 @@ export interface BreakdownData {
   slices: BreakdownSlice[];
 }
 
+export type ComparisonMode = 'metrics' | 'peers';
+
 export interface ChartConfig {
   question_type: QuestionType;
   // trend
@@ -58,7 +60,9 @@ export interface ChartConfig {
   // breakdown
   dimension: string | null;
   // comparison
+  comparison_mode: ComparisonMode;
   metrics: string[] | null;
+  compare_peer_ids: string[] | null;
   location_id: string | null;
 }
 

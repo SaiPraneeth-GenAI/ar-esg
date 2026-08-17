@@ -49,6 +49,12 @@ export const routes: Routes = [
         loadComponent: () => import('./features/charts/charts.component').then((m) => m.ChartsComponent)
       },
       {
+        path: 'settings/peer-companies',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./features/settings/peer-companies/peer-companies.component').then((m) => m.PeerCompaniesComponent)
+      },
+      {
         path: 'settings/users',
         canActivate: [adminGuard],
         loadComponent: () =>
