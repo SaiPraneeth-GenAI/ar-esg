@@ -70,6 +70,10 @@ export interface CarbonTrendPoint {
   prior_year_scope2_location_based_tco2e: number | null;
   prior_year_scope1_2_location_based_tco2e: number | null;
   prior_year_intensity_tco2e_per_mnah: number | null;
+  target_scope1_tco2e: number | null;
+  target_scope2_location_based_tco2e: number | null;
+  target_scope1_2_location_based_tco2e: number | null;
+  target_intensity_tco2e_per_mnah: number | null;
 }
 
 export interface EmissionCalculationOut {

@@ -267,14 +267,14 @@
 }
 
 .ai-insight {
-  position: relative;
-  padding-left: 5.2rem;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.55rem;
 }
 
 .ai-badge {
-  position: absolute;
-  left: 1rem;
-  top: 0.78rem;
+  flex: none;
   font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -284,6 +284,11 @@
   border: 1px solid #d1e7dd;
   border-radius: 999px;
   padding: 0.12rem 0.45rem;
+}
+
+.ai-insight-text {
+  flex: 1 1 260px;
+  min-width: 0;
 }
 
 .type-cursor {

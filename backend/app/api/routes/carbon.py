@@ -305,10 +305,12 @@ def carbon_trend(
         all_months.update(months_in_range(py_start, py_end))
 
     by_month = compute_period_totals_batch(db, current.tenant_id, location_id, sorted(all_months))
+    targets_by_metric = _active_targets_by_metric(db, current.tenant_id, location_id, _TREND_TARGET_METRICS)
 
     points = []
     for (start, end), (py_start, py_end) in zip(buckets, prior_year_buckets):
-        totals = compute_range_totals(db, current.tenant_id, location_id, months_in_range(start, end), by_month=by_month)
+        bucket_months = months_in_range(start, end)
+        totals = compute_range_totals(db, current.tenant_id, location_id, bucket_months, by_month=by_month)
         py_totals = compute_range_totals(
             db, current.tenant_id, location_id, months_in_range(py_start, py_end), by_month=by_month
         )
@@ -326,6 +328,14 @@ def carbon_trend(
                 prior_year_scope2_location_based_tco2e=py_totals["scope2_loc_tco2e"],
                 prior_year_scope1_2_location_based_tco2e=py_totals["scope1_2_loc_tco2e"],
                 prior_year_intensity_tco2e_per_mnah=py_totals["intensity"],
+                target_scope1_tco2e=_target_value_for_bucket(targets_by_metric.get("scope1_tco2e"), "scope1_tco2e", bucket_months),
+                target_scope2_location_based_tco2e=_target_value_for_bucket(targets_by_metric.get("scope2_tco2e"), "scope2_tco2e", bucket_months),
+                target_scope1_2_location_based_tco2e=_target_value_for_bucket(
+                    targets_by_metric.get("scope1_2_tco2e"), "scope1_2_tco2e", bucket_months
+                ),
+                target_intensity_tco2e_per_mnah=_target_value_for_bucket(
+                    targets_by_metric.get("ghg_intensity_production"), "ghg_intensity_production", bucket_months
+                ),
             )
         )
     return points
@@ -506,19 +516,40 @@ def carbon_ai_insight(
     return AiInsightOut(insight=insight)
 
 
+def _target_value_for_bucket(target: EmissionTarget | None, metric_key: str, months: list[date]) -> float | None:
+    """The metric's target figure for exactly this bucket -- None (not
+    substituted with anything) when the target doesn't apply here, either
+    because there is no active target for this metric/location or because
+    this bucket falls outside the target's own period (e.g. a 2027 target
+    contributes nothing to a 2026 bucket). `months` is the same range the
+    actual figure was aggregated over: a budget metric's total is summed
+    across exactly those months so it's comparable to a multi-month
+    actual; a rate metric's value stays constant regardless of range
+    length."""
+    if target is None or target.target_value is None:
+        return None
+    anchor_period = months[-1]
+    if not (target.target_period_start <= anchor_period <= target.target_period_end):
+        return None
+    num_months = len(months_between(target.target_period_start, target.target_period_end))
+    if metric_key in RATE_METRIC_KEYS:
+        return target_value_for_month(target.monthly_phasing, anchor_period, float(target.target_value), num_months, metric_key)
+    relevant = [m for m in months if target.target_period_start <= m <= target.target_period_end]
+    monthly_targets = [
+        target_value_for_month(target.monthly_phasing, m, float(target.target_value), num_months, metric_key)
+        for m in relevant
+    ]
+    monthly_targets = [t for t in monthly_targets if t is not None]
+    return sum(monthly_targets) if monthly_targets else None
+
+
 def _active_target_comparison(
     db: Session, tenant_id, location_id, metric_key: str, months: list[date], actual: float | None
 ) -> TargetComparison | None:
     """Only ever reads an active target for the exact same boundary this
     card already shows -- never substitutes a different location/metric
     target, and never fabricates a comparison when none has been
-    declared (rule: targets are never auto-created). `months` is the same
-    range the actual figure was aggregated over (one month, or a
-    quarter-to-date/year-to-date range): a budget metric's total is
-    summed across exactly those months so it's comparable to a multi-month
-    actual; a rate metric's value stays constant regardless of range
-    length."""
-    anchor_period = months[-1]
+    declared (rule: targets are never auto-created)."""
     target = (
         db.query(EmissionTarget)
         .filter(
@@ -526,29 +557,33 @@ def _active_target_comparison(
             EmissionTarget.location_id == location_id,
             EmissionTarget.metric_key == metric_key,
             EmissionTarget.status == "active",
-            EmissionTarget.target_period_start <= anchor_period,
-            EmissionTarget.target_period_end >= anchor_period,
         )
         .first()
     )
-    if target is None or target.target_value is None:
-        return None
-    num_months = len(months_between(target.target_period_start, target.target_period_end))
-    if metric_key in RATE_METRIC_KEYS:
-        range_target = target_value_for_month(
-            target.monthly_phasing, anchor_period, float(target.target_value), num_months, target.metric_key
-        )
-    else:
-        relevant = [m for m in months if target.target_period_start <= m <= target.target_period_end]
-        monthly_targets = [
-            target_value_for_month(target.monthly_phasing, m, float(target.target_value), num_months, target.metric_key)
-            for m in relevant
-        ]
-        monthly_targets = [t for t in monthly_targets if t is not None]
-        range_target = sum(monthly_targets) if monthly_targets else None
+    range_target = _target_value_for_bucket(target, metric_key, months)
     if range_target is None:
         return None
     return TargetComparison(target_id=target.id, target_value=range_target, status=classify_status(actual, range_target))
+
+
+_TREND_TARGET_METRICS = ["scope1_tco2e", "scope2_tco2e", "scope1_2_tco2e", "ghg_intensity_production"]
+
+
+def _active_targets_by_metric(db: Session, tenant_id, location_id, metric_keys: list[str]) -> dict[str, EmissionTarget]:
+    """One query for every active target this trend chart could need a
+    reference line for -- targets are few (at most one per metric per
+    location), so this is never worth batching per-bucket."""
+    targets = (
+        db.query(EmissionTarget)
+        .filter(
+            EmissionTarget.tenant_id == tenant_id,
+            EmissionTarget.location_id == location_id,
+            EmissionTarget.metric_key.in_(metric_keys),
+            EmissionTarget.status == "active",
+        )
+        .all()
+    )
+    return {t.metric_key: t for t in targets}
 
 
 def _build_insight(sources: list[CarbonOverviewSource], current_total: float | None, prior_total: float | None, unresolved_count: int) -> str | None:

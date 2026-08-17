@@ -80,6 +80,13 @@ class CarbonTrendPoint(BaseModel):
     prior_year_scope2_location_based_tco2e: float | None = None
     prior_year_scope1_2_location_based_tco2e: float | None = None
     prior_year_intensity_tco2e_per_mnah: float | None = None
+    # This bucket's active target, if one is set and its period covers this
+    # bucket -- None (not zero) when no target applies here, so the chart
+    # can draw a reference line only where a real commitment exists.
+    target_scope1_tco2e: float | None = None
+    target_scope2_location_based_tco2e: float | None = None
+    target_scope1_2_location_based_tco2e: float | None = None
+    target_intensity_tco2e_per_mnah: float | None = None
 
 
 class RecalculateResponse(BaseModel):

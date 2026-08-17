@@ -20,6 +20,10 @@ export interface ChartPoint {
    * year-over-year comparison alongside the current value. Omitted or
    * absent for a series/point that has no prior-year figure. */
   priorYearValuesBySeries?: Record<string, number | null>;
+  /** This bucket's active target for the series, if one is set and its
+   * period covers this bucket -- lets the chart draw a target reference
+   * line alongside the actuals. Absent (not zero) when no target applies. */
+  targetValuesBySeries?: Record<string, number | null>;
 }
 
 type ChartKind = 'bar' | 'line';
@@ -77,6 +81,20 @@ export class RichTrendChartComponent implements OnChanges {
     return this.activePriorYearValues().some((v) => v !== null);
   }
 
+  activeTargetValues(): (number | null)[] {
+    const key = this.selectedKey();
+    return this.points.map((p) => p.targetValuesBySeries?.[key] ?? null);
+  }
+
+  hasTargetData(): boolean {
+    return this.activeTargetValues().some((v) => v !== null);
+  }
+
+  targetMarkerPct(value: number | null): number | null {
+    if (value === null) return null;
+    return Math.min((value / this.maxValue()) * 100, 100);
+  }
+
   showYoY(): boolean {
     return this.compareYoY() && this.hasYoYData();
   }
@@ -88,7 +106,8 @@ export class RichTrendChartComponent implements OnChanges {
   private maxValue(): number {
     const current = this.activeValues().filter((v): v is number => v !== null);
     const prior = this.showYoY() ? this.activePriorYearValues().filter((v): v is number => v !== null) : [];
-    return Math.max(...current, ...prior, 0.0001);
+    const target = this.activeTargetValues().filter((v): v is number => v !== null);
+    return Math.max(...current, ...prior, ...target, 0.0001);
   }
 
   barHeightPct(value: number | null): number {
@@ -156,6 +175,10 @@ export class RichTrendChartComponent implements OnChanges {
 
   priorYearLinePathSegments(): { d: string }[] {
     return this.pathSegments(this.activePriorYearValues());
+  }
+
+  targetLinePathSegments(): { d: string }[] {
+    return this.pathSegments(this.activeTargetValues());
   }
 
   areaPath(): string {

@@ -139,7 +139,7 @@
     @if (aiInsightTyped() || overview()!.insight) {
       <p class="insight ai-insight">
         <span class="ai-badge">AI insight</span>
-        {{ aiInsightTyped() || overview()!.insight }}@if (aiInsightBusy()) {<span class="type-cursor"></span>}
+        <span class="ai-insight-text">{{ aiInsightTyped() || overview()!.insight }}@if (aiInsightBusy()) {<span class="type-cursor"></span>}</span>
       </p>
     }
 

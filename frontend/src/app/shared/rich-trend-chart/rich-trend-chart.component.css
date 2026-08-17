@@ -149,6 +149,20 @@
   width: 14px;
 }
 
+.swatch-target {
+  background: none;
+  border-top: 2px dashed #98a2b3;
+  height: 0;
+  width: 14px;
+}
+
+.swatch-target-dashed {
+  background: none;
+  border-top: 1.8px dashed #98a2b3;
+  height: 0;
+  width: 14px;
+}
+
 /* Bar mode */
 
 .bar-chart-wrap {
@@ -207,6 +221,7 @@
 }
 
 .bar-track {
+  position: relative;
   width: 100%;
   max-width: 32px;
   height: 100%;
@@ -214,6 +229,15 @@
   align-items: flex-end;
   justify-content: center;
   gap: 3px;
+}
+
+.target-marker {
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  height: 0;
+  border-top: 2px dashed #98a2b3;
+  pointer-events: none;
 }
 
 .bar-track.grouped {

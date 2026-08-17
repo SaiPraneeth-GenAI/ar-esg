@@ -163,6 +163,13 @@ export class CarbonOverviewComponent implements OnChanges {
             scope2: p.prior_year_scope2_location_based_tco2e,
             scope3: null,
             intensity: p.prior_year_intensity_tco2e_per_mnah
+          },
+          targetValuesBySeries: {
+            scope1_2: p.target_scope1_2_location_based_tco2e,
+            scope1: p.target_scope1_tco2e,
+            scope2: p.target_scope2_location_based_tco2e,
+            scope3: null,
+            intensity: p.target_intensity_tco2e_per_mnah
           }
         }))
       );
