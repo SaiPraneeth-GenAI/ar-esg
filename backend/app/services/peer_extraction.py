@@ -30,12 +30,15 @@ logger = logging.getLogger("peer_extraction")
 
 _CHARS_PER_CHUNK = 150_000  # ~35-40k tokens/chunk, comfortably under gpt-4o-mini's context
 _MAX_CHUNKS = 14  # safety valve on a pathologically large upload -- ~2.1M chars / a ~500+ page document
-# Every chunk fires at once (one worker per possible chunk) rather than in
-# batches -- wall-clock time is then close to ONE chunk's latency
-# regardless of how many chunks the document needed, not the number of
-# batches. gpt-4o-mini's per-account rate limit comfortably covers this
-# for a single user's occasional upload.
-_MAX_WORKERS = _MAX_CHUNKS
+# Fires several chunks at once rather than one at a time -- wall-clock
+# time is then close to a batch's latency, not the sum of every chunk.
+# Kept well below _MAX_CHUNKS (rather than one worker per chunk) since
+# firing all 14 simultaneously on a resource-constrained instance risked
+# connection contention that could itself cause the stalls this is meant
+# to avoid.
+_MAX_WORKERS = 6
+_CHUNK_TIMEOUT_SECONDS = 45  # a single chunk call is killed past this, not left to hang the whole job
+_JOB_TIMEOUT_SECONDS = 150  # hard ceiling on the whole extraction, in case a chunk somehow ignores its own timeout
 
 # gpt-4o-mini list pricing per 1M tokens, for the estimate in logs only --
 # not billed anywhere, purely so "is this actually working" is visible
@@ -110,7 +113,11 @@ def _call_ai(text: str) -> tuple[dict[str, float | None], dict]:
     if not settings.openai_api_key or not text.strip():
         return empty, {}
 
-    client = OpenAI(api_key=settings.openai_api_key)
+    # No timeout was set anywhere in this pipeline -- a single slow/stuck
+    # request (network stall, provider-side slowness) held up the ENTIRE
+    # job forever, even when every other chunk had already finished. This
+    # bounds a single chunk call, so one straggler can never hang the job.
+    client = OpenAI(api_key=settings.openai_api_key, timeout=_CHUNK_TIMEOUT_SECONDS, max_retries=1)
     metric_lines = "\n".join(f"- {key}: {spec['label']} ({spec['unit']})" for key, spec in CHARTABLE_METRICS.items())
     prompt = (
         "The text below is one section of a company's BRSR / annual report "
@@ -146,8 +153,8 @@ def _call_ai(text: str) -> tuple[dict[str, float | None], dict]:
             if usage
             else {}
         )
-    except Exception:
-        logger.exception("peer_extraction chunk AI call failed")
+    except Exception as exc:
+        logger.warning("peer_extraction chunk AI call failed: %s: %s", type(exc).__name__, exc)
         return empty, {}
     return {key: parsed.get(key) for key in CHARTABLE_METRICS}, usage_stats
 
@@ -176,20 +183,36 @@ def extract_metrics_from_pdf(pdf_bytes: bytes) -> tuple[dict[str, float | None],
     total_input_tokens = 0
     total_output_tokens = 0
     billed_chunks = 0
+    timed_out_chunks = 0
 
-    with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as pool:
+    # Each chunk call already has its own _CHUNK_TIMEOUT_SECONDS timeout
+    # (set on the OpenAI client itself), so a stalled request fails fast
+    # on its own. This is a second, independent backstop: if a future
+    # somehow doesn't respect that (e.g. a hang before the request is even
+    # sent), the job still returns whatever's been gathered once
+    # _JOB_TIMEOUT_SECONDS is up, rather than waiting forever -- Python
+    # threads can't be force-killed, so a straggler is simply abandoned
+    # (not awaited) rather than blocking the response to the user.
+    pool = ThreadPoolExecutor(max_workers=_MAX_WORKERS)
+    try:
         futures = {pool.submit(_call_ai, chunk): i for i, chunk in enumerate(chunks)}
-        for future in as_completed(futures):
-            chunk_index = futures[future]
-            extracted, usage = future.result()
-            if usage:
-                billed_chunks += 1
-                total_input_tokens += usage.get("input_tokens", 0)
-                total_output_tokens += usage.get("output_tokens", 0)
-            for key, value in extracted.items():
-                if value is not None and merged[key] is None:
-                    merged[key] = value
-                    found_in_chunk[key] = chunk_index
+        try:
+            for future in as_completed(futures, timeout=_JOB_TIMEOUT_SECONDS):
+                chunk_index = futures[future]
+                extracted, usage = future.result()
+                if usage:
+                    billed_chunks += 1
+                    total_input_tokens += usage.get("input_tokens", 0)
+                    total_output_tokens += usage.get("output_tokens", 0)
+                for key, value in extracted.items():
+                    if value is not None and merged[key] is None:
+                        merged[key] = value
+                        found_in_chunk[key] = chunk_index
+        except TimeoutError:
+            timed_out_chunks = sum(1 for f in futures if not f.done())
+            logger.warning("peer_extraction job-level timeout hit -- %s chunk(s) abandoned, proceeding with partial results", timed_out_chunks)
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
     found_count = sum(1 for v in merged.values() if v is not None)
     total_tokens = total_input_tokens + total_output_tokens
@@ -197,9 +220,9 @@ def extract_metrics_from_pdf(pdf_bytes: bytes) -> tuple[dict[str, float | None],
     elapsed = round(time.monotonic() - started_at, 1)
 
     logger.info(
-        "peer_extraction hash=%s elapsed_seconds=%s total_pages=%s chunks=%s billed_chunks=%s chars_sent=%s "
+        "peer_extraction hash=%s elapsed_seconds=%s total_pages=%s chunks=%s billed_chunks=%s timed_out_chunks=%s chars_sent=%s "
         "input_tokens=%s output_tokens=%s total_tokens=%s est_cost_usd=%s found_count=%s/%s",
-        doc_hash[:12], elapsed, total_pages, len(chunks), billed_chunks, chars_sent,
+        doc_hash[:12], elapsed, total_pages, len(chunks), billed_chunks, timed_out_chunks, chars_sent,
         total_input_tokens, total_output_tokens, total_tokens, est_cost, found_count, len(merged),
     )
 
