@@ -116,11 +116,6 @@
         </div>
       }
 
-      <label class="field">
-        <span class="field-label">Rationale <span class="required">*</span></span>
-        <textarea rows="3" [ngModel]="rationale()" (ngModelChange)="rationale.set($event)" placeholder="Why this target -- required to activate"></textarea>
-      </label>
-
       @if (!isRateMetric()) {
         <label class="active-toggle">
           <input type="checkbox" [ngModel]="phaseMonthly()" (ngModelChange)="togglePhasing()" />

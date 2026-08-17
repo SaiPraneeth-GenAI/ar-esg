@@ -69,20 +69,8 @@
 
           <div class="target-actions">
             @if (t.status === 'draft') {
-              @if (activatingId() === t.id) {
-                <input
-                  type="text"
-                  class="rationale-input"
-                  placeholder="Rationale for activating -- required"
-                  [ngModel]="activateRationale()"
-                  (ngModelChange)="activateRationale.set($event)"
-                />
-                <button type="button" class="link-btn" [disabled]="!activateRationale().trim()" (click)="confirmActivate(t)">Confirm activate</button>
-                <button type="button" class="link-btn muted-link" (click)="cancelActivate()">Cancel</button>
-              } @else {
-                <button type="button" class="link-btn" (click)="startActivate(t)">Activate</button>
-                <button type="button" class="link-btn danger-link" (click)="deleteTarget(t)">Delete draft</button>
-              }
+              <button type="button" class="link-btn" (click)="confirmActivate(t)">Activate</button>
+              <button type="button" class="link-btn danger-link" (click)="deleteTarget(t)">Delete draft</button>
             }
             @if (t.status === 'active') {
               <button type="button" class="link-btn danger-link" (click)="archiveTarget(t)">Archive</button>

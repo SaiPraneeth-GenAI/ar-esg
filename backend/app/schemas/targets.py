@@ -77,7 +77,7 @@ class TargetUpdate(BaseModel):
 
 
 class TargetActivateRequest(BaseModel):
-    rationale: str
+    rationale: str | None = None
 
 
 class TargetOut(BaseModel):

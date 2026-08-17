@@ -150,10 +150,10 @@ export class TargetApiService {
     await firstValueFrom(this.http.delete<void>(`${environment.apiBaseUrl}/targets/${id}`, { headers }));
   }
 
-  async activate(id: string, rationale: string): Promise<TargetOut> {
+  async activate(id: string): Promise<TargetOut> {
     const headers = await this.authHeaders();
     return firstValueFrom(
-      this.http.post<TargetOut>(`${environment.apiBaseUrl}/targets/${id}/activate`, { rationale }, { headers })
+      this.http.post<TargetOut>(`${environment.apiBaseUrl}/targets/${id}/activate`, {}, { headers })
     );
   }
 

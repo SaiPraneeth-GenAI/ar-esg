@@ -53,14 +53,16 @@ export class TargetWizardComponent implements OnInit {
 
   today = new Date();
   baselineYear = signal<number>(currentYear() - 1);
-  targetYear = signal<number>(currentYear() + 1);
+  // Defaults to the current year, not next year -- a target whose period
+  // hasn't started yet shows "Not started yet" instead of a real status,
+  // which is correct but confusing the moment after creating one.
+  targetYear = signal<number>(currentYear());
   baselinePreview = signal<BaselinePreviewResponse | null>(null);
   baselineLoading = signal(false);
 
   reductionPercentage = signal<number | null>(10);
   targetValue = signal<number | null>(null);
   ownerId = signal<string>('');
-  rationale = signal('');
   phaseMonthly = signal(false);
   phasedMonths = signal<MonthlyPhaseEntry[]>([]);
   showReductionHelper = signal(false);
@@ -174,7 +176,7 @@ export class TargetWizardComponent implements OnInit {
   }
 
   canActivate(): boolean {
-    if (this.targetValue() === null || !this.rationale().trim()) return false;
+    if (this.targetValue() === null) return false;
     if (this.phaseMonthly() && this.phasedMismatch()) return false;
     return this.baselinePreview()?.ready ?? false;
   }
@@ -190,8 +192,7 @@ export class TargetWizardComponent implements OnInit {
       reduction_percentage: this.reductionPercentage(),
       target_value: this.targetValue(),
       monthly_phasing: this.phaseMonthly() && !this.isRateMetric() ? this.phasedMonths() : [],
-      owner_id: this.ownerId() || null,
-      rationale: this.rationale() || null
+      owner_id: this.ownerId() || null
     };
   }
 
@@ -213,7 +214,7 @@ export class TargetWizardComponent implements OnInit {
     this.errorMessage.set('');
     try {
       const created = await this.targetApi.create(this.buildPayload());
-      await this.targetApi.activate(created.id, this.rationale());
+      await this.targetApi.activate(created.id);
       this.saved.emit();
     } catch (err: any) {
       this.errorMessage.set(err?.error?.detail ?? 'Could not activate this target.');

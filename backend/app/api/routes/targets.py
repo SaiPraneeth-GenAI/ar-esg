@@ -273,8 +273,6 @@ def activate_target(
         raise HTTPException(status_code=409, detail="Only a draft target can be activated.")
     if target.target_value is None:
         raise HTTPException(status_code=422, detail="Set a target value (directly or via a reduction percentage) before activating.")
-    if not payload.rationale or not payload.rationale.strip():
-        raise HTTPException(status_code=422, detail="A rationale is required to activate a target.")
 
     if target.monthly_phasing:
         phasing_error = validate_monthly_phasing(

@@ -26,9 +26,6 @@ export class TargetsComponent implements OnInit {
   performanceMonths = signal<TargetMonthPerformance[]>([]);
   performanceLoading = signal(false);
 
-  activatingId = signal<string | null>(null);
-  activateRationale = signal('');
-
   tabCounts = computed(() => {
     const all = this.targets();
     return {
@@ -96,20 +93,9 @@ export class TargetsComponent implements OnInit {
     await this.refresh();
   }
 
-  startActivate(t: TargetOut): void {
-    this.activatingId.set(t.id);
-    this.activateRationale.set('');
-  }
-
-  cancelActivate(): void {
-    this.activatingId.set(null);
-  }
-
   async confirmActivate(t: TargetOut): Promise<void> {
-    if (!this.activateRationale().trim()) return;
     try {
-      await this.api.activate(t.id, this.activateRationale());
-      this.activatingId.set(null);
+      await this.api.activate(t.id);
       this.successMessage.set('Target activated.');
       await this.refresh();
     } catch (err: any) {
