@@ -633,6 +633,9 @@ def bulk_import(
     Effluent Generated" under both ETP-Water and STP-Water); a row with no
     category that matches more than one is an ambiguity error, not a
     guess."""
+    tenant = db.get(Tenant, current.tenant_id)
+    auto_approve = bool(tenant and tenant.auto_approve_entries)
+
     q = db.query(DataPoint, Category.name).join(Category, Category.id == DataPoint.category_id).filter(
         Category.tenant_id == current.tenant_id
     )
@@ -811,6 +814,14 @@ def bulk_import(
             target_status="Submitted",
             audit_action="bulk_uploaded",
         )
+        # Bulk upload previously never benefited from the tenant's
+        # auto-approve setting -- manual Submit did (see submit_entries()),
+        # but a bulk-imported row landed as "Submitted" and just sat there
+        # until someone else (never the uploader -- see approve_entry()'s
+        # self-approval guard) reviewed it. Mirrors submit_entries() exactly
+        # so the same setting means the same thing everywhere.
+        if auto_approve and entry.status == "Submitted":
+            _approve_entry_now(db, entry, current.tenant_id, current.id, current.email, auto=True)
         results.append(
             BulkImportRowResult(
                 row_index=row.row_index,
