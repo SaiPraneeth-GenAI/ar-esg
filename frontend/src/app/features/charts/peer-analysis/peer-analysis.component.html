@@ -31,25 +31,44 @@
           <h2>Upload {{ company()?.name }}'s {{ year() }} BRSR report</h2>
           <p class="step-desc">Upload the PDF and AI will pull out the figures that line up with what Amara Raja already tracks -- Scope 1/2, intensity, and safety metrics. You'll review them before anything is saved.</p>
 
-          <label class="upload-dropzone" [class.has-file]="selectedFile()">
-            <input type="file" accept=".pdf" (change)="onFileChange($event)" hidden />
-            @if (selectedFile()) {
-              <span class="upload-filename">📄 {{ selectedFile()!.name }}</span>
-            } @else {
-              <span>Click to choose a PDF, or drag one here</span>
-            }
-          </label>
+          @if (peerApi.extractError()) {
+            <div class="banner error">{{ peerApi.extractError() }}</div>
+          }
 
-          <div class="step-actions">
-            <button type="button" class="primary-btn" [disabled]="!selectedFile() || extracting()" (click)="extract()">
-              {{ extracting() ? 'Reading report…' : 'Extract figures' }}
-            </button>
-          </div>
+          @if (peerApi.extracting()) {
+            <div class="reading-status">
+              <span class="spinner"></span>
+              <div>
+                <span class="reading-title">Reading {{ peerApi.extractFileName() }}… {{ peerApi.extractElapsedSeconds() }}s</span>
+                <p class="reading-hint">This runs in the background -- feel free to switch tabs and come back, it'll keep going.</p>
+              </div>
+            </div>
+          } @else {
+            <label
+              class="upload-dropzone"
+              [class.has-file]="selectedFile()"
+              [class.drag-active]="dragActive()"
+              (dragover)="onDragOver($event)"
+              (dragleave)="onDragLeave()"
+              (drop)="onDrop($event)"
+            >
+              <input type="file" accept=".pdf" (change)="onFileChange($event)" hidden />
+              @if (selectedFile()) {
+                <span class="upload-filename">📄 {{ selectedFile()!.name }}</span>
+              } @else {
+                <span>Click to choose a PDF, or drag one here</span>
+              }
+            </label>
+
+            <div class="step-actions">
+              <button type="button" class="primary-btn" [disabled]="!selectedFile()" (click)="extract()">Extract figures</button>
+            </div>
+          }
         </div>
       </div>
     }
 
-    @if (phase() === 'review' && extractResult()) {
+    @if (phase() === 'review' && peerApi.extractResult()) {
       <div class="step-card">
         <div class="step-badge">2</div>
         <div class="step-body">

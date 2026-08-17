@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { SupabaseService } from './supabase.service';
@@ -117,6 +117,50 @@ export class PeerApiService {
       throw new Error(body?.detail ?? 'Could not extract this PDF.');
     }
     return response.json();
+  }
+
+  // Extraction state lives here (a root-provided singleton), not on the
+  // component, so it survives the user navigating to another tab and back
+  // -- the underlying fetch() keeps running regardless of whether the
+  // Peer Analysis component is currently mounted.
+  extracting = signal(false);
+  extractError = signal('');
+  extractResult = signal<PeerExtractResult | null>(null);
+  extractFileName = signal('');
+  extractElapsedSeconds = signal(0);
+  private extractTimer: ReturnType<typeof setInterval> | null = null;
+
+  async startExtraction(companyId: string, file: File, year: number): Promise<void> {
+    this.extracting.set(true);
+    this.extractError.set('');
+    this.extractResult.set(null);
+    this.extractFileName.set(file.name);
+    this.extractElapsedSeconds.set(0);
+    const startedAt = Date.now();
+    this.extractTimer = setInterval(() => this.extractElapsedSeconds.set(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    try {
+      this.extractResult.set(await this.extractPdf(companyId, file, year));
+    } catch (err: any) {
+      this.extractError.set(err?.message ?? 'Could not read this PDF.');
+    } finally {
+      this.extracting.set(false);
+      if (this.extractTimer) {
+        clearInterval(this.extractTimer);
+        this.extractTimer = null;
+      }
+    }
+  }
+
+  clearExtraction(): void {
+    if (this.extractTimer) {
+      clearInterval(this.extractTimer);
+      this.extractTimer = null;
+    }
+    this.extracting.set(false);
+    this.extractError.set('');
+    this.extractResult.set(null);
+    this.extractFileName.set('');
+    this.extractElapsedSeconds.set(0);
   }
 
   async compareYear(companyId: string, year: number): Promise<PeerCompareYearResult> {

@@ -1,13 +1,7 @@
 import { DecimalPipe } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import {
-  PeerApiService,
-  PeerCompany,
-  PeerCompareYearResult,
-  PeerExtractResult,
-  PeerExtractRow
-} from '../../../core/peer-api.service';
+import { PeerApiService, PeerCompany, PeerCompareYearResult, PeerExtractRow } from '../../../core/peer-api.service';
 
 type Phase = 'upload' | 'review' | 'compare';
 
@@ -23,7 +17,11 @@ function defaultYear(): number {
   styleUrl: './peer-analysis.component.css'
 })
 export class PeerAnalysisComponent implements OnInit {
-  private peerApi = inject(PeerApiService);
+  // Public so the template can read extraction progress (extracting(),
+  // extractElapsedSeconds(), extractResult()) straight off it -- it's a
+  // root-provided singleton, so an in-flight extraction (and its result)
+  // survives the user navigating to another tab and coming back.
+  peerApi = inject(PeerApiService);
 
   loading = signal(true);
   errorMessage = signal('');
@@ -35,13 +33,29 @@ export class PeerAnalysisComponent implements OnInit {
   phase = signal<Phase>('upload');
 
   selectedFile = signal<File | null>(null);
-  extracting = signal(false);
-  extractResult = signal<PeerExtractResult | null>(null);
+  dragActive = signal(false);
   editableValues = signal<Record<string, number | null>>({});
   saving = signal(false);
 
   compareLoading = signal(false);
   compareResult = signal<PeerCompareYearResult | null>(null);
+
+  constructor() {
+    // Picks up a completed extraction whether it finished while the user
+    // was still here or while they were off on another tab -- runs once on
+    // mount too, so returning to an already-finished extraction jumps
+    // straight to review instead of looking stuck.
+    effect(() => {
+      const result = this.peerApi.extractResult();
+      if (!this.peerApi.extracting() && result && this.phase() === 'upload') {
+        const values: Record<string, number | null> = {};
+        for (const row of result.rows) values[row.key] = row.peer_value;
+        this.editableValues.set(values);
+        this.year.set(result.year);
+        this.phase.set('review');
+      }
+    });
+  }
 
   yearOptions(): number[] {
     const current = new Date().getFullYear();
@@ -55,7 +69,9 @@ export class PeerAnalysisComponent implements OnInit {
       const company = await this.peerApi.getDefaultCompany();
       this.company.set(company);
       await this.refreshSavedYears();
-      this.selectYear(this.savedYears()[0] ?? defaultYear());
+      if (!this.peerApi.extracting() && !this.peerApi.extractResult()) {
+        this.selectYear(this.savedYears()[0] ?? defaultYear());
+      }
     } catch {
       this.errorMessage.set('Could not load peer comparison data.');
     } finally {
@@ -80,7 +96,6 @@ export class PeerAnalysisComponent implements OnInit {
     this.errorMessage.set('');
     this.successMessage.set('');
     this.selectedFile.set(null);
-    this.extractResult.set(null);
     if (this.hasDataFor(y)) {
       this.phase.set('compare');
       void this.loadCompare(y);
@@ -91,14 +106,12 @@ export class PeerAnalysisComponent implements OnInit {
 
   reupload(): void {
     this.phase.set('upload');
-    this.extractResult.set(null);
+    this.peerApi.clearExtraction();
     this.selectedFile.set(null);
     this.successMessage.set('');
   }
 
-  onFileChange(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0] ?? null;
+  private acceptFile(file: File | null): void {
     this.errorMessage.set('');
     if (file && !file.name.toLowerCase().endsWith('.pdf')) {
       this.errorMessage.set('Please upload a PDF file.');
@@ -108,39 +121,39 @@ export class PeerAnalysisComponent implements OnInit {
     this.selectedFile.set(file);
   }
 
+  onFileChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.acceptFile(input.files?.[0] ?? null);
+  }
+
+  onDragOver(event: DragEvent): void {
+    event.preventDefault();
+    this.dragActive.set(true);
+  }
+
+  onDragLeave(): void {
+    this.dragActive.set(false);
+  }
+
+  onDrop(event: DragEvent): void {
+    event.preventDefault();
+    this.dragActive.set(false);
+    this.acceptFile(event.dataTransfer?.files?.[0] ?? null);
+  }
+
   async extract(): Promise<void> {
     const company = this.company();
     const file = this.selectedFile();
     if (!company || !file) return;
-    this.extracting.set(true);
     this.errorMessage.set('');
-    try {
-      const result = await this.peerApi.extractPdf(company.id, file, this.year());
-      this.extractResult.set(result);
-      const values: Record<string, number | null> = {};
-      for (const row of result.rows) values[row.key] = row.peer_value;
-      this.editableValues.set(values);
-      this.phase.set('review');
-    } catch (err: any) {
-      this.errorMessage.set(err?.message ?? 'Could not read this PDF. You can still enter figures by hand below.');
-      const rows = this.buildBlankRows();
-      this.extractResult.set(rows);
-      const values: Record<string, number | null> = {};
-      for (const row of rows.rows) values[row.key] = null;
-      this.editableValues.set(values);
-      this.phase.set('review');
-    } finally {
-      this.extracting.set(false);
-    }
-  }
-
-  private buildBlankRows(): PeerExtractResult {
-    const company = this.company()!;
-    return { peer_company_id: company.id, peer_company_name: company.name, year: this.year(), source_filename: '', rows: [] };
+    // Fire-and-forget: state lives on PeerApiService, so this keeps running
+    // (and the constructor's effect() picks up the result) even if the
+    // user navigates to another tab while it works.
+    void this.peerApi.startExtraction(company.id, file, this.year());
   }
 
   groupedRows(): { group: string; rows: PeerExtractRow[] }[] {
-    const rows = this.extractResult()?.rows ?? [];
+    const rows = this.peerApi.extractResult()?.rows ?? [];
     const groups: { group: string; rows: PeerExtractRow[] }[] = [];
     for (const row of rows) {
       let bucket = groups.find((g) => g.group === row.group);
@@ -176,12 +189,13 @@ export class PeerAnalysisComponent implements OnInit {
       await this.peerApi.upsertData(company.id, {
         period: `${this.year()}-01-01`,
         metrics,
-        data_source: this.extractResult()?.source_filename || 'Manual entry',
+        data_source: this.peerApi.extractResult()?.source_filename || 'Manual entry',
         source_link: null,
         data_confidence: 'self_reported',
         notes: null
       });
       this.successMessage.set('Comparison saved.');
+      this.peerApi.clearExtraction();
       await this.refreshSavedYears();
       this.phase.set('compare');
       await this.loadCompare(this.year());
