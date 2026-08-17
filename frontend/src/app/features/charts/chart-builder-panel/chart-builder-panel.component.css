@@ -183,11 +183,18 @@
   color: #98a2b3;
 }
 
+/* flex-shrink: 0 matters here -- .panel-body is itself a flex column with
+   several stacked fields; without it, this box (an overflow:auto child)
+   gets crushed toward zero height by the flex algorithm whenever the
+   panel's total content exceeds the visible area, showing only a sliver
+   with a scrollbar instead of scrolling the panel body as a whole. */
 .metric-checkboxes {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
   max-height: 220px;
+  min-height: 44px;
+  flex-shrink: 0;
   overflow-y: auto;
   border: 1px solid #eaecf0;
   border-radius: 10px;

@@ -2,42 +2,87 @@
   <header class="page-header">
     <div>
       <h1>Charts</h1>
-      <p class="subtitle">Build a chart from any metric this platform already tracks -- no SQL, always live data.</p>
+      @if (activeTab() === 'company') {
+        <p class="subtitle">Build a chart from any metric this platform already tracks -- no SQL, always live data.</p>
+      } @else {
+        <p class="subtitle">Benchmark Amara Raja against other companies' published ESG figures.</p>
+      }
     </div>
-    <button type="button" class="primary-btn" (click)="openNewChart()">+ New chart</button>
+    @if (activeTab() === 'company') {
+      <button type="button" class="primary-btn" (click)="openNewChart()">+ New chart</button>
+    }
   </header>
+
+  <div class="tabs">
+    <button type="button" class="tab" [class.active]="activeTab() === 'company'" (click)="setTab('company')">Company Charts</button>
+    <button type="button" class="tab" [class.active]="activeTab() === 'peers'" (click)="setTab('peers')">Peer Analysis</button>
+  </div>
 
   @if (errorMessage()) {
     <div class="banner error">{{ errorMessage() }}</div>
   }
 
-  @if (loading()) {
-    <p class="muted">Loading your charts…</p>
-  } @else if (rendered().length === 0) {
-    <div class="empty-state">
-      <p>No charts yet. Build one from any GHG, intensity, or safety metric this platform tracks.</p>
-      <button type="button" class="primary-btn" (click)="openNewChart()">+ New chart</button>
-    </div>
-  } @else {
-    <div class="chart-grid">
-      @for (item of rendered(); track item.chart.id) {
-        <div class="chart-card">
-          <div class="chart-card-header">
-            <div>
-              <h3>{{ item.chart.name }}</h3>
-              @if (item.chart.description) {
-                <p class="chart-desc">{{ item.chart.description }}</p>
-              }
+  @if (activeTab() === 'company') {
+    @if (loading()) {
+      <p class="muted">Loading your charts…</p>
+    } @else if (companyCharts().length === 0) {
+      <div class="empty-state">
+        <p>No charts yet. Build one from any GHG, intensity, or safety metric this platform tracks.</p>
+        <button type="button" class="primary-btn" (click)="openNewChart()">+ New chart</button>
+      </div>
+    } @else {
+      <div class="chart-grid">
+        @for (item of companyCharts(); track item.chart.id) {
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div>
+                <h3>{{ item.chart.name }}</h3>
+                @if (item.chart.description) {
+                  <p class="chart-desc">{{ item.chart.description }}</p>
+                }
+              </div>
+              <div class="chart-card-actions">
+                <button type="button" class="link-btn" (click)="openEditChart(item)">Edit</button>
+                <button type="button" class="link-btn danger-link" (click)="deleteChart(item)">Delete</button>
+              </div>
             </div>
-            <div class="chart-card-actions">
-              <button type="button" class="link-btn" (click)="openEditChart(item)">Edit</button>
-              <button type="button" class="link-btn danger-link" (click)="deleteChart(item)">Delete</button>
-            </div>
-          </div>
 
-          @if (item.chart.config.question_type === 'breakdown') {
-            <app-pie-chart [title]="item.displayLabel" [slices]="item.slices" [unit]="item.unit" [decimals]="1" [loading]="item.loading"></app-pie-chart>
-          } @else {
+            @if (item.chart.config.question_type === 'breakdown') {
+              <app-pie-chart [title]="item.displayLabel" [slices]="item.slices" [unit]="item.unit" [decimals]="1" [loading]="item.loading"></app-pie-chart>
+            } @else {
+              <app-rich-trend-chart
+                [title]="item.displayLabel"
+                [series]="item.series"
+                [points]="item.points"
+                defaultSeriesKey="value"
+                [loading]="item.loading"
+                [decimals]="2"
+              ></app-rich-trend-chart>
+            }
+          </div>
+        }
+      </div>
+    }
+  } @else {
+    <app-peer-analysis (newComparisonChart)="openNewPeerChart()"></app-peer-analysis>
+
+    @if (!loading() && peerCharts().length > 0) {
+      <div class="chart-grid peer-chart-grid">
+        @for (item of peerCharts(); track item.chart.id) {
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div>
+                <h3>{{ item.chart.name }}</h3>
+                @if (item.chart.description) {
+                  <p class="chart-desc">{{ item.chart.description }}</p>
+                }
+              </div>
+              <div class="chart-card-actions">
+                <button type="button" class="link-btn" (click)="openEditChart(item)">Edit</button>
+                <button type="button" class="link-btn danger-link" (click)="deleteChart(item)">Delete</button>
+              </div>
+            </div>
+
             <app-rich-trend-chart
               [title]="item.displayLabel"
               [series]="item.series"
@@ -46,13 +91,13 @@
               [loading]="item.loading"
               [decimals]="2"
             ></app-rich-trend-chart>
-          }
-        </div>
-      }
-    </div>
+          </div>
+        }
+      </div>
+    }
   }
 
   @if (showBuilder()) {
-    <app-chart-builder-panel [editing]="editingChart()" (closed)="closeBuilder()" (saved)="onBuilderSaved()"></app-chart-builder-panel>
+    <app-chart-builder-panel [editing]="editingChart()" [peerOnly]="builderPeerOnly()" (closed)="closeBuilder()" (saved)="onBuilderSaved()"></app-chart-builder-panel>
   }
 </div>

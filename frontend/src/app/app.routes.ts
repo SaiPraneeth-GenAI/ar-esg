@@ -49,12 +49,6 @@ export const routes: Routes = [
         loadComponent: () => import('./features/charts/charts.component').then((m) => m.ChartsComponent)
       },
       {
-        path: 'settings/peer-companies',
-        canActivate: [adminGuard],
-        loadComponent: () =>
-          import('./features/settings/peer-companies/peer-companies.component').then((m) => m.PeerCompaniesComponent)
-      },
-      {
         path: 'settings/users',
         canActivate: [adminGuard],
         loadComponent: () =>
@@ -82,6 +76,14 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/settings/mapping-templates/mapping-templates.component').then(
             (m) => m.MappingTemplatesComponent
+          )
+      },
+      {
+        path: 'settings/approvals',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./features/settings/approval-settings/approval-settings.component').then(
+            (m) => m.ApprovalSettingsComponent
           )
       }
     ]

@@ -1,27 +1,51 @@
-.page {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 2.5rem 1.5rem 4rem;
+.peer-analysis {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
 }
 
-.page-header {
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.section-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1.5rem;
 }
 
-.page-header h1 {
+.section-header h2 {
   margin: 0;
+  font-size: 1.05rem;
   color: #101828;
 }
 
-.subtitle {
+.section-subtitle {
   color: #667085;
-  margin: 0.25rem 0 0;
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
   max-width: 560px;
-  line-height: 1.5;
+}
+
+.secondary-btn {
+  background: #fff;
+  color: #344054;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.secondary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .primary-btn {
@@ -34,7 +58,6 @@
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
-  white-space: nowrap;
 }
 
 .primary-btn:disabled {
@@ -42,23 +65,10 @@
   cursor: not-allowed;
 }
 
-.secondary-btn {
-  background: #fff;
-  color: #344054;
-  border: 1px solid #d0d5dd;
-  border-radius: 8px;
-  padding: 0.65rem 1.2rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-}
-
 .banner {
   border-radius: 8px;
   padding: 0.6rem 0.85rem;
   font-size: 0.85rem;
-  margin-bottom: 1rem;
 }
 
 .banner.error {
@@ -75,14 +85,14 @@
 
 .muted {
   color: #98a2b3;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
 }
 
 .empty-state {
   background: #fafbfc;
   border: 1px dashed #d0d5dd;
   border-radius: 12px;
-  padding: 2.5rem 1.5rem;
+  padding: 2rem 1.5rem;
   text-align: center;
 }
 
@@ -93,13 +103,12 @@
   margin: 0 auto;
 }
 
-.add-company-card,
+.card,
 .add-period-form {
   background: #fafbfc;
   border: 1px solid #eaecf0;
   border-radius: 12px;
   padding: 1.1rem;
-  margin-bottom: 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
@@ -207,7 +216,7 @@
   justify-content: flex-end;
 }
 
-.link-btn {
+.text-btn {
   background: none;
   border: none;
   color: #0e2c21;
@@ -217,6 +226,7 @@
   padding: 0;
   text-decoration: underline;
   font-family: inherit;
+  align-self: flex-start;
 }
 
 .danger-link {
@@ -270,13 +280,49 @@
   white-space: nowrap;
 }
 
-.metric-inputs {
+.mode-toggle {
+  display: flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 0.2rem;
+  gap: 0.15rem;
+  background: #f2f4f7;
+  border-radius: 9px;
+}
+
+.mode-btn {
+  border: none;
+  background: transparent;
+  padding: 0.4rem 0.85rem;
+  border-radius: 7px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #667085;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.mode-btn.active {
+  background: #fff;
+  color: #101828;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+
+.metric-inputs,
+.metric-checkboxes {
   max-height: 280px;
   overflow-y: auto;
   border: 1px solid #eaecf0;
   border-radius: 10px;
   padding: 0.75rem 0.9rem;
   background: #fff;
+  flex-shrink: 0;
+}
+
+.metric-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
 }
 
 .metric-group-label {
@@ -290,6 +336,16 @@
 
 .metric-group-label:first-child {
   margin-top: 0;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.83rem;
+  color: #344054;
+  cursor: pointer;
+  padding: 0.15rem 0;
 }
 
 .metric-input-row-group {
@@ -328,4 +384,57 @@
   font-size: 0.72rem;
   color: #98a2b3;
   white-space: nowrap;
+}
+
+.template-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.step-label {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #344054;
+}
+
+.template-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.upload-btn {
+  background: #fff;
+  color: #344054;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.upload-btn:hover {
+  background: #f9fafb;
+}
+
+.upload-status {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #027a48;
+}
+
+.upload-error {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #b42318;
+}
+
+.loaded-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
 }

@@ -1,15 +1,20 @@
 """Peer benchmarking v1 -- see docs/CHART_SIMPLIFICATION_AND_PEER_ANALYSIS.md
-Part 2. Manual entry, one period at a time (the doc's Excel-with-locked-
-cells template + granularity-aware import pipeline is deferred -- a
-handful of peer companies with a few periods each doesn't need a file
-upload pipeline to be useful yet). Peer figures are keyed by the same
-metric keys the Chart Builder's CHARTABLE_METRICS registry uses, so they
-plug directly into the comparison-chart machinery."""
+Part 2. Entry is manual (a form) or via a downloadable CSV template with
+Amara Raja's own values pre-filled and the peer's columns left blank to
+fill in and re-upload -- parsed client-side (matching how /entries' own
+bulk-upload wizard already parses CSV/Excel in the browser and posts
+structured JSON, rather than a server-side file-upload endpoint). Peer
+figures are keyed by the same metric keys the Chart Builder's
+CHARTABLE_METRICS registry uses, so they plug directly into the
+comparison-chart machinery."""
 
+import csv
+import io
 import uuid
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -45,6 +50,38 @@ def _validate_metrics(metrics: dict[str, float]) -> None:
     unknown = [k for k in metrics if k not in CHARTABLE_METRICS]
     if unknown:
         raise HTTPException(status_code=422, detail=f"Unknown metric(s): {', '.join(unknown)}")
+
+
+@router.get("/{company_id}/template")
+def download_template(
+    company_id: uuid.UUID,
+    period: date,
+    metrics: str,
+    location_id: uuid.UUID | None = None,
+    current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
+    db: Session = Depends(get_db),
+):
+    """One row per requested metric, Amara Raja's own value pre-filled
+    (the same computation the dashboard uses) and the peer's column left
+    blank -- fill it in and re-upload via the same form the manual-entry
+    path uses (parsed in the browser, not a server-side file endpoint)."""
+    company = _get_owned_company(db, current, company_id)
+    keys = [k for k in metrics.split(",") if k.strip()]
+    unknown = [k for k in keys if k not in CHARTABLE_METRICS]
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Unknown metric(s): {', '.join(unknown)}")
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["metric_key", "metric_label", "unit", "amara_raja_value", f"{company.name}_value"])
+    for key in keys:
+        spec = CHARTABLE_METRICS[key]
+        data = get_metric_data(metric=key, period=period, period_mode="month", months=1, location_id=location_id, current=current, db=db)
+        self_value = data.points[-1].value if data.points else None
+        writer.writerow([key, spec["label"], spec["unit"], self_value if self_value is not None else "", ""])
+
+    filename = f"{company.name.replace(' ', '_')}_{period.isoformat()[:7]}_template.csv"
+    return Response(content=buffer.getvalue(), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @router.post("", response_model=PeerCompanyOut)

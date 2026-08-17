@@ -5,6 +5,7 @@ from app.api.routes import (
     admin_emission_factors,
     admin_locations,
     admin_mapping_templates,
+    admin_tenant_settings,
     admin_users,
     carbon,
     charts,
@@ -12,6 +13,7 @@ from app.api.routes import (
     entries,
     health,
     intensity,
+    internal,
     peers,
     safety,
     targets,
@@ -33,6 +35,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(admin_users.router)
 app.include_router(admin_locations.router)
+app.include_router(admin_tenant_settings.router)
 app.include_router(dashboard.router)
 app.include_router(entries.router)
 app.include_router(admin_mapping_templates.router)
@@ -43,3 +46,4 @@ app.include_router(intensity.router)
 app.include_router(safety.router)
 app.include_router(charts.router)
 app.include_router(peers.router)
+app.include_router(internal.router)

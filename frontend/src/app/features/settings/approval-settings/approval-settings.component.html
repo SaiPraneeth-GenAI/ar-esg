@@ -1,0 +1,41 @@
+<div class="page">
+  <header class="page-header">
+    <h1>Approval Settings</h1>
+    <p class="subtitle">Control how entries move from Submitted to Approved.</p>
+  </header>
+
+  @if (errorMessage()) {
+    <div class="banner error">{{ errorMessage() }}</div>
+  }
+  @if (successMessage()) {
+    <div class="banner success">{{ successMessage() }}</div>
+  }
+
+  @if (loading()) {
+    <p class="muted">Loading…</p>
+  } @else {
+    <div class="setting-card">
+      <div class="setting-row">
+        <div class="setting-text">
+          <span class="setting-title">Auto-approve submitted entries</span>
+          <p class="setting-desc">
+            When on, an entry a Manager submits is approved immediately -- no separate Approver review step. It still
+            creates the same approval and audit trail, and still triggers the same rollup and GHG recalculation as a
+            manual approval. When off (default), submitted entries wait in the Approver's queue as usual.
+          </p>
+        </div>
+        <button
+          type="button"
+          class="switch"
+          role="switch"
+          [attr.aria-checked]="autoApprove()"
+          [class.on]="autoApprove()"
+          [disabled]="saving()"
+          (click)="toggle()"
+        >
+          <span class="switch-knob"></span>
+        </button>
+      </div>
+    </div>
+  }
+</div>

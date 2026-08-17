@@ -1,10 +1,13 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { BreakdownDimension, ChartApiService, ChartMetric, ChartMetricPoint, SavedChart } from '../../core/chart-api.service';
 import { PeriodMode } from '../../core/intensity-api.service';
-import { PeerApiService, PeerCompany } from '../../core/peer-api.service';
+import { PeerApiService } from '../../core/peer-api.service';
 import { PieChartComponent, PieSlice } from '../../shared/pie-chart/pie-chart.component';
 import { ChartPoint, ChartSeriesDef, RichTrendChartComponent } from '../../shared/rich-trend-chart/rich-trend-chart.component';
 import { ChartBuilderPanelComponent } from './chart-builder-panel/chart-builder-panel.component';
+import { PeerAnalysisComponent } from './peer-analysis/peer-analysis.component';
+
+type TabId = 'company' | 'peers';
 
 function currentMonthValue(): string {
   const now = new Date();
@@ -31,7 +34,7 @@ interface RenderedChart {
 @Component({
   selector: 'app-charts',
   standalone: true,
-  imports: [RichTrendChartComponent, PieChartComponent, ChartBuilderPanelComponent],
+  imports: [RichTrendChartComponent, PieChartComponent, ChartBuilderPanelComponent, PeerAnalysisComponent],
   templateUrl: './charts.component.html',
   styleUrl: './charts.component.css'
 })
@@ -39,25 +42,38 @@ export class ChartsComponent implements OnInit {
   private chartApi = inject(ChartApiService);
   private peerApi = inject(PeerApiService);
 
+  activeTab = signal<TabId>('company');
+
   loading = signal(true);
   errorMessage = signal('');
   rendered = signal<RenderedChart[]>([]);
   metrics = signal<ChartMetric[]>([]);
   dimensions = signal<BreakdownDimension[]>([]);
-  peerCompanies = signal<PeerCompany[]>([]);
 
   showBuilder = signal(false);
   editingChart = signal<SavedChart | null>(null);
+  builderPeerOnly = signal(false);
+
+  private isPeerChart(chart: SavedChart): boolean {
+    return chart.config.question_type === 'comparison' && chart.config.comparison_mode === 'peers';
+  }
+
+  companyCharts(): RenderedChart[] {
+    return this.rendered().filter((item) => !this.isPeerChart(item.chart));
+  }
+
+  peerCharts(): RenderedChart[] {
+    return this.rendered().filter((item) => this.isPeerChart(item.chart));
+  }
+
+  setTab(tab: TabId): void {
+    this.activeTab.set(tab);
+  }
 
   async ngOnInit(): Promise<void> {
-    const [metrics, dimensions, peerCompanies] = await Promise.all([
-      this.chartApi.listMetrics(),
-      this.chartApi.listBreakdownDimensions(),
-      this.peerApi.listCompanies()
-    ]);
+    const [metrics, dimensions] = await Promise.all([this.chartApi.listMetrics(), this.chartApi.listBreakdownDimensions()]);
     this.metrics.set(metrics);
     this.dimensions.set(dimensions);
-    this.peerCompanies.set(peerCompanies);
     await this.refresh();
   }
 
@@ -134,11 +150,19 @@ export class ChartsComponent implements OnInit {
 
   openNewChart(): void {
     this.editingChart.set(null);
+    this.builderPeerOnly.set(false);
+    this.showBuilder.set(true);
+  }
+
+  openNewPeerChart(): void {
+    this.editingChart.set(null);
+    this.builderPeerOnly.set(true);
     this.showBuilder.set(true);
   }
 
   openEditChart(item: RenderedChart): void {
     this.editingChart.set(item.chart);
+    this.builderPeerOnly.set(this.isPeerChart(item.chart));
     this.showBuilder.set(true);
   }
 

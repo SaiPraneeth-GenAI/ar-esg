@@ -139,13 +139,29 @@
   border-left-color: #4fd1a5;
 }
 
+/* Rendered in the DOM whenever settingsOpen() is true, independent of
+   whether the rail is hovered/expanded -- without an explicit hidden
+   state, the collapsed 68px rail (overflow: hidden) showed these as a
+   column of horizontally-clipped label fragments any time a settings
+   sub-route was open and the mouse wasn't over the sidebar. Same
+   opacity-gated reveal .nav-label already uses. */
 .nav-subitems {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
   padding: 0.3rem 0 0.5rem 2.1rem;
-  animation: slide-in 0.16s ease-out;
   white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease;
+}
+
+.sidebar-inner:hover .nav-subitems,
+.sidebar-inner:focus-within .nav-subitems {
+  opacity: 1;
+  pointer-events: auto;
+  animation: slide-in 0.16s ease-out;
+  transition: opacity 0.14s ease 0.06s;
 }
 
 @keyframes slide-in {

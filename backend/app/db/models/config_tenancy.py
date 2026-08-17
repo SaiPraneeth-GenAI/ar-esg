@@ -16,6 +16,10 @@ class Tenant(Base):
     industry_vertical: Mapped[str | None] = mapped_column(String)
     branding_config: Mapped[dict | None] = mapped_column(JSONB)
     schema_mode: Mapped[str | None] = mapped_column(String)
+    # When true, an entry a Manager submits is approved immediately instead
+    # of waiting in the Approver's queue -- see /admin/tenant-settings and
+    # entries.submit_entries. Admin-only, off by default.
+    auto_approve_entries: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
 
     locations: Mapped[list["Location"]] = relationship(back_populates="tenant")

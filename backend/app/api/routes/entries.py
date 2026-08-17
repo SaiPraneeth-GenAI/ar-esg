@@ -11,7 +11,7 @@ from app.core.auth import CurrentUser, require_roles
 from app.core.config import get_settings
 from app.core.supabase_storage import upload_file
 from app.core.unit_conversion import convert_unit, units_equivalent
-from app.db.models import Approval, AuditLog, Attachment, Category, DataPoint, EmailLog, Entry, Location, MappingTemplate, User
+from app.db.models import Approval, AuditLog, Attachment, Category, DataPoint, EmailLog, Entry, Location, MappingTemplate, Tenant, User
 from app.db.session import get_db
 from app.schemas.entries import (
     AttachmentOut,
@@ -700,6 +700,23 @@ def bulk_import(
     )
 
 
+def _approve_entry_now(db: Session, entry: Entry, tenant_id, actor_id, actor_email: str, auto: bool) -> None:
+    """Shared by a human Approver's decision and tenant-level
+    auto-approval -- same status transition, same Approval/audit trail,
+    same rollup + GHG recalculation, so an auto-approved entry is
+    indistinguishable in every downstream calculation from a manually
+    approved one. Only the audit trail's wording marks it as automatic."""
+    entry.status = "Approved"
+    db.add(Approval(entry_id=entry.id, approver_id=actor_id, action="approve"))
+    db.commit()
+    action = "auto_approved" if auto else "approved"
+    note = "Auto-approved (tenant setting)" if auto else "Approved"
+    write_audit(db, entry.id, actor_email, action, "Submitted", note)
+    recompute_rollup_for_entry(db, entry)
+    calculate_entry(db, entry, tenant_id, actor_id)
+    db.commit()
+
+
 @router.post("/submit", response_model=list[EntryOut])
 def submit_entries(
     payload: SubmitRequest,
@@ -719,10 +736,14 @@ def submit_entries(
         )
         .all()
     )
+    tenant = db.get(Tenant, current.tenant_id)
+    auto_approve = bool(tenant and tenant.auto_approve_entries)
     for entry in rows:
         entry.status = "Submitted"
         db.commit()
         write_audit(db, entry.id, current.email, "submitted", "Draft", "Submitted")
+        if auto_approve:
+            _approve_entry_now(db, entry, current.tenant_id, current.id, current.email, auto=True)
     return [_entry_out(db, e) for e in rows]
 
 
@@ -765,17 +786,7 @@ def approve_entry(
     if entry.submitted_by is not None and str(entry.submitted_by) == str(current.id):
         raise HTTPException(status_code=403, detail="You cannot approve your own submission")
 
-    entry.status = "Approved"
-    db.add(Approval(entry_id=entry.id, approver_id=current.id, action="approve"))
-    db.commit()
-    write_audit(db, entry.id, current.email, "approved", "Submitted", "Approved")
-    recompute_rollup_for_entry(db, entry)
-
-    # GHG calculation is a separate concern from the Water/Waste rollup
-    # above -- only runs (and only writes a row) when this data point is a
-    # mapped carbon source (see app/core/carbon_mapping.py).
-    calculate_entry(db, entry, current.tenant_id, current.id)
-    db.commit()
+    _approve_entry_now(db, entry, current.tenant_id, current.id, current.email, auto=False)
 
     return _entry_out(db, entry)
 

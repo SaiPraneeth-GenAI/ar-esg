@@ -37,6 +37,34 @@
   white-space: nowrap;
 }
 
+.tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #eaecf0;
+}
+
+.tab {
+  background: none;
+  border: none;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #667085;
+  cursor: pointer;
+  font-family: inherit;
+  border-bottom: 2px solid transparent;
+}
+
+.tab.active {
+  color: #0e2c21;
+  border-bottom-color: #0e2c21;
+}
+
+.peer-chart-grid {
+  margin-top: 1.5rem;
+}
+
 .banner {
   border-radius: 8px;
   padding: 0.6rem 0.85rem;

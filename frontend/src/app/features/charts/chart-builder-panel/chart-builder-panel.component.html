@@ -38,7 +38,9 @@
     }
 
     @if (step() === 2) {
-      <button type="button" class="link-btn" (click)="backToQuestion()">← Change question</button>
+      @if (!peerOnly) {
+        <button type="button" class="link-btn" (click)="backToQuestion()">← Change question</button>
+      }
 
       @if (questionType() === 'trend') {
         <label class="field">
@@ -91,10 +93,9 @@
       }
 
       @if (questionType() === 'comparison') {
-        <div class="mode-toggle" role="group" aria-label="What to compare">
-          <button type="button" class="mode-btn" [class.active]="comparisonMode() === 'metrics'" (click)="setComparisonMode('metrics')">Our metrics</button>
-          <button type="button" class="mode-btn" [class.active]="comparisonMode() === 'peers'" (click)="setComparisonMode('peers')">Us vs peers</button>
-        </div>
+        @if (peerOnly) {
+          <p class="panel-hint">Comparing Amara Raja against your peer companies for one metric.</p>
+        }
 
         @if (comparisonMode() === 'metrics') {
           <label class="field">

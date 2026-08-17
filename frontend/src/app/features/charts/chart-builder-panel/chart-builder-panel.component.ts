@@ -69,6 +69,11 @@ export class ChartBuilderPanelComponent implements OnInit {
   private peerApi = inject(PeerApiService);
 
   @Input() editing: SavedChart | null = null;
+  /** Opened from the Peer Analysis tab's "+ New peer comparison" -- skips
+   * the question picker and goes straight to a comparison-vs-peers builder.
+   * The normal Company Charts entry point never shows peer comparison as
+   * an option there; it's a separate, dedicated flow. */
+  @Input() peerOnly = false;
   @Output() closed = new EventEmitter<void>();
   @Output() saved = new EventEmitter<void>();
 
@@ -196,6 +201,11 @@ export class ChartBuilderPanelComponent implements OnInit {
       if (this.editing.config.dimension) this.dimension.set(this.editing.config.dimension);
       if (this.editing.config.metrics) this.comparisonMetrics.set(new Set(this.editing.config.metrics));
       if (this.editing.config.compare_peer_ids) this.selectedPeerIds.set(new Set(this.editing.config.compare_peer_ids));
+      this.step.set(2);
+      await this.refreshPreview();
+    } else if (this.peerOnly) {
+      this.questionType.set('comparison');
+      this.comparisonMode.set('peers');
       this.step.set(2);
       await this.refreshPreview();
     }

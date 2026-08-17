@@ -104,4 +104,21 @@ export class PeerApiService {
     if (locationId) params['location_id'] = locationId;
     return firstValueFrom(this.http.get<PeerCompareData>(`${environment.apiBaseUrl}/peers/compare`, { headers, params }));
   }
+
+  async downloadTemplate(companyId: string, companyName: string, period: string, metricKeys: string[], locationId?: string): Promise<void> {
+    const { data } = await this.supabase.client.auth.getSession();
+    const params: Record<string, string> = { period, metrics: metricKeys.join(',') };
+    if (locationId) params['location_id'] = locationId;
+    const query = new URLSearchParams(params);
+    const response = await fetch(`${environment.apiBaseUrl}/peers/${companyId}/template?${query}`, {
+      headers: { Authorization: `Bearer ${data.session?.access_token ?? ''}` }
+    });
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${companyName.replace(/\s+/g, '_')}_${period.slice(0, 7)}_template.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 }

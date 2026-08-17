@@ -1,8 +1,9 @@
-import { DecimalPipe } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { DecimalPipe, KeyValuePipe } from '@angular/common';
+import { Component, EventEmitter, OnInit, Output, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ChartApiService, ChartMetric } from '../../../core/chart-api.service';
 import { PeerApiService, PeerCompany, PeerData } from '../../../core/peer-api.service';
+import { parseSpreadsheet } from '../../data-entry/bulk-upload-wizard/bulk-upload-wizard.utils';
 
 function currentMonthValue(): string {
   const now = new Date();
@@ -15,16 +16,20 @@ const CONFIDENCE_LABELS: Record<string, string> = {
   estimated: 'Estimated'
 };
 
+type EntryMode = 'manual' | 'template';
+
 @Component({
-  selector: 'app-peer-companies',
+  selector: 'app-peer-analysis',
   standalone: true,
-  imports: [FormsModule, DecimalPipe],
-  templateUrl: './peer-companies.component.html',
-  styleUrl: './peer-companies.component.css'
+  imports: [FormsModule, DecimalPipe, KeyValuePipe],
+  templateUrl: './peer-analysis.component.html',
+  styleUrl: './peer-analysis.component.css'
 })
-export class PeerCompaniesComponent implements OnInit {
+export class PeerAnalysisComponent implements OnInit {
   private peerApi = inject(PeerApiService);
   private chartApi = inject(ChartApiService);
+
+  @Output() newComparisonChart = new EventEmitter<void>();
 
   loading = signal(true);
   errorMessage = signal('');
@@ -42,13 +47,18 @@ export class PeerCompaniesComponent implements OnInit {
   dataLoading = signal(false);
 
   showAddPeriod = signal(false);
+  entryMode = signal<EntryMode>('manual');
   periodValue = signal(currentMonthValue());
   periodMetricValues = signal<Record<string, number | null>>({});
+  templateMetricKeys = signal<Set<string>>(new Set());
   dataSource = signal('');
   sourceLink = signal('');
   dataConfidence = signal<string>('self_reported');
   notes = signal('');
   submittingPeriod = signal(false);
+  downloadingTemplate = signal(false);
+  uploadedFileName = signal('');
+  uploadParseError = signal('');
 
   confidenceLabels = CONFIDENCE_LABELS;
 
@@ -126,14 +136,26 @@ export class PeerCompaniesComponent implements OnInit {
     }
   }
 
+  expandedCompany(): PeerCompany | undefined {
+    return this.companies().find((c) => c.id === this.expandedCompanyId());
+  }
+
   openAddPeriod(): void {
     this.showAddPeriod.set(true);
+    this.entryMode.set('manual');
     this.periodValue.set(currentMonthValue());
     this.periodMetricValues.set({});
+    this.templateMetricKeys.set(new Set());
     this.dataSource.set('');
     this.sourceLink.set('');
     this.dataConfidence.set('self_reported');
     this.notes.set('');
+    this.uploadedFileName.set('');
+    this.uploadParseError.set('');
+  }
+
+  setEntryMode(mode: EntryMode): void {
+    this.entryMode.set(mode);
   }
 
   setMetricValue(key: string, value: string): void {
@@ -144,6 +166,67 @@ export class PeerCompaniesComponent implements OnInit {
 
   hasAnyMetricValue(): boolean {
     return Object.values(this.periodMetricValues()).some((v) => v !== null && v !== undefined);
+  }
+
+  toggleTemplateMetric(key: string): void {
+    const set = new Set(this.templateMetricKeys());
+    if (set.has(key)) {
+      set.delete(key);
+    } else {
+      set.add(key);
+    }
+    this.templateMetricKeys.set(set);
+  }
+
+  isTemplateMetricSelected(key: string): boolean {
+    return this.templateMetricKeys().has(key);
+  }
+
+  async downloadTemplate(): Promise<void> {
+    const company = this.expandedCompany();
+    const keys = Array.from(this.templateMetricKeys());
+    if (!company || keys.length === 0) return;
+    this.downloadingTemplate.set(true);
+    this.errorMessage.set('');
+    try {
+      await this.peerApi.downloadTemplate(company.id, company.name, `${this.periodValue()}-01`, keys);
+    } catch {
+      this.errorMessage.set('Could not download the template.');
+    } finally {
+      this.downloadingTemplate.set(false);
+    }
+  }
+
+  async onTemplateFileChange(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.uploadedFileName.set(file.name);
+    this.uploadParseError.set('');
+    try {
+      const { rows } = await parseSpreadsheet(file);
+      // Template columns: metric_key, metric_label, unit, amara_raja_value, {peer}_value
+      const values: Record<string, number | null> = { ...this.periodMetricValues() };
+      let found = 0;
+      for (const row of rows) {
+        const key = String(row[0] ?? '').trim();
+        const peerRaw = row[4];
+        if (!key || peerRaw === '' || peerRaw === null || peerRaw === undefined) continue;
+        const num = Number(peerRaw);
+        if (Number.isNaN(num)) continue;
+        values[key] = num;
+        found += 1;
+      }
+      if (found === 0) {
+        this.uploadParseError.set(`No filled-in values found in ${this.expandedCompany()?.name ?? 'peer'}'s column -- check you filled the last column and re-download if needed.`);
+        return;
+      }
+      this.periodMetricValues.set(values);
+    } catch {
+      this.uploadParseError.set('Could not read this file. Make sure it is the downloaded .csv template.');
+    } finally {
+      input.value = '';
+    }
   }
 
   async savePeriodData(): Promise<void> {
