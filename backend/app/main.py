@@ -12,7 +12,6 @@ from app.api.routes import (
     entries,
     health,
     intensity,
-    internal,
     safety,
     targets,
 )
@@ -42,4 +41,3 @@ app.include_router(targets.router)
 app.include_router(intensity.router)
 app.include_router(safety.router)
 app.include_router(charts.router)
-app.include_router(internal.router)
