@@ -144,6 +144,36 @@
   color: #fff;
 }
 
+.sample-count-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.sample-count-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #475467;
+}
+
+.sample-count-field input {
+  width: 72px;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.sample-count-hint {
+  font-size: 0.78rem;
+  color: #98a2b3;
+}
+
 .demo-step-head {
   display: flex;
   align-items: flex-start;

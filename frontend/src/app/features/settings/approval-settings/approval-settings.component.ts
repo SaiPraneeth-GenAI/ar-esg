@@ -45,7 +45,15 @@ export class ApprovalSettingsComponent implements OnInit {
   populateStep = signal<PopulateStep>('idle');
   populatePassword = signal('');
   populateError = signal('');
-  populateResult = signal<{ entries_created: number; targets_activated: number } | null>(null);
+  populateResult = signal<{ entries_created: number; targets_activated: number; entries_rejected: number; entries_pending: number } | null>(
+    null
+  );
+  // Demo-only: pull this many of the most recent month's entries back out
+  // of auto-approved so there's real material to show tracking/closing a
+  // rejection and approving something live, instead of a dataset where
+  // everything already happened. 0/0 keeps the original all-approved behavior.
+  rejectedSampleCount = signal(0);
+  pendingSampleCount = signal(0);
 
   downloadingEntries = signal(false);
   downloadingFactors = signal(false);
@@ -177,8 +185,13 @@ export class ApprovalSettingsComponent implements OnInit {
         this.populateStep.set('confirming');
         return;
       }
-      const result = await this.demoApi.populateAll();
-      this.populateResult.set({ entries_created: result.entries_created, targets_activated: result.targets_activated });
+      const result = await this.demoApi.populateAll(this.rejectedSampleCount(), this.pendingSampleCount());
+      this.populateResult.set({
+        entries_created: result.entries_created,
+        targets_activated: result.targets_activated,
+        entries_rejected: result.entries_rejected,
+        entries_pending: result.entries_pending
+      });
       this.populateStep.set('done');
       this.clearResult.set(null);
       this.targetsUploadResult.set(null);

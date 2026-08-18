@@ -17,6 +17,8 @@ export interface PopulateAllResponse {
   entries_errors: number;
   targets_activated: number;
   targets_errors: number;
+  entries_rejected: number;
+  entries_pending: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -36,11 +38,15 @@ export class AdminDemoApiService {
     );
   }
 
-  async populateAll(): Promise<PopulateAllResponse> {
+  async populateAll(rejectedCount: number, pendingCount: number): Promise<PopulateAllResponse> {
     const headers = await this.authHeaders();
     return firstValueFrom(
       this.http
-        .post<PopulateAllResponse>(`${environment.apiBaseUrl}/admin/demo/populate-all`, {}, { headers })
+        .post<PopulateAllResponse>(
+          `${environment.apiBaseUrl}/admin/demo/populate-all`,
+          { rejected_count: rejectedCount, pending_count: pendingCount },
+          { headers }
+        )
         .pipe(timeout(90_000))
     );
   }

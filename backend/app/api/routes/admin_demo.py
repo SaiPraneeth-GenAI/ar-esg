@@ -4,14 +4,17 @@ demo can start from a clean slate and repopulate itself end-to-end through
 the app's own Bulk Upload flows -- nothing here writes an entry, factor,
 or target directly, with one exception (populate_all_demo_data, see there)."""
 
+import uuid
+
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.api.routes.entries import bulk_import
 from app.api.routes.targets import bulk_import_targets
 from app.core.auth import CurrentUser, require_roles
-from app.db.models import Entry, EmissionTarget, Location, PeerData
+from app.db.models import Approval, AuditLog, Entry, EmissionTarget, Location, PeerData
 from app.db.session import get_db
 from app.schemas.entries import BulkImportRequest, BulkImportRowIn
 from app.schemas.targets import TargetBulkImportRequest, TargetBulkRowIn
@@ -23,6 +26,7 @@ from app.services.demo_data import (
     demo_target_rows,
     ensure_demo_emission_factors,
 )
+from app.services.rollups import recompute_rollups_for_entries
 
 router = APIRouter(prefix="/admin/demo", tags=["admin"])
 
@@ -63,6 +67,16 @@ def clear_demo_data(
     )
 
 
+class PopulateAllRequest(BaseModel):
+    # Demo-only knobs: pull this many of the just-approved entries back
+    # into Rejected/Submitted instead of leaving all 1275 pre-approved, so
+    # there's real material to demo the reject-track-close workflow and a
+    # live approval against, rather than a backdrop with nothing left to
+    # act on. Both default to 0 (the original all-approved behavior).
+    rejected_count: int = 0
+    pending_count: int = 0
+
+
 class PopulateAllResponse(BaseModel):
     entries_deleted: int
     targets_deleted: int
@@ -70,10 +84,52 @@ class PopulateAllResponse(BaseModel):
     entries_errors: int
     targets_activated: int
     targets_errors: int
+    entries_rejected: int
+    entries_pending: int
+
+
+_DEMO_REJECT_NOTE = "Reported value looks out of range for this site/period -- please recheck the source reading and resubmit."
+
+
+def _seed_demo_decisions(db: Session, to_reject: list[uuid.UUID], to_pending: list[uuid.UUID], current: CurrentUser) -> None:
+    """Moves a handful of already-approved demo entries back to
+    Rejected/Submitted -- direct status writes (not the normal single/bulk
+    reject endpoints, which require Submitted as the starting state) since
+    this is seeding a demo scenario, not a real reviewer decision."""
+    if to_reject:
+        db.execute(sa_update(Entry).where(Entry.id.in_(to_reject)).values(status="Rejected"))
+        db.add_all(
+            [Approval(entry_id=eid, approver_id=current.id, action="reject", reject_note=_DEMO_REJECT_NOTE) for eid in to_reject]
+        )
+        db.add_all(
+            [
+                AuditLog(entry_id=eid, actor=current.email, action="rejected", old_value="Approved", new_value=f"Rejected: {_DEMO_REJECT_NOTE}")
+                for eid in to_reject
+            ]
+        )
+    if to_pending:
+        db.execute(sa_update(Entry).where(Entry.id.in_(to_pending)).values(status="Submitted"))
+        db.add_all(
+            [
+                AuditLog(entry_id=eid, actor=current.email, action="reverted_to_submitted", old_value="Approved", new_value="Submitted")
+                for eid in to_pending
+            ]
+        )
+    db.commit()
+
+    # Approved-only aggregates (Rollup) need to stop counting whichever of
+    # these just stopped being Approved -- recompute_rollups_for_entries()
+    # always does a fresh SUM against current status, so this is safe to
+    # call after the status change above rather than before it.
+    changed = db.query(Entry).filter(Entry.id.in_(to_reject + to_pending)).all()
+    if changed:
+        recompute_rollups_for_entries(db, changed)
+        db.commit()
 
 
 @router.post("/populate-all", response_model=PopulateAllResponse)
 async def populate_all_demo_data(
+    payload: PopulateAllRequest = PopulateAllRequest(),
     current: CurrentUser = Depends(require_roles("Admin")),
     db: Session = Depends(get_db),
 ):
@@ -86,11 +142,18 @@ async def populate_all_demo_data(
     download-then-reupload round trip through xlsx, but is otherwise the
     same operation -- just password-gated on the frontend (see
     ApprovalSettingsComponent.confirmPopulateAll) since it's destructive
-    the same way /clear is."""
+    the same way /clear is.
+
+    payload.rejected_count/pending_count optionally pull a few of the
+    entries from the most recent demo month back out of Approved
+    afterward, so the demo has a couple of real Rejected entries to track
+    and close, and a couple of real Submitted ones to approve live,
+    instead of a dataset where everything already happened."""
     location = db.query(Location).filter(Location.tenant_id == current.tenant_id).first()
     if location is None:
         return PopulateAllResponse(
-            entries_deleted=0, targets_deleted=0, entries_created=0, entries_errors=0, targets_activated=0, targets_errors=0
+            entries_deleted=0, targets_deleted=0, entries_created=0, entries_errors=0,
+            targets_activated=0, targets_errors=0, entries_rejected=0, entries_pending=0,
         )
 
     location_ids = [loc.id for loc in db.query(Location).filter(Location.tenant_id == current.tenant_id).all()]
@@ -127,6 +190,23 @@ async def populate_all_demo_data(
     )
     targets_result = bulk_import_targets(targets_payload, current, db)
 
+    rejected_count = max(0, payload.rejected_count)
+    pending_count = max(0, payload.pending_count)
+    total_needed = rejected_count + pending_count
+    entries_rejected = entries_pending = 0
+    if total_needed > 0:
+        # The tail of the created rows is the most recent demo month (rows
+        # are generated month-major, oldest first) -- picking from there
+        # means whatever the dashboard shows by default already includes
+        # the seeded Rejected/Submitted entries.
+        created_ids = [r.entry_id for r in entries_result.rows if r.entry_id is not None]
+        tail = created_ids[-total_needed:]
+        to_reject = tail[:rejected_count]
+        to_pending = tail[rejected_count:]
+        _seed_demo_decisions(db, to_reject, to_pending, current)
+        entries_rejected = len(to_reject)
+        entries_pending = len(to_pending)
+
     return PopulateAllResponse(
         entries_deleted=entries_deleted,
         targets_deleted=targets_deleted,
@@ -134,6 +214,8 @@ async def populate_all_demo_data(
         entries_errors=entries_result.error_count,
         targets_activated=targets_result.activated_count,
         targets_errors=targets_result.error_count,
+        entries_rejected=entries_rejected,
+        entries_pending=entries_pending,
     )
 
 
