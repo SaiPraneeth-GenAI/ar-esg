@@ -101,6 +101,38 @@ export interface TargetPerformanceResponse {
   months: TargetMonthPerformance[];
 }
 
+export interface TargetBulkRowIn {
+  row_index: number;
+  metric_key: string;
+  location_name?: string | null;
+  baseline_period_start: string;
+  baseline_period_end: string;
+  target_period_start: string;
+  target_period_end: string;
+  reduction_percentage?: number | null;
+  target_value?: number | null;
+  rationale?: string | null;
+}
+
+export interface TargetBulkImportRequest {
+  commit: boolean;
+  rows: TargetBulkRowIn[];
+}
+
+export interface TargetBulkRowResult {
+  row_index: number;
+  status: 'valid' | 'error' | 'created' | 'activated';
+  metric_key: string;
+  message: string | null;
+  target_id: string | null;
+}
+
+export interface TargetBulkImportResponse {
+  rows: TargetBulkRowResult[];
+  activated_count: number;
+  error_count: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class TargetApiService {
   private http = inject(HttpClient);
@@ -154,6 +186,13 @@ export class TargetApiService {
     const headers = await this.authHeaders();
     return firstValueFrom(
       this.http.post<TargetOut>(`${environment.apiBaseUrl}/targets/${id}/activate`, {}, { headers })
+    );
+  }
+
+  async bulkImport(payload: TargetBulkImportRequest): Promise<TargetBulkImportResponse> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(
+      this.http.post<TargetBulkImportResponse>(`${environment.apiBaseUrl}/targets/bulk-import`, payload, { headers })
     );
   }
 

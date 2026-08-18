@@ -37,5 +37,147 @@
         </button>
       </div>
     </div>
+
+    <div class="setting-card demo-card">
+      <div class="setting-row">
+        <div class="setting-text">
+          <span class="setting-title">Simulate Sample</span>
+          <p class="setting-desc">
+            A step-by-step way to reset this tenant to a clean slate and repopulate it with plausible demo data --
+            for showcasing the product, not for everyday use.
+          </p>
+        </div>
+        <button
+          type="button"
+          class="switch"
+          role="switch"
+          [attr.aria-checked]="simulateSampleOpen()"
+          [class.on]="simulateSampleOpen()"
+          (click)="toggleSimulateSample()"
+        >
+          <span class="switch-knob"></span>
+        </button>
+      </div>
+
+      @if (simulateSampleOpen()) {
+        <div class="demo-steps">
+          <!-- Step 1: Clear -->
+          <div class="demo-step">
+            <div class="demo-step-head">
+              <span class="demo-step-num">1</span>
+              <div>
+                <span class="demo-step-title">Clear existing data</span>
+                <p class="demo-step-desc">
+                  Deletes every entry, calculation, target, and peer comparison for this tenant. Users, sites,
+                  categories, and the emission factor library are untouched.
+                </p>
+              </div>
+            </div>
+
+            @if (clearStep() === 'idle') {
+              <button type="button" class="danger-btn" (click)="startClear()">Clear all data</button>
+            } @else if (clearStep() === 'confirming' || clearStep() === 'clearing') {
+              <div class="confirm-box">
+                @if (clearError()) {
+                  <div class="banner error">{{ clearError() }}</div>
+                }
+                <label class="password-label">
+                  Re-enter your password to confirm
+                  <input
+                    type="password"
+                    [ngModel]="clearPassword()"
+                    (ngModelChange)="clearPassword.set($event)"
+                    [disabled]="clearStep() === 'clearing'"
+                    placeholder="Password"
+                    autocomplete="current-password"
+                  />
+                </label>
+                <div class="confirm-actions">
+                  <button type="button" class="secondary-btn" [disabled]="clearStep() === 'clearing'" (click)="cancelClear()">Cancel</button>
+                  <button type="button" class="danger-btn" [disabled]="clearStep() === 'clearing'" (click)="confirmClear()">
+                    {{ clearStep() === 'clearing' ? 'Clearing…' : 'Confirm & clear' }}
+                  </button>
+                </div>
+              </div>
+            } @else {
+              @if (clearResult(); as result) {
+                <div class="banner success">
+                  Cleared {{ result.entries_deleted }} entries, {{ result.targets_deleted }} targets, and
+                  {{ result.peer_data_deleted }} peer records.
+                  <button type="button" class="link-btn" (click)="startClear()">Clear again</button>
+                </div>
+              }
+            }
+          </div>
+
+          <!-- Step 2: Emission factors -->
+          <div class="demo-step">
+            <div class="demo-step-head">
+              <span class="demo-step-num">2</span>
+              <div>
+                <span class="demo-step-title">Add emission factors</span>
+                <p class="demo-step-desc">
+                  Download the sample workbook, then upload it via <strong>Settings → Emission Factors → Bulk
+                  upload</strong>. Covers the fuels and grid factor the entries sample needs, back to 2024.
+                </p>
+              </div>
+            </div>
+            <button type="button" class="secondary-btn" [disabled]="downloadingFactors()" (click)="downloadFactors()">
+              {{ downloadingFactors() ? 'Preparing…' : 'Download sample workbook' }}
+            </button>
+          </div>
+
+          <!-- Step 3: Entries -->
+          <div class="demo-step">
+            <div class="demo-step-head">
+              <span class="demo-step-num">3</span>
+              <div>
+                <span class="demo-step-title">Add data entries</span>
+                <p class="demo-step-desc">
+                  Download the sample workbook, then upload it via <strong>Data Entry → Bulk upload (all
+                  categories)</strong>. One row per data point per month, August 2024 through August 2026.
+                </p>
+              </div>
+            </div>
+            <button type="button" class="secondary-btn" [disabled]="downloadingEntries()" (click)="downloadEntries()">
+              {{ downloadingEntries() ? 'Preparing…' : 'Download sample workbook' }}
+            </button>
+          </div>
+
+          <!-- Step 4: Targets -->
+          <div class="demo-step">
+            <div class="demo-step-head">
+              <span class="demo-step-num">4</span>
+              <div>
+                <span class="demo-step-title">Add targets</span>
+                <p class="demo-step-desc">
+                  Download the sample workbook, then upload it right here -- one target per tracked metric,
+                  activated immediately against the entries and factors from steps 2-3.
+                </p>
+              </div>
+            </div>
+            <div class="demo-step-actions">
+              <button type="button" class="secondary-btn" [disabled]="downloadingTargets()" (click)="downloadTargets()">
+                {{ downloadingTargets() ? 'Preparing…' : 'Download sample workbook' }}
+              </button>
+              <label class="upload-btn" [class.disabled]="targetsUploading()">
+                {{ targetsUploading() ? 'Uploading…' : 'Upload & activate' }}
+                <input type="file" hidden accept=".csv,.xlsx,.xls" [disabled]="targetsUploading()" (change)="onTargetsFileSelected($event)" />
+              </label>
+            </div>
+            @if (targetsUploadError()) {
+              <div class="banner error">{{ targetsUploadError() }}</div>
+            }
+            @if (targetsUploadResult(); as result) {
+              <div class="banner success">{{ result.activated }} target(s) activated{{ result.errors > 0 ? ', ' + result.errors + ' row(s) failed' : '' }}.</div>
+            }
+          </div>
+
+          @if (downloadError()) {
+            <div class="banner error">{{ downloadError() }}</div>
+          }
+        </div>
+      }
+    </div>
   }
 </div>
