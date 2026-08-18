@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { EntriesApiService, EntryRecord } from '../../../core/entries-api.service';
 import { EntryHistoryComponent } from '../entry-history/entry-history.component';
@@ -22,6 +22,14 @@ export class ApprovalQueueComponent implements OnInit {
   rejectNote = '';
   historyOpenId = signal<string | null>(null);
 
+  selectedIds = signal<Set<string>>(new Set());
+  bulkBusy = signal(false);
+  bulkRejecting = signal(false);
+  bulkRejectNote = '';
+
+  selectedCount = computed(() => this.selectedIds().size);
+  allSelected = computed(() => this.queue().length > 0 && this.selectedIds().size === this.queue().length);
+
   async ngOnInit(): Promise<void> {
     await this.refresh();
   }
@@ -31,11 +39,88 @@ export class ApprovalQueueComponent implements OnInit {
     this.errorMessage.set('');
     try {
       this.queue.set(await this.api.getQueue());
+      this.selectedIds.set(new Set());
     } catch {
       this.errorMessage.set('Could not load the approval queue.');
     } finally {
       this.loading.set(false);
     }
+  }
+
+  isSelected(entry: EntryRecord): boolean {
+    return this.selectedIds().has(entry.id);
+  }
+
+  toggleSelect(entry: EntryRecord): void {
+    const next = new Set(this.selectedIds());
+    if (next.has(entry.id)) {
+      next.delete(entry.id);
+    } else {
+      next.add(entry.id);
+    }
+    this.selectedIds.set(next);
+  }
+
+  toggleSelectAll(): void {
+    this.selectedIds.set(this.allSelected() ? new Set() : new Set(this.queue().map((e) => e.id)));
+  }
+
+  clearSelection(): void {
+    this.selectedIds.set(new Set());
+  }
+
+  async bulkApprove(): Promise<void> {
+    const ids = Array.from(this.selectedIds());
+    if (ids.length === 0) return;
+    this.bulkBusy.set(true);
+    this.errorMessage.set('');
+    this.successMessage.set('');
+    try {
+      const result = await this.api.bulkApprove(ids);
+      this.successMessage.set(this.summarize(result.processed_count, 'approved', result.skipped.length));
+      await this.refresh();
+    } catch (err) {
+      this.errorMessage.set(this.extractError(err));
+    } finally {
+      this.bulkBusy.set(false);
+    }
+  }
+
+  startBulkReject(): void {
+    this.bulkRejecting.set(true);
+    this.bulkRejectNote = '';
+  }
+
+  cancelBulkReject(): void {
+    this.bulkRejecting.set(false);
+    this.bulkRejectNote = '';
+  }
+
+  async confirmBulkReject(): Promise<void> {
+    const ids = Array.from(this.selectedIds());
+    if (ids.length === 0) return;
+    if (!this.bulkRejectNote.trim()) {
+      this.errorMessage.set('A rejection note is required.');
+      return;
+    }
+    this.bulkBusy.set(true);
+    this.errorMessage.set('');
+    this.successMessage.set('');
+    try {
+      const result = await this.api.bulkReject(ids, this.bulkRejectNote.trim());
+      this.successMessage.set(this.summarize(result.processed_count, 'rejected', result.skipped.length));
+      this.bulkRejecting.set(false);
+      await this.refresh();
+    } catch (err) {
+      this.errorMessage.set(this.extractError(err));
+    } finally {
+      this.bulkBusy.set(false);
+    }
+  }
+
+  private summarize(processed: number, verb: string, skipped: number): string {
+    const base = `${processed} entr${processed === 1 ? 'y' : 'ies'} ${verb}.`;
+    return skipped > 0 ? `${base} ${skipped} skipped (already decided or not yours to decide).` : base;
   }
 
   async approve(entry: EntryRecord): Promise<void> {

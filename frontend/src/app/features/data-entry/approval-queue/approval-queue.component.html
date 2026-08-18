@@ -13,9 +13,34 @@
       <p>Nothing waiting for your review.</p>
     </div>
   } @else {
+    @if (selectedCount() > 0) {
+      <div class="bulk-toolbar">
+        @if (bulkRejecting()) {
+          <div class="bulk-reject-form">
+            <textarea rows="2" placeholder="Rejection note for all selected (required)" [(ngModel)]="bulkRejectNote"></textarea>
+            <div class="bulk-reject-actions">
+              <button class="primary-btn danger" [disabled]="bulkBusy()" (click)="confirmBulkReject()">
+                Confirm reject {{ selectedCount() }}
+              </button>
+              <button class="secondary-btn" [disabled]="bulkBusy()" (click)="cancelBulkReject()">Cancel</button>
+            </div>
+          </div>
+        } @else {
+          <span class="bulk-count">{{ selectedCount() }} selected</span>
+          <button class="primary-btn" [disabled]="bulkBusy()" (click)="bulkApprove()">
+            {{ bulkBusy() ? 'Approving…' : 'Approve selected' }}
+          </button>
+          <button class="secondary-btn danger" [disabled]="bulkBusy()" (click)="startBulkReject()">Reject selected</button>
+          <button class="link-btn muted" [disabled]="bulkBusy()" (click)="clearSelection()">Clear selection</button>
+        }
+      </div>
+    }
     <table class="queue-table">
       <thead>
         <tr>
+          <th class="select-col">
+            <input type="checkbox" [checked]="allSelected()" (change)="toggleSelectAll()" aria-label="Select all" />
+          </th>
           <th>Category</th>
           <th>Field</th>
           <th>Plant</th>
@@ -27,7 +52,15 @@
       </thead>
       <tbody>
         @for (entry of queue(); track entry.id) {
-          <tr>
+          <tr [class.row-selected]="isSelected(entry)">
+            <td class="select-col">
+              <input
+                type="checkbox"
+                [checked]="isSelected(entry)"
+                (change)="toggleSelect(entry)"
+                [attr.aria-label]="'Select ' + entry.data_point_name"
+              />
+            </td>
             <td>{{ entry.category_name }}</td>
             <td>{{ entry.data_point_name }}</td>
             <td>{{ entry.location_name }}</td>
@@ -54,7 +87,7 @@
           </tr>
           @if (historyOpenId() === entry.id) {
             <tr>
-              <td colspan="7">
+              <td colspan="8">
                 <app-entry-history [entryId]="entry.id"></app-entry-history>
               </td>
             </tr>

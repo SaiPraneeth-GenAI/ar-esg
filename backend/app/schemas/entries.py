@@ -57,6 +57,25 @@ class RejectRequest(BaseModel):
     reject_note: str
 
 
+class BulkApproveRequest(BaseModel):
+    entry_ids: list[uuid.UUID]
+
+
+class BulkRejectRequest(BaseModel):
+    entry_ids: list[uuid.UUID]
+    reject_note: str
+
+
+class BulkDecisionSkip(BaseModel):
+    entry_id: uuid.UUID
+    reason: str
+
+
+class BulkDecisionResponse(BaseModel):
+    processed_count: int
+    skipped: list[BulkDecisionSkip]
+
+
 class AuditLogOut(BaseModel):
     id: uuid.UUID
     actor: str | None

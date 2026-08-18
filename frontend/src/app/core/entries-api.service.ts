@@ -105,6 +105,16 @@ export interface BulkImportResponse {
   created_count: number;
 }
 
+export interface BulkDecisionSkip {
+  entry_id: string;
+  reason: string;
+}
+
+export interface BulkDecisionResponse {
+  processed_count: number;
+  skipped: BulkDecisionSkip[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class EntriesApiService {
   private http = inject(HttpClient);
@@ -174,6 +184,28 @@ export class EntriesApiService {
       this.http.post<EntryRecord>(
         `${environment.apiBaseUrl}/entries/${entryId}/reject`,
         { reject_note: rejectNote },
+        { headers }
+      )
+    );
+  }
+
+  async bulkApprove(entryIds: string[]): Promise<BulkDecisionResponse> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(
+      this.http.post<BulkDecisionResponse>(
+        `${environment.apiBaseUrl}/entries/bulk-approve`,
+        { entry_ids: entryIds },
+        { headers }
+      )
+    );
+  }
+
+  async bulkReject(entryIds: string[], rejectNote: string): Promise<BulkDecisionResponse> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(
+      this.http.post<BulkDecisionResponse>(
+        `${environment.apiBaseUrl}/entries/bulk-reject`,
+        { entry_ids: entryIds, reject_note: rejectNote },
         { headers }
       )
     );

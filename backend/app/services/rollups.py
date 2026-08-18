@@ -11,7 +11,9 @@ def month_start(d: date) -> date:
     return d.replace(day=1)
 
 
-def recompute_rollup(db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID, category_name: str, period: date) -> Rollup:
+def recompute_rollup(
+    db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID, category_name: str, period: date, commit: bool = True
+) -> Rollup:
     """Recomputes and stores the rollup for one tenant/location/category/month.
 
     Called the moment an entry is approved for that slice -- the dashboard
@@ -78,16 +80,46 @@ def recompute_rollup(db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID, 
         rollup.aggregated_value = aggregated_value
         rollup.target_value = target_value
 
-    db.commit()
-    db.refresh(rollup)
+    if commit:
+        db.commit()
+        db.refresh(rollup)
     return rollup
 
 
-def recompute_rollup_for_entry(db: Session, entry: Entry) -> None:
+def recompute_rollup_for_entry(db: Session, entry: Entry, commit: bool = True) -> None:
     """Convenience hook for wherever an entry transitions to Approved."""
     data_point = db.get(DataPoint, entry.data_point_id)
     category = db.get(Category, data_point.category_id)
-    recompute_rollup(db, category.tenant_id, entry.location_id, category.name, entry.period)
+    recompute_rollup(db, category.tenant_id, entry.location_id, category.name, entry.period, commit=commit)
+
+
+def recompute_rollups_for_entries(db: Session, entries: list[Entry]) -> None:
+    """Batched version of recompute_rollup_for_entry() for approving many
+    entries at once (bulk upload auto-approve, bulk-approve action): many
+    entries in the same request commonly land in the same tenant/location/
+    category/month bucket, so this recomputes each distinct rollup once
+    instead of once per entry, and leaves the commit to the caller instead
+    of one round trip per entry."""
+    if not entries:
+        return
+
+    dp_ids = {e.data_point_id for e in entries}
+    dps = {dp.id: dp for dp in db.query(DataPoint).filter(DataPoint.id.in_(dp_ids)).all()}
+    category_ids = {dp.category_id for dp in dps.values()}
+    categories = {c.id: c for c in db.query(Category).filter(Category.id.in_(category_ids)).all()}
+
+    seen: set[tuple[uuid.UUID, uuid.UUID, str, date]] = set()
+    for entry in entries:
+        dp = dps.get(entry.data_point_id)
+        category = categories.get(dp.category_id) if dp else None
+        if category is None:
+            continue
+        period = month_start(entry.period)
+        key = (category.tenant_id, entry.location_id, category.name, period)
+        if key in seen:
+            continue
+        seen.add(key)
+        recompute_rollup(db, category.tenant_id, entry.location_id, category.name, period, commit=False)
 
 
 def _next_month(d: date) -> date:

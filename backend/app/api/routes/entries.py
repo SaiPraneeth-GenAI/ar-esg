@@ -29,10 +29,14 @@ from app.db.session import get_db
 from app.schemas.entries import (
     AttachmentOut,
     AuditLogOut,
+    BulkApproveRequest,
+    BulkDecisionResponse,
+    BulkDecisionSkip,
     BulkImportRequest,
     BulkImportResponse,
     BulkImportRowIn,
     BulkImportRowResult,
+    BulkRejectRequest,
     CategoryOut,
     DataPointOut,
     EntryOut,
@@ -51,10 +55,10 @@ from app.schemas.mapping import (
     SheetDetectionResult,
 )
 from app.services.audit import write_audit
-from app.services.carbon_calculation import calculate_entry
+from app.services.carbon_calculation import calculate_entries_batch
 from app.services.mailing import MailingError, send_email
 from app.services.mapping import header_fingerprint, infer_period, match_category, match_data_point, match_metadata_field, normalize
-from app.services.rollups import recompute_rollup_for_entry
+from app.services.rollups import recompute_rollups_for_entries
 
 router = APIRouter(prefix="/entries", tags=["entries"])
 
@@ -617,7 +621,7 @@ def csv_template(
 
 
 @router.post("/bulk-import", response_model=BulkImportResponse)
-def bulk_import(
+async def bulk_import(
     payload: BulkImportRequest,
     current: CurrentUser = Depends(require_roles("Admin", "Manager")),
     db: Session = Depends(get_db),
@@ -635,7 +639,7 @@ def bulk_import(
     category that matches more than one is an ambiguity error, not a
     guess."""
     tenant = db.get(Tenant, current.tenant_id)
-    auto_approve = bool(tenant and tenant.auto_approve_entries)
+    auto_approve = _effective_auto_approve(tenant, current)
 
     q = db.query(DataPoint, Category.name).join(Category, Category.id == DataPoint.category_id).filter(
         Category.tenant_id == current.tenant_id
@@ -875,6 +879,7 @@ def bulk_import(
         if auto_approve and entry.status == "Submitted":
             pending_approvals.append(entry)
 
+    notify_queue = False
     if payload.commit and pending_results:
         # One flush assigns every new entry its id; existing entries already
         # have one. Audit rows reference entry.id, so they're built here,
@@ -884,12 +889,16 @@ def bulk_import(
             db.add(AuditLog(entry_id=entry.id, actor=current.email, action=action, old_value=old_value, new_value=new_value))
         for idx, entry in pending_results:
             results[idx].entry_id = entry.id
-        # _approve_entry_now() does its own commit + real calculate_entry()
-        # work per row -- genuine calculation, not a wasted round trip, so
-        # it's left exactly as-is rather than batched.
-        for entry in pending_approvals:
-            _approve_entry_now(db, entry, current.tenant_id, current.id, current.email, auto=True)
+        # Approve, calculate, and recompute rollups for every auto-approved
+        # row in one batched pass (see _bulk_approve_entries) instead of once
+        # per row -- this used to be the dominant cost on a large file, each
+        # row round-tripping the cross-region DB 4+ times on its own.
+        _bulk_approve_entries(db, pending_approvals, current.tenant_id, current.id, current.email, auto=True)
+        notify_queue = len(pending_approvals) < len(pending_results)
         db.commit()
+
+    if notify_queue:
+        await _notify_approvers_of_queue(db, current)
 
     return BulkImportResponse(
         rows=results,
@@ -899,25 +908,78 @@ def bulk_import(
     )
 
 
-def _approve_entry_now(db: Session, entry: Entry, tenant_id, actor_id, actor_email: str, auto: bool) -> None:
-    """Shared by a human Approver's decision and tenant-level
-    auto-approval -- same status transition, same Approval/audit trail,
-    same rollup + GHG recalculation, so an auto-approved entry is
-    indistinguishable in every downstream calculation from a manually
-    approved one. Only the audit trail's wording marks it as automatic."""
-    entry.status = "Approved"
-    db.add(Approval(entry_id=entry.id, approver_id=actor_id, action="approve"))
-    db.commit()
+def _effective_auto_approve(tenant: Tenant | None, current: CurrentUser) -> bool:
+    """Tenant-wide auto-approve setting, OR the actor is themselves an
+    Admin/Approver -- they already hold approval authority, and the
+    self-approval guard on the manual approve endpoint means without this
+    their own submissions would otherwise sit in the queue waiting on a
+    second Admin/Approver to come rubber-stamp them."""
+    if tenant and tenant.auto_approve_entries:
+        return True
+    return any(role in ("Admin", "Approver") for role in current.roles)
+
+
+def _bulk_approve_entries(
+    db: Session, entries: list[Entry], tenant_id, actor_id, actor_email: str, auto: bool
+) -> None:
+    """Batched form of approving many entries in one request -- same status
+    transition, Approval row, audit trail, rollup + GHG recalculation as
+    approving one at a time, but every write stays pending in the session
+    (see calculate_entries_batch / recompute_rollups_for_entries) instead of
+    round-tripping the DB per entry. Caller commits once."""
+    if not entries:
+        return
     action = "auto_approved" if auto else "approved"
     note = "Auto-approved (tenant setting)" if auto else "Approved"
-    write_audit(db, entry.id, actor_email, action, "Submitted", note)
-    recompute_rollup_for_entry(db, entry)
-    calculate_entry(db, entry, tenant_id, actor_id)
+    for entry in entries:
+        entry.status = "Approved"
+        db.add(Approval(entry_id=entry.id, approver_id=actor_id, action="approve"))
+        db.add(AuditLog(entry_id=entry.id, actor=actor_email, action=action, old_value="Submitted", new_value=note))
+    calculate_entries_batch(db, entries, tenant_id, actor_id)
+    recompute_rollups_for_entries(db, entries)
+
+
+def _approve_entry_now(db: Session, entry: Entry, tenant_id, actor_id, actor_email: str, auto: bool) -> None:
+    """Single-entry entry point (manual Approve button, per-row auto-approve
+    in submit_entries) -- shares its logic with the bulk path via
+    _bulk_approve_entries, just committed once immediately instead of being
+    left for a caller managing a larger batch."""
+    _bulk_approve_entries(db, [entry], tenant_id, actor_id, actor_email, auto)
+    db.commit()
+
+
+async def _notify_approvers_of_queue(db: Session, current: CurrentUser) -> None:
+    """Fired once per submit/bulk-import request (not per row) whenever it
+    leaves entries sitting in Submitted status -- so an Admin/Approver
+    doesn't have to remember to go check the queue. One email per
+    recipient, not per entry."""
+    approvers = (
+        db.query(User)
+        .filter(User.tenant_id == current.tenant_id, User.roles.overlap(["Admin", "Approver"]), User.email != current.email)
+        .all()
+    )
+    if not approvers:
+        return
+    settings = get_settings()
+    link = f"{settings.frontend_url}/admin/data-entry?tab=queue"
+    subject = "Enviqo: new entries awaiting your approval"
+    html_body = (
+        f"<p><strong>{current.email}</strong> submitted entries that are now waiting on your approval.</p>"
+        f'<p><a href="{link}">Open the approval queue in Enviqo</a>.</p>'
+    )
+    text_body = f"{current.email} submitted entries that are now waiting on your approval.\n\nOpen the approval queue: {link}"
+    for approver in approvers:
+        status = "sent"
+        try:
+            await send_email(approver.email, subject, html_body, text_body)
+        except MailingError:
+            status = "failed"
+        db.add(EmailLog(recipient=approver.email, subject=subject, related_id=None, status=status))
     db.commit()
 
 
 @router.post("/submit", response_model=list[EntryOut])
-def submit_entries(
+async def submit_entries(
     payload: SubmitRequest,
     current: CurrentUser = Depends(require_roles("Admin", "Manager")),
     db: Session = Depends(get_db),
@@ -936,13 +998,18 @@ def submit_entries(
         .all()
     )
     tenant = db.get(Tenant, current.tenant_id)
-    auto_approve = bool(tenant and tenant.auto_approve_entries)
+    auto_approve = _effective_auto_approve(tenant, current)
     for entry in rows:
         entry.status = "Submitted"
+        db.add(AuditLog(entry_id=entry.id, actor=current.email, action="submitted", old_value="Draft", new_value="Submitted"))
+    db.commit()
+
+    if rows and auto_approve:
+        _bulk_approve_entries(db, rows, current.tenant_id, current.id, current.email, auto=True)
         db.commit()
-        write_audit(db, entry.id, current.email, "submitted", "Draft", "Submitted")
-        if auto_approve:
-            _approve_entry_now(db, entry, current.tenant_id, current.id, current.email, auto=True)
+    elif rows:
+        await _notify_approvers_of_queue(db, current)
+
     return _entry_out_batch(db, rows)
 
 
@@ -1012,6 +1079,161 @@ async def reject_entry(
     await _send_rejection_email(db, entry, payload.reject_note)
 
     return _entry_out(db, entry)
+
+
+def _screen_bulk_entries(db: Session, entry_ids: list[uuid.UUID], current: CurrentUser) -> tuple[list[Entry], list[BulkDecisionSkip]]:
+    """Same eligibility rules as _load_entry_for_decision() plus the
+    self-decision guard, but collects failures per row instead of raising
+    -- one bad id in a 40-row selection shouldn't fail the other 39."""
+    entries: list[Entry] = []
+    skips: list[BulkDecisionSkip] = []
+    if not entry_ids:
+        return entries, skips
+
+    found = {e.id: e for e in db.query(Entry).filter(Entry.id.in_(entry_ids)).all()}
+    for entry_id in entry_ids:
+        entry = found.get(entry_id)
+        if entry is None:
+            skips.append(BulkDecisionSkip(entry_id=entry_id, reason="Entry not found"))
+            continue
+        dp = db.get(DataPoint, entry.data_point_id)
+        category = db.get(Category, dp.category_id) if dp else None
+        if category is None or category.tenant_id != current.tenant_id:
+            skips.append(BulkDecisionSkip(entry_id=entry_id, reason="Entry not found"))
+            continue
+        if entry.status != "Submitted":
+            skips.append(BulkDecisionSkip(entry_id=entry_id, reason=f"Entry is {entry.status.lower()}, not awaiting approval"))
+            continue
+        if entry.submitted_by is not None and str(entry.submitted_by) == str(current.id):
+            skips.append(BulkDecisionSkip(entry_id=entry_id, reason="You cannot decide on your own submission"))
+            continue
+        entries.append(entry)
+    return entries, skips
+
+
+@router.post("/bulk-approve", response_model=BulkDecisionResponse)
+async def bulk_approve_entries(
+    payload: BulkApproveRequest,
+    current: CurrentUser = Depends(require_roles("Admin", "Approver")),
+    db: Session = Depends(get_db),
+):
+    """Approve many queue entries in one request -- one Approval row and one
+    audit log entry per entry (same trail as approving one at a time, see
+    _bulk_approve_entries), but one calculation/rollup/commit pass for the
+    whole selection instead of one per row."""
+    entries, skips = _screen_bulk_entries(db, payload.entry_ids, current)
+
+    _bulk_approve_entries(db, entries, current.tenant_id, current.id, current.email, auto=False)
+    db.commit()
+
+    if entries:
+        await _send_bulk_approval_email(db, entries, current.email)
+
+    return BulkDecisionResponse(processed_count=len(entries), skipped=skips)
+
+
+@router.post("/bulk-reject", response_model=BulkDecisionResponse)
+async def bulk_reject_entries(
+    payload: BulkRejectRequest,
+    current: CurrentUser = Depends(require_roles("Admin", "Approver")),
+    db: Session = Depends(get_db),
+):
+    if not payload.reject_note.strip():
+        raise HTTPException(status_code=422, detail="A rejection note is required")
+
+    entries, skips = _screen_bulk_entries(db, payload.entry_ids, current)
+
+    for entry in entries:
+        entry.status = "Rejected"
+        db.add(Approval(entry_id=entry.id, approver_id=current.id, action="reject", reject_note=payload.reject_note))
+        db.add(
+            AuditLog(
+                entry_id=entry.id,
+                actor=current.email,
+                action="rejected",
+                old_value="Submitted",
+                new_value=f"Rejected: {payload.reject_note}",
+            )
+        )
+    db.commit()
+
+    if entries:
+        await _send_bulk_rejection_email(db, entries, payload.reject_note)
+
+    return BulkDecisionResponse(processed_count=len(entries), skipped=skips)
+
+
+async def _send_bulk_approval_email(db: Session, entries: list[Entry], approver_email: str) -> None:
+    """One email per submitter summarizing everything of theirs that was
+    just approved in this batch, instead of one email per entry."""
+    by_submitter: dict[uuid.UUID, list[Entry]] = {}
+    for entry in entries:
+        if entry.submitted_by is not None:
+            by_submitter.setdefault(entry.submitted_by, []).append(entry)
+
+    settings = get_settings()
+    link = f"{settings.frontend_url}/admin/data-entry"
+    for submitter_id, submitter_entries in by_submitter.items():
+        submitter = db.get(User, submitter_id)
+        if submitter is None:
+            continue
+        count = len(submitter_entries)
+        subject = f"Enviqo: {count} entr{'y' if count == 1 else 'ies'} approved"
+        html_body = (
+            f"<p><strong>{approver_email}</strong> approved {count} of your submitted entr{'y' if count == 1 else 'ies'}.</p>"
+            f'<p><a href="{link}">Open Enviqo</a> to see them.</p>'
+        )
+        text_body = f"{approver_email} approved {count} of your submitted entries.\n\nOpen Enviqo: {link}"
+        status = "sent"
+        try:
+            await send_email(submitter.email, subject, html_body, text_body)
+        except MailingError:
+            status = "failed"
+        db.add(EmailLog(recipient=submitter.email, subject=subject, related_id=None, status=status))
+    db.commit()
+
+
+async def _send_bulk_rejection_email(db: Session, entries: list[Entry], reject_note: str) -> None:
+    """One email per submitter listing everything of theirs that was just
+    rejected in this batch, instead of one email per entry."""
+    by_submitter: dict[uuid.UUID, list[Entry]] = {}
+    for entry in entries:
+        if entry.submitted_by is not None:
+            by_submitter.setdefault(entry.submitted_by, []).append(entry)
+
+    settings = get_settings()
+    link = f"{settings.frontend_url}/admin/data-entry"
+    dp_cache: dict[uuid.UUID, DataPoint] = {}
+    for submitter_id, submitter_entries in by_submitter.items():
+        submitter = db.get(User, submitter_id)
+        if submitter is None:
+            continue
+        lines = []
+        for entry in submitter_entries:
+            dp = dp_cache.get(entry.data_point_id)
+            if dp is None:
+                dp = db.get(DataPoint, entry.data_point_id)
+                dp_cache[entry.data_point_id] = dp
+            lines.append(f"{dp.name} ({entry.period.strftime('%B %Y')})")
+        count = len(submitter_entries)
+        subject = f"Enviqo: {count} entr{'y' if count == 1 else 'ies'} rejected"
+        html_items = "".join(f"<li>{line}</li>" for line in lines)
+        html_body = (
+            f"<p>{count} of your submitted entr{'y' if count == 1 else 'ies'} were rejected: "
+            f"<ul>{html_items}</ul></p>"
+            f"<p><strong>Reason:</strong> {reject_note}</p>"
+            f'<p><a href="{link}">Open Enviqo</a> to fix and resubmit.</p>'
+        )
+        text_body = (
+            f"{count} of your submitted entries were rejected:\n" + "\n".join(lines) + f"\n\nReason: {reject_note}\n\nOpen Enviqo: {link}"
+        )
+        status = "sent"
+        try:
+            await send_email(submitter.email, subject, html_body, text_body)
+        except MailingError:
+            status = "failed"
+        db.add(EmailLog(recipient=submitter.email, subject=subject, related_id=None, status=status))
+    db.commit()
 
 
 async def _send_rejection_email(db: Session, entry: Entry, reject_note: str) -> None:
