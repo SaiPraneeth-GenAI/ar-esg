@@ -132,6 +132,34 @@
   border: 1px solid #abefc6;
 }
 
+.banner.warning {
+  background: #fffaeb;
+  color: #b54708;
+  border: 1px solid #fedf89;
+}
+
+.edit-toggle-btn {
+  background: #fff;
+  color: #344054;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.83rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.edit-toggle-btn:hover {
+  border-color: #98a2b3;
+}
+
+.edit-toggle-btn.active {
+  background: #0e2c21;
+  color: #fff;
+  border-color: #0e2c21;
+}
+
 .muted {
   color: #98a2b3;
   font-size: 0.85rem;
@@ -188,7 +216,7 @@
 
 .classic-row {
   display: grid;
-  grid-template-columns: 1.3fr 0.7fr 1.5fr auto auto;
+  grid-template-columns: 1.3fr 0.7fr 1.6fr auto;
   gap: 0.9rem;
   align-items: center;
   padding: 0.9rem 0;
@@ -324,28 +352,10 @@ input[type='number']:focus {
   text-overflow: ellipsis;
 }
 
-.attach-btn {
-  font-size: 0.9rem;
-  color: #0e2c21;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.attach-placeholder {
-  width: 1.3rem;
-  display: inline-block;
-}
-
 .locked-value {
   font-size: 0.95rem;
   font-weight: 700;
   color: #344054;
-}
-
-.approved-edit-hint {
-  margin: -0.3rem 0 0.6rem;
-  font-size: 0.76rem;
-  color: #b54708;
 }
 
 .link-btn {

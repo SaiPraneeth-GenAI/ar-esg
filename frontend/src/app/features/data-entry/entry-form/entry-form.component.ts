@@ -1,13 +1,6 @@
 import { Component, EventEmitter, Input, OnChanges, Output, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import {
-  AttachmentRecord,
-  DataPoint,
-  EntriesApiService,
-  EntryCategory,
-  EntryRecord,
-  LastValueEntry
-} from '../../../core/entries-api.service';
+import { DataPoint, EntriesApiService, EntryCategory, EntryRecord, LastValueEntry } from '../../../core/entries-api.service';
 import { BulkUploadWizardComponent } from '../bulk-upload-wizard/bulk-upload-wizard.component';
 import { EntryHistoryComponent } from '../entry-history/entry-history.component';
 
@@ -17,7 +10,6 @@ interface FieldState {
   note: string;
   entry: EntryRecord | null;
   lastValue: LastValueEntry | null;
-  attachments: AttachmentRecord[];
   historyOpen: boolean;
   saving: boolean;
   autosaved: boolean;
@@ -53,6 +45,7 @@ export class EntryFormComponent implements OnChanges {
   monthValue = signal(currentMonthValue());
   mode = signal<'entry' | 'bulk'>('entry');
   fields = signal<FieldState[]>([]);
+  editMode = signal(false);
 
   get periodIso(): string {
     return `${this.monthValue()}-01`;
@@ -60,6 +53,7 @@ export class EntryFormComponent implements OnChanges {
 
   async ngOnChanges(): Promise<void> {
     this.mode.set('entry');
+    this.editMode.set(false);
     if (this.initialPeriod) {
       this.monthValue.set(this.initialPeriod.slice(0, 7));
     }
@@ -92,7 +86,6 @@ export class EntryFormComponent implements OnChanges {
             note,
             entry,
             lastValue: lastValueByDataPoint.get(dp.id) ?? null,
-            attachments: [],
             historyOpen: false,
             saving: false,
             autosaved: false,
@@ -108,19 +101,22 @@ export class EntryFormComponent implements OnChanges {
     }
   }
 
-  /** Only "Submitted" (awaiting a decision) is locked -- editing an
-   * Approved value is allowed, but see onFieldBlur/flushPendingEdits:
-   * the backend sends it back to Draft when that happens, so a
-   * correction always needs a fresh Submit -> Approve before it can
-   * affect any calculated figure. */
+  /** "Submitted" (awaiting a decision) is always locked. An Approved value
+   * is also locked by default -- editing it demotes it back to Draft (see
+   * onFieldBlur/flushPendingEdits), so that's gated behind the top "Edit"
+   * toggle rather than being silently available on every field. */
   isLocked(field: FieldState): boolean {
-    return field.entry?.status === 'Submitted';
+    if (field.entry?.status === 'Submitted') return true;
+    if (field.entry?.status === 'Approved' && !this.editMode()) return true;
+    return false;
   }
 
-  /** True once an edit to a currently-Approved value has actually been
-   * typed -- used to warn before the field reverts to Draft on save. */
-  editingApproved(field: FieldState): boolean {
-    return field.entry?.status === 'Approved';
+  hasApprovedFields(): boolean {
+    return this.fields().some((f) => f.entry?.status === 'Approved');
+  }
+
+  toggleEditMode(): void {
+    this.editMode.set(!this.editMode());
   }
 
   updateField(index: number, patch: Partial<FieldState>): void {
@@ -244,23 +240,6 @@ export class EntryFormComponent implements OnChanges {
   toggleHistory(index: number): void {
     const field = this.fields()[index];
     this.updateField(index, { historyOpen: !field.historyOpen });
-  }
-
-  async onFileSelected(index: number, event: Event): Promise<void> {
-    const field = this.fields()[index];
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file || !field.entry) {
-      return;
-    }
-    try {
-      const attachment = await this.api.uploadAttachment(field.entry.id, file);
-      this.updateField(index, { attachments: [...field.attachments, attachment] });
-    } catch {
-      this.errorMessage.set('Could not upload attachment.');
-    } finally {
-      input.value = '';
-    }
   }
 
   statusLabel(field: FieldState): string {
