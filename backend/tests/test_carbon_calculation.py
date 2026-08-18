@@ -49,6 +49,14 @@ def test_normalize_fuel_activity_unrecognized_unit_is_unresolved():
     assert isinstance(result, UnresolvedResult)
 
 
+def test_normalize_fuel_activity_tco2e_per_tonne_factor_matches_kg_activity():
+    # Coal (and other solid fuels) are conventionally factored as tCO2e/t --
+    # dimensionally identical to kgCO2e/kg, so a kg-recorded entry resolves
+    # against it directly with no scaling.
+    result = normalize_fuel_activity(Decimal("500"), "kg", "tCO2e/t", density_kg_per_unit=None)
+    assert result == (Decimal("500"), "kg")
+
+
 def test_normalize_grid_activity_kwh_to_mwh():
     value, unit = normalize_grid_activity(Decimal("5000"), "kWh")
     assert value == Decimal("5")

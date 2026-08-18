@@ -48,14 +48,26 @@ class UnresolvedResult:
         return f"{self.reason_code}: {self.reason_detail}"
 
 
+TONNE_BASIS_SUFFIXES = ("/t", "/tonne", "/tonnes", "/mt")
+
+
 def normalize_fuel_activity(
     activity_value: Decimal, activity_unit: str, factor_unit: str, density_kg_per_unit: Decimal | None
 ) -> tuple[Decimal, str] | UnresolvedResult:
     """Fuel factors are expressed per litre or per kg. Converts only when a
     documented density is on file (rule #8) -- never assumes kg == litre."""
-    factor_unit_l = factor_unit.lower()
+    factor_unit_l = factor_unit.lower().replace(" ", "")
     if "litre" in factor_unit_l or "/l" in factor_unit_l:
         factor_basis = "litre"
+    elif factor_unit_l.startswith("tco2e") and factor_unit_l.endswith(TONNE_BASIS_SUFFIXES):
+        # Solid fuels (coal, biomass, ...) are conventionally factored as
+        # tCO2e per tonne, e.g. IPCC/GHG Protocol coal factors -- since
+        # both sides of that ratio are scaled by the same 1000x versus
+        # kgCO2e/kg, the factor_value carries over unchanged, not just the
+        # basis label. Only "tCO2e/t" qualifies for this: a "kgCO2e/t"
+        # factor is a genuinely different scale and stays unresolved
+        # rather than silently treated as identical.
+        factor_basis = "kg"
     elif "kg" in factor_unit_l:
         factor_basis = "kg"
     else:
