@@ -176,6 +176,40 @@ def build_entries_workbook(db: Session, tenant_id) -> bytes:
     return buf.getvalue()
 
 
+def demo_entry_rows(db: Session, tenant_id) -> list[dict]:
+    """Same rows as build_entries_workbook(), as plain dicts instead of an
+    xlsx sheet -- feeds the one-click "populate all" endpoint directly
+    instead of a download-then-reupload round trip. Deliberately not
+    factored to share code with build_entries_workbook() (some duplication
+    of the same simple loop) so the already-verified xlsx path stays
+    untouched by this."""
+    categories = db.query(Category).filter(Category.tenant_id == tenant_id).order_by(Category.display_order, Category.name).all()
+    rng = random.Random(42)
+    generators = _build_generators(rng)
+    rows: list[dict] = []
+    for i, month in enumerate(DEMO_MONTHS):
+        for cat in categories:
+            for dp in cat.data_points:
+                key = (cat.name, dp.name)
+                if key in SKIP_DATA_POINTS:
+                    continue
+                gen = generators.get(key)
+                if gen is None:
+                    continue
+                rows.append(
+                    {
+                        "category": cat.name,
+                        "data_point_name": dp.name,
+                        "value": gen(i),
+                        "unit": dp.unit or "",
+                        "note": "Demo data — sample workbook",
+                        "year": month.year,
+                        "month": month.month,
+                    }
+                )
+    return rows
+
+
 # ---- Emission factors ---------------------------------------------------
 
 # Backfills FY2024 so the entries workbook's Aug-Dec 2024 rows have a
@@ -342,3 +376,22 @@ def build_targets_workbook() -> bytes:
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def demo_target_rows() -> list[dict]:
+    """Same rows as build_targets_workbook(), as plain dicts -- see
+    demo_entry_rows() for why this isn't factored to share code with the
+    xlsx builder."""
+    return [
+        {
+            "metric_key": metric_key,
+            "location_name": None,
+            "baseline_period_start": "2025-01-01",
+            "baseline_period_end": "2025-12-01",
+            "target_period_start": "2026-01-01",
+            "target_period_end": "2026-12-01",
+            "reduction_percentage": 10.0,
+            "rationale": "Demo target — 10% reduction from the FY25 baseline.",
+        }
+        for metric_key in _TARGET_METRIC_ORDER
+    ]

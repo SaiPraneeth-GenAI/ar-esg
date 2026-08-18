@@ -6,6 +6,7 @@ import { TargetApiService, TargetBulkRowIn } from '../../../core/target-api.serv
 import { TenantSettingsApiService } from '../../../core/tenant-settings-api.service';
 
 type ClearStep = 'idle' | 'confirming' | 'clearing' | 'done';
+type PopulateStep = 'idle' | 'confirming' | 'running' | 'done';
 
 @Component({
   selector: 'app-approval-settings',
@@ -35,6 +36,16 @@ export class ApprovalSettingsComponent implements OnInit {
   clearPassword = signal('');
   clearError = signal('');
   clearResult = signal<{ entries_deleted: number; targets_deleted: number; peer_data_deleted: number } | null>(null);
+
+  // One-click alternative to the download/upload x3 flow below: clears
+  // whatever's there and repopulates factors + all entries (auto-approved)
+  // + all targets (activated) in one request, so a demo never gets left
+  // mid-way through Draft/Submitted rows waiting on a separate approval
+  // pass. Password-gated the same as Clear, since it's just as destructive.
+  populateStep = signal<PopulateStep>('idle');
+  populatePassword = signal('');
+  populateError = signal('');
+  populateResult = signal<{ entries_created: number; targets_activated: number } | null>(null);
 
   downloadingEntries = signal(false);
   downloadingFactors = signal(false);
@@ -79,6 +90,7 @@ export class ApprovalSettingsComponent implements OnInit {
     this.simulateSampleOpen.set(!this.simulateSampleOpen());
     if (!this.simulateSampleOpen()) {
       this.resetClearFlow();
+      this.cancelPopulateAll();
     }
   }
 
@@ -130,6 +142,56 @@ export class ApprovalSettingsComponent implements OnInit {
       this.clearStep.set('confirming');
     } finally {
       this.clearPassword.set('');
+    }
+  }
+
+  startPopulateAll(): void {
+    this.populateStep.set('confirming');
+    this.populatePassword.set('');
+    this.populateError.set('');
+  }
+
+  cancelPopulateAll(): void {
+    this.populateStep.set('idle');
+    this.populatePassword.set('');
+    this.populateError.set('');
+  }
+
+  /** Same re-authentication gate as confirmClear() -- this both deletes
+   * existing entries/targets and recreates them, so it gets no less
+   * protection than Clear alone does. */
+  async confirmPopulateAll(): Promise<void> {
+    if (!this.populatePassword()) {
+      this.populateError.set('Enter your password to confirm.');
+      return;
+    }
+    this.populateStep.set('running');
+    this.populateError.set('');
+    try {
+      const { error } = await this.supabase.client.auth.signInWithPassword({
+        email: this.userEmail(),
+        password: this.populatePassword()
+      });
+      if (error) {
+        this.populateError.set('Incorrect password.');
+        this.populateStep.set('confirming');
+        return;
+      }
+      const result = await this.demoApi.populateAll();
+      this.populateResult.set({ entries_created: result.entries_created, targets_activated: result.targets_activated });
+      this.populateStep.set('done');
+      this.clearResult.set(null);
+      this.targetsUploadResult.set(null);
+      if (result.entries_errors > 0 || result.targets_errors > 0) {
+        this.populateError.set(
+          `${result.entries_errors} entry row(s) and ${result.targets_errors} target row(s) could not be created -- everything else is in.`
+        );
+      }
+    } catch {
+      this.populateError.set('Could not populate demo data -- please try again.');
+      this.populateStep.set('confirming');
+    } finally {
+      this.populatePassword.set('');
     }
   }
 

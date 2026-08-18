@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, timeout } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { SupabaseService } from './supabase.service';
 
@@ -8,6 +8,15 @@ export interface ClearDemoDataResponse {
   entries_deleted: number;
   targets_deleted: number;
   peer_data_deleted: number;
+}
+
+export interface PopulateAllResponse {
+  entries_deleted: number;
+  targets_deleted: number;
+  entries_created: number;
+  entries_errors: number;
+  targets_activated: number;
+  targets_errors: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -24,6 +33,15 @@ export class AdminDemoApiService {
     const headers = await this.authHeaders();
     return firstValueFrom(
       this.http.post<ClearDemoDataResponse>(`${environment.apiBaseUrl}/admin/demo/clear`, {}, { headers })
+    );
+  }
+
+  async populateAll(): Promise<PopulateAllResponse> {
+    const headers = await this.authHeaders();
+    return firstValueFrom(
+      this.http
+        .post<PopulateAllResponse>(`${environment.apiBaseUrl}/admin/demo/populate-all`, {}, { headers })
+        .pipe(timeout(90_000))
     );
   }
 

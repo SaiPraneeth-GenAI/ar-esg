@@ -132,6 +132,18 @@
   gap: 0.7rem;
 }
 
+.demo-step-oneclick {
+  background: #f5faf7;
+  border: 1px solid #d1e7dd;
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+}
+
+.demo-step-oneclick .demo-step-num {
+  background: #0e2c21;
+  color: #fff;
+}
+
 .demo-step-head {
   display: flex;
   align-items: flex-start;

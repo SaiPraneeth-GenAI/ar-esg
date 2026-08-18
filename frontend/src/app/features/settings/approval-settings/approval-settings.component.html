@@ -61,6 +61,57 @@
 
       @if (simulateSampleOpen()) {
         <div class="demo-steps">
+          <!-- One-click shortcut for steps 1-4 -->
+          <div class="demo-step demo-step-oneclick">
+            <div class="demo-step-head">
+              <span class="demo-step-num">⚡</span>
+              <div>
+                <span class="demo-step-title">Or: populate everything in one click</span>
+                <p class="demo-step-desc">
+                  Clears whatever's here now and recreates factors, all entries (auto-approved), and all targets
+                  (activated) in one go -- the same result as steps 1-4, without the download/upload round trips.
+                </p>
+              </div>
+            </div>
+
+            @if (populateStep() === 'idle' || populateStep() === 'done') {
+              <button type="button" class="danger-btn" (click)="startPopulateAll()">
+                {{ populateStep() === 'done' ? 'Run again' : 'Populate all demo data' }}
+              </button>
+              @if (populateStep() === 'done' && populateResult(); as result) {
+                <div class="banner success">
+                  {{ result.entries_created }} entries created and approved, {{ result.targets_activated }} targets activated.
+                </div>
+              }
+              @if (populateError()) {
+                <div class="banner error">{{ populateError() }}</div>
+              }
+            } @else {
+              <div class="confirm-box">
+                @if (populateError()) {
+                  <div class="banner error">{{ populateError() }}</div>
+                }
+                <label class="password-label">
+                  Re-enter your password to confirm -- this replaces whatever's currently here
+                  <input
+                    type="password"
+                    [ngModel]="populatePassword()"
+                    (ngModelChange)="populatePassword.set($event)"
+                    [disabled]="populateStep() === 'running'"
+                    placeholder="Password"
+                    autocomplete="current-password"
+                  />
+                </label>
+                <div class="confirm-actions">
+                  <button type="button" class="secondary-btn" [disabled]="populateStep() === 'running'" (click)="cancelPopulateAll()">Cancel</button>
+                  <button type="button" class="danger-btn" [disabled]="populateStep() === 'running'" (click)="confirmPopulateAll()">
+                    {{ populateStep() === 'running' ? 'Populating…' : 'Confirm & populate' }}
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+
           <!-- Step 1: Clear -->
           <div class="demo-step">
             <div class="demo-step-head">
