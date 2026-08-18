@@ -63,15 +63,40 @@
   color: #6ee7a8;
 }
 
+.brand-name {
+  line-height: 1;
+}
+
+.brand-by {
+  align-self: flex-end;
+  padding-bottom: 0.1rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #9fd9b6;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.75;
+}
+
 .brand-content {
-  max-width: 420px;
+  max-width: 440px;
   margin: auto 0;
 }
 
-.brand-content h1 {
-  font-size: 2.15rem;
+.eyebrow {
+  display: inline-block;
+  font-size: 0.72rem;
   font-weight: 700;
-  line-height: 1.25;
+  color: #6ee7a8;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.85rem;
+}
+
+.brand-content h1 {
+  font-size: 2.05rem;
+  font-weight: 700;
+  line-height: 1.28;
   margin: 0 0 1rem;
   letter-spacing: -0.01em;
 }
