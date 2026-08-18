@@ -1,0 +1,159 @@
+.bell-wrap {
+  position: relative;
+}
+
+.bell-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid #eaecf0;
+  background: #fff;
+  color: #475467;
+  cursor: pointer;
+}
+
+.bell-btn:hover {
+  background: #f9fafb;
+  color: #101828;
+}
+
+.bell-btn svg {
+  width: 19px;
+  height: 19px;
+}
+
+.bell-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: #b42318;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.bell-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: 340px;
+  max-height: 420px;
+  background: #fff;
+  border: 1px solid #eaecf0;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.16);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bell-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid #eaecf0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #101828;
+}
+
+.mark-all-btn {
+  background: none;
+  border: none;
+  color: #0e2c21;
+  font-weight: 600;
+  font-size: 0.76rem;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+
+.bell-empty {
+  padding: 1.5rem 0.9rem;
+  text-align: center;
+  color: #98a2b3;
+  font-size: 0.83rem;
+}
+
+.bell-list {
+  overflow-y: auto;
+}
+
+.bell-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.65rem 0.9rem;
+  border: none;
+  border-bottom: 1px solid #f2f4f7;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.bell-item:last-child {
+  border-bottom: none;
+}
+
+.bell-item:hover {
+  background: #f9fafb;
+}
+
+.bell-item.unread {
+  background: #f5faf7;
+}
+
+.bell-item.unread:hover {
+  background: #ecf7f0;
+}
+
+.unread-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #0e2c21;
+  margin-top: 0.4rem;
+}
+
+.bell-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.bell-item-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #101828;
+}
+
+.bell-item-text {
+  font-size: 0.78rem;
+  color: #667085;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bell-item-time {
+  font-size: 0.72rem;
+  color: #98a2b3;
+}

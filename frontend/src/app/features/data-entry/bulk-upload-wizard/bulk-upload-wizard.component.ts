@@ -1,8 +1,10 @@
 import { DatePipe } from '@angular/common';
 import { Component, EventEmitter, Input, Output, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { TimeoutError } from 'rxjs';
 import { BulkImportRowIn, EntriesApiService, EntryCategory } from '../../../core/entries-api.service';
 import { ColumnSuggestion, MappingApiService, SheetDetectionResult } from '../../../core/mapping-api.service';
+import { ToastService } from '../../../core/toast.service';
 import {
   TARGET_FIELDS,
   TargetField,
@@ -64,6 +66,7 @@ function cellDisplay(value: unknown): string {
 export class BulkUploadWizardComponent {
   private api = inject(EntriesApiService);
   private mappingApi = inject(MappingApiService);
+  private toast = inject(ToastService);
 
   /** null = "all categories" mode -- one upload covering every category at
    * once, matched by (category, data_point_name) since a few field names
@@ -591,8 +594,19 @@ export class BulkUploadWizardComponent {
         this.period
       );
       this.commitResult.set({ created: result.created_count, error: result.error_count });
-    } catch {
-      this.commitError.set('Could not create these entries. Nothing was saved.');
+      this.toast.show(
+        result.error_count > 0
+          ? `${result.created_count} entries created, ${result.error_count} could not be created.`
+          : `${result.created_count} entries created and submitted for approval.`,
+        result.error_count > 0 ? 'error' : 'success'
+      );
+    } catch (err) {
+      const message =
+        err instanceof TimeoutError
+          ? 'This is taking longer than expected. Your entries may already have been created -- check the Approval Queue before retrying, to avoid creating duplicates.'
+          : 'Could not create these entries. Nothing was saved.';
+      this.commitError.set(message);
+      this.toast.show(message, 'error');
     } finally {
       this.committing.set(false);
     }

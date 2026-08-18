@@ -66,3 +66,21 @@ class EmailLog(Base):
     sent_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
     related_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     status: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class Notification(Base):
+    """In-app counterpart to EmailLog -- one row per recipient per event,
+    so the header bell can show an unread count without polling email.
+    See migrations/0019_notification.sql."""
+
+    __tablename__ = "notification"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenant.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    body: Mapped[str | None] = mapped_column(Text)
+    link: Mapped[str | None] = mapped_column(Text)
+    read_at: Mapped[datetime | None] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))

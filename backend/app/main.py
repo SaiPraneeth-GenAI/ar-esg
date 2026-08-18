@@ -22,6 +22,7 @@ from app.api.routes import (
     entries,
     health,
     intensity,
+    notifications,
     peers,
     reports,
     safety,
@@ -57,3 +58,4 @@ app.include_router(charts.router)
 app.include_router(peers.router)
 app.include_router(reports.router)
 app.include_router(admin_demo.router)
+app.include_router(notifications.router)

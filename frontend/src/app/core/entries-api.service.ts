@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, timeout } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { SupabaseService } from './supabase.service';
 
@@ -192,22 +192,22 @@ export class EntriesApiService {
   async bulkApprove(entryIds: string[]): Promise<BulkDecisionResponse> {
     const headers = await this.authHeaders();
     return firstValueFrom(
-      this.http.post<BulkDecisionResponse>(
-        `${environment.apiBaseUrl}/entries/bulk-approve`,
-        { entry_ids: entryIds },
-        { headers }
-      )
+      this.http
+        .post<BulkDecisionResponse>(`${environment.apiBaseUrl}/entries/bulk-approve`, { entry_ids: entryIds }, { headers })
+        .pipe(timeout(120_000))
     );
   }
 
   async bulkReject(entryIds: string[], rejectNote: string): Promise<BulkDecisionResponse> {
     const headers = await this.authHeaders();
     return firstValueFrom(
-      this.http.post<BulkDecisionResponse>(
-        `${environment.apiBaseUrl}/entries/bulk-reject`,
-        { entry_ids: entryIds, reject_note: rejectNote },
-        { headers }
-      )
+      this.http
+        .post<BulkDecisionResponse>(
+          `${environment.apiBaseUrl}/entries/bulk-reject`,
+          { entry_ids: entryIds, reject_note: rejectNote },
+          { headers }
+        )
+        .pipe(timeout(120_000))
     );
   }
 
@@ -247,11 +247,18 @@ export class EntriesApiService {
   ): Promise<BulkImportResponse> {
     const headers = await this.authHeaders();
     return firstValueFrom(
-      this.http.post<BulkImportResponse>(
-        `${environment.apiBaseUrl}/entries/bulk-import`,
-        { category, location_id: locationId, commit, rows, default_period: defaultPeriod ?? null },
-        { headers }
-      )
+      this.http
+        .post<BulkImportResponse>(
+          `${environment.apiBaseUrl}/entries/bulk-import`,
+          { category, location_id: locationId, commit, rows, default_period: defaultPeriod ?? null },
+          { headers }
+        )
+        // A stalled connection with no server response otherwise hangs this
+        // call forever (HttpClient has no default timeout) -- the caller
+        // never finds out the request actually failed, and the UI is stuck
+        // on a spinner with no way out. 2 minutes is well above the ~1s a
+        // full 1000+ row commit normally takes.
+        .pipe(timeout(120_000))
     );
   }
 

@@ -78,11 +78,15 @@
 
           @if (settingsOpen()) {
             <div class="nav-subitems">
-              <a routerLink="/admin/settings/users" routerLinkActive="active" class="nav-subitem">Users</a>
-              <a routerLink="/admin/settings/roles" routerLinkActive="active" class="nav-subitem">Roles</a>
-              <a routerLink="/admin/settings/plants" routerLinkActive="active" class="nav-subitem">Sites</a>
+              @if (isAdmin()) {
+                <a routerLink="/admin/settings/users" routerLinkActive="active" class="nav-subitem">Users</a>
+                <a routerLink="/admin/settings/roles" routerLinkActive="active" class="nav-subitem">Roles</a>
+                <a routerLink="/admin/settings/plants" routerLinkActive="active" class="nav-subitem">Sites</a>
+              }
               <a routerLink="/admin/settings/mapping-templates" routerLinkActive="active" class="nav-subitem">Mapping Templates</a>
-              <a routerLink="/admin/settings/approvals" routerLinkActive="active" class="nav-subitem">Approval Settings</a>
+              @if (isAdmin()) {
+                <a routerLink="/admin/settings/approvals" routerLinkActive="active" class="nav-subitem">Approval Settings</a>
+              }
               <a routerLink="/admin/settings/data-connections" routerLinkActive="active" class="nav-subitem">Data Connections</a>
             </div>
           }
@@ -151,6 +155,7 @@
       </div>
 
       <div class="topbar-user">
+        <app-notification-bell></app-notification-bell>
         <span class="user-email">{{ userEmail() }}</span>
         <button type="button" class="logout-btn" (click)="logout()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -167,4 +172,5 @@
       <router-outlet></router-outlet>
     </main>
   </div>
+  <app-toast-container></app-toast-container>
 </div>

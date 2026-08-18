@@ -1,6 +1,8 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { TimeoutError } from 'rxjs';
 import { EntriesApiService, EntryRecord } from '../../../core/entries-api.service';
+import { ToastService } from '../../../core/toast.service';
 import { EntryHistoryComponent } from '../entry-history/entry-history.component';
 
 @Component({
@@ -12,6 +14,7 @@ import { EntryHistoryComponent } from '../entry-history/entry-history.component'
 })
 export class ApprovalQueueComponent implements OnInit {
   private api = inject(EntriesApiService);
+  private toast = inject(ToastService);
 
   loading = signal(true);
   queue = signal<EntryRecord[]>([]);
@@ -77,10 +80,14 @@ export class ApprovalQueueComponent implements OnInit {
     this.successMessage.set('');
     try {
       const result = await this.api.bulkApprove(ids);
-      this.successMessage.set(this.summarize(result.processed_count, 'approved', result.skipped.length));
+      const message = this.summarize(result.processed_count, 'approved', result.skipped.length);
+      this.successMessage.set(message);
+      this.toast.show(message, 'success');
       await this.refresh();
     } catch (err) {
-      this.errorMessage.set(this.extractError(err));
+      const message = this.extractError(err);
+      this.errorMessage.set(message);
+      this.toast.show(message, 'error');
     } finally {
       this.bulkBusy.set(false);
     }
@@ -108,11 +115,15 @@ export class ApprovalQueueComponent implements OnInit {
     this.successMessage.set('');
     try {
       const result = await this.api.bulkReject(ids, this.bulkRejectNote.trim());
-      this.successMessage.set(this.summarize(result.processed_count, 'rejected', result.skipped.length));
+      const message = this.summarize(result.processed_count, 'rejected', result.skipped.length);
+      this.successMessage.set(message);
+      this.toast.show(message, 'success');
       this.bulkRejecting.set(false);
       await this.refresh();
     } catch (err) {
-      this.errorMessage.set(this.extractError(err));
+      const message = this.extractError(err);
+      this.errorMessage.set(message);
+      this.toast.show(message, 'error');
     } finally {
       this.bulkBusy.set(false);
     }
@@ -173,6 +184,9 @@ export class ApprovalQueueComponent implements OnInit {
   }
 
   private extractError(err: unknown): string {
+    if (err instanceof TimeoutError) {
+      return 'This is taking longer than expected. Some of these may already be decided -- refresh the queue before retrying.';
+    }
     return (err as { error?: { detail?: string } })?.error?.detail ?? 'Something went wrong.';
   }
 }

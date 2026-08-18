@@ -20,6 +20,15 @@ from sqlalchemy.orm import Session
 from app.core.carbon_mapping import CarbonSourceMapping, get_carbon_mapping
 from app.db.models import DataPoint, EmissionCalculation, EmissionFactor, Entry, IpccReference, ProductionVolumeMapping, RevenueMapping
 
+class _Unset:
+    """Sentinel distinguishing "no existing calc was passed in, query for
+    it" (calculate_entry) from "the caller already checked, there genuinely
+    isn't one" (calculate_entries_batch) -- None is a valid value in the
+    second case, so it can't double as the sentinel."""
+
+
+_UNSET = _Unset()
+
 UNRESOLVED_REASONS = {
     "missing_factor": "No approved factor found for this substance/scope/period.",
     "ambiguous_factor": "More than one approved factor matches -- resolve the duplicate before this can calculate.",
@@ -295,13 +304,23 @@ def run_calculation(
 
 
 def build_calculation_row(
-    db: Session, entry: Entry, dp: DataPoint, tenant_id: uuid.UUID, calculated_by: uuid.UUID | None
+    db: Session,
+    entry: Entry,
+    dp: DataPoint,
+    tenant_id: uuid.UUID,
+    calculated_by: uuid.UUID | None,
+    existing: "EmissionCalculation | None | _Unset" = _UNSET,
 ) -> EmissionCalculation | None:
     """Builds (via db.add, not committed) the EmissionCalculation row for
     one entry, superseding whatever was previously current for it. Returns
     None -- writes nothing -- when the data point isn't a mapped GHG
     source at all (Water/Waste/etc stay out of the queue entirely, not
-    flagged as perpetually "unresolved")."""
+    flagged as perpetually "unresolved").
+
+    `existing` lets a batch caller (calculate_entries_batch) pass in a
+    pre-fetched supersede target instead of this function querying for it
+    -- the single-entry caller (calculate_entry) leaves it unset and gets
+    the query run here, same as before."""
     mapping = get_carbon_mapping(dp.name)
     if mapping is None:
         return None
@@ -313,11 +332,12 @@ def build_calculation_row(
     else:
         outcome = run_calculation(db, tenant_id, mapping, to_decimal(entry.value), dp.unit or "", entry.period)
 
-    existing = (
-        db.query(EmissionCalculation)
-        .filter(EmissionCalculation.entry_id == entry.id, EmissionCalculation.status.in_(["calculated", "unresolved"]))
-        .first()
-    )
+    if existing is _UNSET:
+        existing = (
+            db.query(EmissionCalculation)
+            .filter(EmissionCalculation.entry_id == entry.id, EmissionCalculation.status.in_(["calculated", "unresolved"]))
+            .first()
+        )
 
     resolved = outcome.resolved
     calc = EmissionCalculation(
@@ -363,15 +383,35 @@ def calculate_entries_batch(
 ) -> list[tuple[Entry, EmissionCalculation | None]]:
     """Batch entry point for a period/queue recalculation -- every row is
     added to the same session without an intermediate commit, so the
-    caller can commit once (rule: bounded transaction, not per-entry)."""
+    caller can commit once (rule: bounded transaction, not per-entry).
+
+    dp_cache is an explicit dict, not a bare reliance on SQLAlchemy's
+    db.get() -- its identity map holds instances by weak reference, so
+    without something keeping a real (strong) reference across loop
+    iterations, the garbage collector can reclaim a "cached" row between
+    entries and silently turn every repeat lookup back into a fresh query.
+    Same reasoning for pre-fetching every existing EmissionCalculation to
+    supersede in one query instead of one per entry."""
+    if not entries:
+        return []
+
+    dps = {dp.id: dp for dp in db.query(DataPoint).filter(DataPoint.id.in_({e.data_point_id for e in entries})).all()}
+    existing_by_entry = {
+        ec.entry_id: ec
+        for ec in db.query(EmissionCalculation)
+        .filter(
+            EmissionCalculation.entry_id.in_([e.id for e in entries]),
+            EmissionCalculation.status.in_(["calculated", "unresolved"]),
+        )
+        .all()
+    }
+
     results: list[tuple[Entry, EmissionCalculation | None]] = []
-    dp_cache: dict[uuid.UUID, DataPoint] = {}
     for entry in entries:
-        dp = dp_cache.get(entry.data_point_id)
-        if dp is None:
-            dp = db.get(DataPoint, entry.data_point_id)
-            dp_cache[entry.data_point_id] = dp
-        results.append((entry, build_calculation_row(db, entry, dp, tenant_id, calculated_by)))
+        dp = dps.get(entry.data_point_id)
+        results.append(
+            (entry, build_calculation_row(db, entry, dp, tenant_id, calculated_by, existing_by_entry.get(entry.id)))
+        )
     return results
 
 

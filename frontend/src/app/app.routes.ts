@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { adminGuard } from './core/admin.guard';
+import { adminOnlyGuard } from './core/admin-only.guard';
 import { authGuard } from './core/auth.guard';
 
 export const routes: Routes = [
@@ -50,7 +51,7 @@ export const routes: Routes = [
       },
       {
         path: 'settings/users',
-        canActivate: [adminGuard],
+        canActivate: [adminOnlyGuard],
         loadComponent: () =>
           import('./features/settings/user-management/user-management.component').then(
             (m) => m.UserManagementComponent
@@ -58,13 +59,13 @@ export const routes: Routes = [
       },
       {
         path: 'settings/roles',
-        canActivate: [adminGuard],
+        canActivate: [adminOnlyGuard],
         loadComponent: () =>
           import('./features/settings/user-roles/user-roles.component').then((m) => m.UserRolesComponent)
       },
       {
         path: 'settings/plants',
-        canActivate: [adminGuard],
+        canActivate: [adminOnlyGuard],
         loadComponent: () =>
           import('./features/settings/assigned-plants/assigned-plants.component').then(
             (m) => m.AssignedPlantsComponent
@@ -80,7 +81,7 @@ export const routes: Routes = [
       },
       {
         path: 'settings/approvals',
-        canActivate: [adminGuard],
+        canActivate: [adminOnlyGuard],
         loadComponent: () =>
           import('./features/settings/approval-settings/approval-settings.component').then(
             (m) => m.ApprovalSettingsComponent

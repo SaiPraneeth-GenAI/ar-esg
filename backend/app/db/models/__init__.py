@@ -9,6 +9,7 @@ from app.db.models.output import (
     ComplianceReport,
     EmailLog,
     MailingList,
+    Notification,
     ReportRequest,
     Rollup,
 )
@@ -41,6 +42,7 @@ __all__ = [
     "ReportRequest",
     "MailingList",
     "EmailLog",
+    "Notification",
     "MappingTemplate",
     "ColumnMappingMemory",
     "EmissionCalculation",

@@ -2,11 +2,13 @@ import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { SupabaseService } from '../../core/supabase.service';
+import { NotificationBellComponent } from '../../shared/notification-bell/notification-bell.component';
+import { ToastContainerComponent } from '../../shared/toast-container/toast-container.component';
 
 @Component({
   selector: 'app-admin-layout',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, ToastContainerComponent, NotificationBellComponent],
   templateUrl: './admin-layout.component.html',
   styleUrl: './admin-layout.component.css'
 })
@@ -42,6 +44,10 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
     const r = this.roles();
     return r.includes('Approver') || r.includes('Admin');
   });
+  // A few Settings pages are Admin-only on the backend (Users, Roles,
+  // Sites, Approval Settings) -- gates the nav links to match, so an
+  // Approver doesn't land on a page whose API calls all 403 underneath it.
+  isAdmin = computed(() => this.roles().includes('Admin'));
   canAccessEmissionFactors = this.canAccessSettings;
 
   settingsOpen = signal(this.isSettingsRoute());
@@ -109,7 +115,7 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
   openSettings(): void {
     this.settingsOpen.set(true);
     if (!this.isSettingsRoute()) {
-      this.router.navigateByUrl('/admin/settings/users');
+      this.router.navigateByUrl(this.isAdmin() ? '/admin/settings/users' : '/admin/settings/mapping-templates');
     }
   }
 
