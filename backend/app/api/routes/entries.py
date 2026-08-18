@@ -5,7 +5,9 @@ from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
+from sqlalchemy import insert as sa_insert, update as sa_update
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.core.auth import CurrentUser, require_roles
 from app.core.config import get_settings
@@ -687,13 +689,16 @@ async def bulk_import(
 
     results: list[BulkImportRowResult] = []
     seen_in_file: set[tuple[uuid.UUID, date]] = set()
-    # Deferred to after the loop -- same reasoning as existing_entries above,
-    # but for writes: _upsert_one() used to commit+refresh once per row,
-    # which for a several-hundred-row upload was several hundred more
-    # cross-region round trips before auto-approve/calculation even started.
-    pending_audits: list[tuple[Entry, str, str | None, str]] = []
+    # Deferred to after the loop and written via Core bulk statements
+    # instead of session.add()/attribute assignment in a loop -- the ORM's
+    # default flush issues one INSERT/UPDATE per dirty-or-new row, measured
+    # at 133s for 2550 rows on the bulk-approve path this mirrors. Every
+    # entry gets its id assigned here (not server-side on flush), so
+    # audit rows and the response can reference it immediately.
+    new_entry_rows: list[dict] = []
+    existing_entry_updates: list[dict] = []
+    pending_audits: list[dict] = []
     pending_approvals: list[Entry] = []
-    pending_results: list[tuple[int, BulkImportRowResult]] = []  # index into results, filled in after flush
 
     for row in payload.rows:
         dp, resolved_category, resolve_error = resolve_data_point(row)
@@ -829,10 +834,11 @@ async def bulk_import(
         # Same upsert semantics as _upsert_one(), built inline instead of
         # calling it: that helper commits+refreshes on every call, which for
         # a several-hundred-row file meant that many more cross-region round
-        # trips. Every write here stays pending in the session and goes out
-        # in the single flush/commit after the loop instead.
+        # trips. Every write here is collected into a plain list and goes
+        # out as one Core bulk INSERT/UPDATE after the loop instead.
         if existing is None:
             entry = Entry(
+                id=uuid.uuid4(),
                 data_point_id=dp.id,
                 location_id=payload.location_id,
                 period=period,
@@ -842,22 +848,45 @@ async def bulk_import(
                 status="Submitted",
                 submitted_by=current.id,
             )
-            db.add(entry)
+            new_entry_rows.append(
+                {
+                    "id": entry.id,
+                    "data_point_id": entry.data_point_id,
+                    "location_id": entry.location_id,
+                    "period": entry.period,
+                    "value": entry.value,
+                    "note": entry.note,
+                    "method_of_entry": entry.method_of_entry,
+                    "status": entry.status,
+                    "submitted_by": entry.submitted_by,
+                }
+            )
             existing_entries[key] = entry
-            pending_audits.append((entry, "bulk_uploaded", None, str(value)))
+            pending_audits.append({"entry_id": entry.id, "actor": current.email, "action": "bulk_uploaded", "old_value": None, "new_value": str(value)})
         else:
             entry = existing
             old_value = str(entry.value) if entry.value is not None else None
             was_approved = entry.status == "Approved"
-            entry.value = value
-            entry.note = row.note
-            entry.method_of_entry = "Bulk Upload"
             # Same "kick back to Draft rather than silently rewrite an
             # approved figure" rule as _upsert_one() -- see there for why.
-            entry.status = "Draft" if was_approved else "Submitted"
-            entry.submitted_by = current.id
+            new_status = "Draft" if was_approved else "Submitted"
+            set_committed_value(entry, "value", value)
+            set_committed_value(entry, "note", row.note)
+            set_committed_value(entry, "method_of_entry", "Bulk Upload")
+            set_committed_value(entry, "status", new_status)
+            set_committed_value(entry, "submitted_by", current.id)
+            existing_entry_updates.append(
+                {
+                    "id": entry.id,
+                    "value": value,
+                    "note": row.note,
+                    "method_of_entry": "Bulk Upload",
+                    "status": new_status,
+                    "submitted_by": current.id,
+                }
+            )
             edit_action = "edited_after_approval" if was_approved else "bulk_uploaded"
-            pending_audits.append((entry, edit_action, old_value, str(value)))
+            pending_audits.append({"entry_id": entry.id, "actor": current.email, "action": edit_action, "old_value": old_value, "new_value": str(value)})
 
         result = BulkImportRowResult(
             row_index=row.row_index,
@@ -865,11 +894,11 @@ async def bulk_import(
             data_point_name=row.data_point_name,
             period=period,
             value=value,
+            entry_id=entry.id,
             unit_note=unit_note,
             category=resolved_category,
         )
         results.append(result)
-        pending_results.append((len(results) - 1, entry))
 
         # Bulk upload previously never benefited from the tenant's
         # auto-approve setting -- manual Submit did (see submit_entries()),
@@ -881,21 +910,25 @@ async def bulk_import(
             pending_approvals.append(entry)
 
     notify_queue = False
-    if payload.commit and pending_results:
-        # One flush assigns every new entry its id; existing entries already
-        # have one. Audit rows reference entry.id, so they're built here,
-        # after the flush, rather than during the row loop above.
-        db.flush()
-        for entry, action, old_value, new_value in pending_audits:
-            db.add(AuditLog(entry_id=entry.id, actor=current.email, action=action, old_value=old_value, new_value=new_value))
-        for idx, entry in pending_results:
-            results[idx].entry_id = entry.id
+    created_count = len(new_entry_rows) + len(existing_entry_updates)
+    if payload.commit and created_count:
+        # Every write here goes out as a Core bulk INSERT/UPDATE, not
+        # session.add()/attribute assignment in a loop -- the ORM's default
+        # flush issues one statement per row, measured at 133s for 2550
+        # rows on the mirrored bulk-approve path. ids are already assigned
+        # (client-generated above), so no flush is needed to learn them.
+        if new_entry_rows:
+            db.execute(sa_insert(Entry), new_entry_rows)
+        if existing_entry_updates:
+            db.execute(sa_update(Entry), existing_entry_updates)
+        if pending_audits:
+            db.execute(sa_insert(AuditLog), pending_audits)
         # Approve, calculate, and recompute rollups for every auto-approved
         # row in one batched pass (see _bulk_approve_entries) instead of once
         # per row -- this used to be the dominant cost on a large file, each
         # row round-tripping the cross-region DB 4+ times on its own.
         _bulk_approve_entries(db, pending_approvals, current.tenant_id, current.id, current.email, auto=True)
-        notify_queue = len(pending_approvals) < len(pending_results)
+        notify_queue = len(pending_approvals) < created_count
         db.commit()
 
     if notify_queue:
@@ -925,17 +958,34 @@ def _bulk_approve_entries(
 ) -> None:
     """Batched form of approving many entries in one request -- same status
     transition, Approval row, audit trail, rollup + GHG recalculation as
-    approving one at a time, but every write stays pending in the session
-    (see calculate_entries_batch / recompute_rollups_for_entries) instead of
-    round-tripping the DB per entry. Caller commits once."""
+    approving one at a time.
+
+    The status update and the Approval/AuditLog inserts go through Core
+    bulk statements (db.execute(update(...)/insert(...), rows)), not
+    session.add()/attribute assignment in a loop -- the ORM's default
+    unit-of-work flushes each dirty/new object as its own round trip, which
+    measured at 133s for 2550 Approval+AuditLog rows alone (a 1275-row
+    bulk-approve). The Core bulk equivalents did the same write in under a
+    second. set_committed_value() syncs each entry's in-memory .status
+    after the bulk UPDATE without marking it dirty again -- otherwise the
+    ORM would still queue up a second, individual UPDATE per row at the
+    next flush, right back to the same cost this is fixing."""
     if not entries:
         return
     action = "auto_approved" if auto else "approved"
     note = "Auto-approved (tenant setting)" if auto else "Approved"
+    entry_ids = [e.id for e in entries]
+
+    db.execute(sa_update(Entry).where(Entry.id.in_(entry_ids)).values(status="Approved"))
     for entry in entries:
-        entry.status = "Approved"
-        db.add(Approval(entry_id=entry.id, approver_id=actor_id, action="approve"))
-        db.add(AuditLog(entry_id=entry.id, actor=actor_email, action=action, old_value="Submitted", new_value=note))
+        set_committed_value(entry, "status", "Approved")
+
+    db.execute(sa_insert(Approval), [{"entry_id": eid, "approver_id": actor_id, "action": "approve"} for eid in entry_ids])
+    db.execute(
+        sa_insert(AuditLog),
+        [{"entry_id": eid, "actor": actor_email, "action": action, "old_value": "Submitted", "new_value": note} for eid in entry_ids],
+    )
+
     calculate_entries_batch(db, entries, tenant_id, actor_id)
     recompute_rollups_for_entries(db, entries)
 
