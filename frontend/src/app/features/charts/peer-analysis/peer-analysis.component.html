@@ -15,9 +15,18 @@
 
     <div class="peer-picker">
       @for (c of companies(); track c.id) {
-        <button type="button" class="peer-pill" [class.active]="c.id === selectedCompanyId()" (click)="selectCompany(c.id)">
-          {{ c.name }}
-        </button>
+        <span class="peer-pill peer-pill-item" [class.active]="c.id === selectedCompanyId()">
+          <button type="button" class="peer-pill-label" (click)="selectCompany(c.id)">{{ c.name }}</button>
+          <button
+            type="button"
+            class="peer-pill-remove"
+            (click)="removePeer(c, $event)"
+            [attr.aria-label]="'Remove ' + c.name"
+            title="Remove this peer"
+          >
+            ×
+          </button>
+        </span>
       }
       @if (canAddPeer()) {
         <button type="button" class="peer-pill peer-pill-add" (click)="startAddPeer()">+ Add peer</button>

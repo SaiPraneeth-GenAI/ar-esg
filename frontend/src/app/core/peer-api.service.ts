@@ -126,6 +126,11 @@ export class PeerApiService {
     return firstValueFrom(this.http.post<PeerCompany>(`${environment.apiBaseUrl}/peers`, payload, { headers }));
   }
 
+  async deleteCompany(companyId: string): Promise<void> {
+    const headers = await this.authHeaders();
+    await firstValueFrom(this.http.delete<void>(`${environment.apiBaseUrl}/peers/${companyId}`, { headers }));
+  }
+
   async listData(companyId: string): Promise<PeerData[]> {
     const headers = await this.authHeaders();
     return firstValueFrom(this.http.get<PeerData[]>(`${environment.apiBaseUrl}/peers/${companyId}/data`, { headers }));

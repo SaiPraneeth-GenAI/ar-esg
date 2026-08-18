@@ -157,6 +157,22 @@ def list_peer_companies(
     ]
 
 
+@router.delete("/{company_id}", status_code=204)
+def delete_peer_company(
+    company_id: uuid.UUID,
+    current: CurrentUser = Depends(require_roles("Admin", "Manager", "Approver")),
+    db: Session = Depends(get_db),
+):
+    """Removes a peer company and every saved year of its data (PeerData
+    cascade-deletes via FK) -- the auto-provisioned default peer isn't
+    special-cased here, matching the intent that seeded it in the first
+    place: a real, removable starting point, not a fixture other code
+    assumes always exists."""
+    company = _get_owned_company(db, current, company_id)
+    db.delete(company)
+    db.commit()
+
+
 def _data_out(db: Session, row: PeerData) -> PeerDataOut:
     user = db.get(User, row.uploaded_by) if row.uploaded_by else None
     return PeerDataOut(

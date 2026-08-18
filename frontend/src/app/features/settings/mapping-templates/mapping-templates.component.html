@@ -15,9 +15,12 @@
     <p class="muted">Loading…</p>
   } @else if (templates().length === 0) {
     <div class="empty-state">
-      <p>
-        No mapping templates yet — one is created automatically the first time a Manager maps a bulk upload's
-        columns. After that, files with the same layout skip straight to validation.
+      <p class="empty-headline">Nothing to remember yet — that's expected before a first bulk upload.</p>
+      <p class="empty-body">
+        Once a Manager maps a file's columns by hand, that mapping is saved automatically. Every later upload with
+        the same headers — the same monthly export from the same source system — skips straight to validation
+        instead of being re-mapped column by column. On a recurring monthly upload, that's the manual step
+        disappearing for good after the first month.
       </p>
     </div>
   } @else {

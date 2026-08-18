@@ -76,6 +76,54 @@
   color: #0e2c21;
 }
 
+.peer-pill-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.3rem 0.3rem 0.3rem 1.1rem;
+  cursor: default;
+}
+
+.peer-pill-label {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.peer-pill-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: none;
+  background: none;
+  color: #98a2b3;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.peer-pill-remove:hover {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.peer-pill-item.active .peer-pill-remove {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.peer-pill-item.active .peer-pill-remove:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
 .peer-limit-note {
   font-size: 0.78rem;
   color: #98a2b3;

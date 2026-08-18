@@ -211,6 +211,32 @@ export class PeerAnalysisComponent implements OnInit {
     }
   }
 
+  async removePeer(company: PeerCompany, event: Event): Promise<void> {
+    event.stopPropagation(); // the pill itself also has a (click) to select -- don't select a peer we're about to delete
+    const note = company.period_count > 0 ? ` and its ${company.period_count} saved year${company.period_count === 1 ? '' : 's'} of data` : '';
+    if (!confirm(`Remove ${company.name}${note}? This can't be undone.`)) return;
+
+    this.errorMessage.set('');
+    try {
+      await this.peerApi.deleteCompany(company.id);
+      const remaining = this.companies().filter((c) => c.id !== company.id);
+      this.companies.set(remaining);
+      if (this.selectedCompanyId() === company.id) {
+        this.selectedCompanyId.set(null);
+        this.showCompareAll.set(false);
+        if (remaining.length > 0) {
+          await this.selectCompany(remaining[0].id);
+        } else {
+          this.savedYears.set([]);
+          this.compareResult.set(null);
+          this.phase.set('upload');
+        }
+      }
+    } catch (err: any) {
+      this.errorMessage.set(err?.error?.detail ?? 'Could not remove this peer company.');
+    }
+  }
+
   // -- Side-by-side: Amara Raja vs every peer with data for this year -----
 
   async toggleCompareAll(): Promise<void> {

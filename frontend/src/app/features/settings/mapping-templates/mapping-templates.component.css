@@ -40,6 +40,19 @@ header h1 {
   font-size: 0.9rem;
 }
 
+.empty-headline {
+  margin: 0 0 0.5rem;
+  font-weight: 700;
+  color: #101828;
+  font-size: 0.98rem;
+}
+
+.empty-body {
+  margin: 0 auto;
+  max-width: 560px;
+  line-height: 1.6;
+}
+
 .template-list {
   display: flex;
   flex-direction: column;
