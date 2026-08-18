@@ -15,6 +15,7 @@ from datetime import date
 from decimal import Decimal
 
 from sqlalchemy import func
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.core.carbon_mapping import CarbonSourceMapping, get_carbon_mapping
@@ -338,9 +339,20 @@ def build_calculation_row(
             .filter(EmissionCalculation.entry_id == entry.id, EmissionCalculation.status.in_(["calculated", "unresolved"]))
             .first()
         )
+        # Only the single-entry caller reaches here (calculate_entries_batch
+        # always passes existing explicitly) -- add immediately, same as
+        # this function always did before batching existed.
+        add_immediately = True
+    else:
+        add_immediately = False
 
     resolved = outcome.resolved
     calc = EmissionCalculation(
+        # Generated here instead of left to the server-side default so a
+        # caller that batches many of these (calculate_entries_batch) can
+        # bulk_save_objects() them -- which skips fetching generated ids
+        # back per row -- while still knowing each row's id immediately.
+        id=uuid.uuid4(),
         tenant_id=tenant_id,
         location_id=entry.location_id,
         entry_id=entry.id,
@@ -366,9 +378,10 @@ def build_calculation_row(
         calculated_by=calculated_by,
         supersedes_calculation_id=existing.id if existing else None,
     )
-    db.add(calc)
-    if existing is not None:
-        existing.status = "superseded"
+    if add_immediately:
+        db.add(calc)
+        if existing is not None:
+            existing.status = "superseded"
     return calc
 
 
@@ -407,11 +420,28 @@ def calculate_entries_batch(
     }
 
     results: list[tuple[Entry, EmissionCalculation | None]] = []
+    new_calcs: list[EmissionCalculation] = []
+    superseded_ids: list[uuid.UUID] = []
     for entry in entries:
         dp = dps.get(entry.data_point_id)
-        results.append(
-            (entry, build_calculation_row(db, entry, dp, tenant_id, calculated_by, existing_by_entry.get(entry.id)))
-        )
+        existing = existing_by_entry.get(entry.id)
+        calc = build_calculation_row(db, entry, dp, tenant_id, calculated_by, existing)
+        results.append((entry, calc))
+        if calc is not None:
+            new_calcs.append(calc)
+            if existing is not None:
+                superseded_ids.append(existing.id)
+
+    # bulk_save_objects()/a single UPDATE...IN instead of session.add() and
+    # attribute mutation per row -- session.add() in a loop measured at
+    # 133s for 2550 rows elsewhere in this codebase (same unit-of-work
+    # flush cost applies here to EmissionCalculation inserts and the
+    # existing-row supersede update).
+    if new_calcs:
+        db.bulk_save_objects(new_calcs)
+    if superseded_ids:
+        db.execute(sa_update(EmissionCalculation).where(EmissionCalculation.id.in_(superseded_ids)).values(status="superseded"))
+
     return results
 
 
