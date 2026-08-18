@@ -437,10 +437,16 @@ def calculate_entries_batch(
     # 133s for 2550 rows elsewhere in this codebase (same unit-of-work
     # flush cost applies here to EmissionCalculation inserts and the
     # existing-row supersede update).
-    if new_calcs:
-        db.bulk_save_objects(new_calcs)
+    #
+    # Order matters: uq_emission_calc_current_per_entry allows only one
+    # non-superseded row per entry_id, so the old row has to be marked
+    # superseded BEFORE its replacement is inserted, not after -- inserting
+    # first (as this originally did) violates the constraint immediately,
+    # since both rows are briefly "current" for the same entry_id.
     if superseded_ids:
         db.execute(sa_update(EmissionCalculation).where(EmissionCalculation.id.in_(superseded_ids)).values(status="superseded"))
+    if new_calcs:
+        db.bulk_save_objects(new_calcs)
 
     return results
 
