@@ -35,7 +35,7 @@ from app.services.carbon_calculation import (
     to_decimal,
     trailing_buckets_for_mode,
 )
-from app.services.dashboard_insight import generate_dashboard_insight
+from app.services.dashboard_insight import generate_dashboard_insight, get_cached_insight, hash_context, store_insight
 from app.services.rollups import month_start
 from app.services.target_calculation import (
     active_target_comparison,
@@ -490,9 +490,11 @@ def carbon_ai_insight(
     """A guardrailed AI summary of the same figures the overview cards show
     -- kept off the /overview response on purpose so a slow or unavailable
     OpenAI call never blocks the dashboard's main load; the frontend fetches
-    this separately and reveals it once ready. Always falls back to the
-    existing deterministic sentence on any AI failure (see
-    services/dashboard_insight.py)."""
+    this separately and reveals it once ready. Durably cached in
+    carbon_insight: a repeat request for the same tenant/location/period
+    whose underlying figures haven't changed is served straight from that
+    row, no OpenAI call. Always falls back to the existing deterministic
+    sentence on any AI failure (see services/dashboard_insight.py)."""
     period = month_start(period)
     range_start, range_end = range_bounds_for_mode(period, period_mode)
     current_months = months_in_range(range_start, range_end)
@@ -550,7 +552,15 @@ def carbon_ai_insight(
         ],
     }
 
-    insight = generate_dashboard_insight(context, fallback)
+    input_hash = hash_context(context)
+    cached = get_cached_insight(db, current.tenant_id, location_id, period, period_mode, input_hash)
+    if cached is not None:
+        return AiInsightOut(insight=cached)
+
+    insight, was_ai_generated = generate_dashboard_insight(context, fallback)
+    if was_ai_generated and insight:
+        store_insight(db, current.tenant_id, location_id, period, period_mode, input_hash, insight)
+        db.commit()
     return AiInsightOut(insight=insight)
 
 

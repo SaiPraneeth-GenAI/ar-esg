@@ -1,4 +1,4 @@
-from app.db.models.carbon import EmissionCalculation, EmissionTarget, ProductionVolumeMapping
+from app.db.models.carbon import CarbonInsight, EmissionCalculation, EmissionTarget, ProductionVolumeMapping
 from app.db.models.chart import SavedChart
 from app.db.models.column_mapping_memory import ColumnMappingMemory
 from app.db.models.config_tenancy import Category, DataPoint, Location, Tenant, User
@@ -44,6 +44,7 @@ __all__ = [
     "MappingTemplate",
     "ColumnMappingMemory",
     "EmissionCalculation",
+    "CarbonInsight",
     "ProductionVolumeMapping",
     "EmissionTarget",
     "RevenueMapping",

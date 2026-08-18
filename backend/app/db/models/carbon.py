@@ -56,6 +56,32 @@ class EmissionCalculation(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
 
 
+class CarbonInsight(Base):
+    """The last AI-generated dashboard insight for one (tenant, location,
+    period, period_mode) -- one row per combination, overwritten in place.
+    input_hash is a hash of the exact figures the text was generated from;
+    a repeat request with the same hash is served straight from this row
+    with no OpenAI call, and only a changed hash (approved data actually
+    moved) triggers a fresh generation. Never written on a fallback (i.e.
+    non-AI) response, so a transient OpenAI failure doesn't permanently
+    poison the cache with rule-based text."""
+
+    __tablename__ = "carbon_insight"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenant.id", ondelete="CASCADE"), nullable=False)
+    location_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("location.id", ondelete="CASCADE"))
+    period: Mapped[date] = mapped_column(nullable=False)
+    period_mode: Mapped[str] = mapped_column(String, nullable=False)
+
+    input_hash: Mapped[str] = mapped_column(String, nullable=False)
+    insight_text: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(String, nullable=False)
+
+    generated_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
+
+
 class ProductionVolumeMapping(Base):
     """Which data point represents battery production for this tenant/
     location, and how to convert its native unit into the canonical MnAh

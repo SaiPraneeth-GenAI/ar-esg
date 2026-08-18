@@ -12,21 +12,31 @@ Guardrails, because this text is shown to the client unreviewed:
   existing deterministic, rule-based sentence -- the card never goes blank
   and never blocks on the AI call being slow.
 - Identical inputs (same tenant/location/period/period_mode and the same
-  underlying figures) are never re-billed -- cached by a hash of the exact
-  JSON sent to the model, so a repeat dashboard load or tab switch is free.
+  underlying figures) are never re-billed. Two layers: an in-process dict
+  for same-worker repeats within a warm process, and carbon_insight (a DB
+  table) as the durable source of truth -- callers should always check
+  get_cached_insight() first and only call generate_dashboard_insight() on
+  a miss, then persist the result with store_insight() (see carbon.py's
+  /ai-insight route). A fallback (non-AI) response is never persisted, so a
+  transient OpenAI outage self-heals on the next request instead of
+  permanently freezing the cache on rule-based text.
 """
 
 import hashlib
 import json
 import logging
+import uuid
+from datetime import date, datetime
 
-from openai import OpenAI
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.db.models import CarbonInsight
+from openai import OpenAI
 
 logger = logging.getLogger("dashboard_insight")
 
-_MODEL = "gpt-4o-mini"
+MODEL = "gpt-4o-mini"
 _TIMEOUT_SECONDS = 20
 _MAX_OUTPUT_TOKENS = 260
 _CACHE: dict[str, str] = {}
@@ -43,30 +53,87 @@ Rules you must follow exactly:
 """
 
 
-def _cache_key(context: dict) -> str:
+def hash_context(context: dict) -> str:
     raw = json.dumps(context, sort_keys=True, default=str)
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def generate_dashboard_insight(context: dict, fallback: str | None) -> str | None:
+def get_cached_insight(
+    db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, period: date, period_mode: str, input_hash: str
+) -> str | None:
+    """The durable check: a row exists for this exact (tenant, location,
+    period, period_mode) AND its stored hash matches today's figures. A
+    match means the underlying data hasn't changed since it was generated
+    -- return the stored text with no AI call at all."""
+    row = (
+        db.query(CarbonInsight)
+        .filter(
+            CarbonInsight.tenant_id == tenant_id,
+            CarbonInsight.location_id == location_id,
+            CarbonInsight.period == period,
+            CarbonInsight.period_mode == period_mode,
+        )
+        .first()
+    )
+    if row is not None and row.input_hash == input_hash:
+        return row.insight_text
+    return None
+
+
+def store_insight(
+    db: Session, tenant_id: uuid.UUID, location_id: uuid.UUID | None, period: date, period_mode: str, input_hash: str, text: str
+) -> None:
+    """Overwrites the one row for this (tenant, location, period,
+    period_mode) -- history isn't kept, only the latest text for the latest
+    hash. Caller commits (or not) as part of its own request transaction."""
+    row = (
+        db.query(CarbonInsight)
+        .filter(
+            CarbonInsight.tenant_id == tenant_id,
+            CarbonInsight.location_id == location_id,
+            CarbonInsight.period == period,
+            CarbonInsight.period_mode == period_mode,
+        )
+        .first()
+    )
+    if row is not None:
+        row.input_hash = input_hash
+        row.insight_text = text
+        row.model = MODEL
+        row.updated_at = datetime.utcnow()
+    else:
+        db.add(
+            CarbonInsight(
+                tenant_id=tenant_id,
+                location_id=location_id,
+                period=period,
+                period_mode=period_mode,
+                input_hash=input_hash,
+                insight_text=text,
+                model=MODEL,
+            )
+        )
+
+
+def generate_dashboard_insight(context: dict, fallback: str | None) -> tuple[str | None, bool]:
     """context is a plain-JSON-serializable dict of already-computed figures
     (current/prior values, deltas, top contributors, target statuses).
-    Returns the AI summary, or `fallback` (the existing rule-based sentence)
-    on any error -- callers should always pass a fallback so the card never
-    ends up empty."""
+    Returns (text, was_ai_generated) -- was_ai_generated is False whenever
+    `text` is really just `fallback` (no API key, empty response, or an
+    error), so callers know not to persist it as a durable cache hit."""
     settings = get_settings()
     if not settings.openai_api_key:
-        return fallback
+        return fallback, False
 
-    key = _cache_key(context)
+    key = hash_context(context)
     cached = _CACHE.get(key)
     if cached is not None:
-        return cached
+        return cached, True
 
     try:
         client = OpenAI(api_key=settings.openai_api_key, timeout=_TIMEOUT_SECONDS, max_retries=1)
         response = client.chat.completions.create(
-            model=_MODEL,
+            model=MODEL,
             temperature=0.2,
             max_tokens=_MAX_OUTPUT_TOKENS,
             messages=[
@@ -76,9 +143,9 @@ def generate_dashboard_insight(context: dict, fallback: str | None) -> str | Non
         )
         text = (response.choices[0].message.content or "").strip()
         if not text:
-            return fallback
+            return fallback, False
         _CACHE[key] = text
-        return text
+        return text, True
     except Exception:
         logger.exception("dashboard_insight generation failed, falling back to rule-based text")
-        return fallback
+        return fallback, False
