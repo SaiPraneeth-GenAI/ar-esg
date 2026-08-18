@@ -4,7 +4,14 @@
       <h1>Targets</h1>
       <p class="subtitle">Reduction targets, locked to their approved baseline data once activated.</p>
     </div>
-    <button type="button" class="primary-btn" (click)="openWizard()">+ New target</button>
+    <div class="header-actions">
+      <button type="button" class="secondary-btn" (click)="downloadBulkTemplate()">Download template</button>
+      <label class="secondary-btn upload-label" [class.disabled]="bulkUploading()">
+        {{ bulkUploading() ? 'Uploading…' : 'Bulk upload' }}
+        <input type="file" accept=".csv,.xlsx,.xls" [disabled]="bulkUploading()" (change)="onBulkFileSelected($event)" hidden />
+      </label>
+      <button type="button" class="primary-btn" (click)="openWizard()">+ New target</button>
+    </div>
   </header>
 
   @if (errorMessage()) {
@@ -12,6 +19,17 @@
   }
   @if (successMessage()) {
     <div class="banner success">{{ successMessage() }}</div>
+  }
+  @if (bulkUploadError()) {
+    <div class="banner error">{{ bulkUploadError() }}</div>
+  }
+  @if (bulkUploadResult(); as result) {
+    <div class="banner success">
+      {{ result.activated }} target{{ result.activated === 1 ? '' : 's' }} created and activated
+      @if (result.errors > 0) {
+        , {{ result.errors }} row{{ result.errors === 1 ? '' : 's' }} skipped (see above)
+      }.
+    </div>
   }
 
   <div class="tabs">

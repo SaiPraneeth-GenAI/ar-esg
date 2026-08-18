@@ -17,6 +17,7 @@ down, training up. Not real measurements; a plausible story for a demo.
 import io
 import math
 import random
+import uuid
 from datetime import date
 from typing import Callable
 
@@ -24,7 +25,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from sqlalchemy.orm import Session
 
-from app.db.models import Category, DataPoint
+from app.db.models import Category, DataPoint, EmissionFactor
 
 # ---- Shared month range -------------------------------------------------
 
@@ -230,6 +231,79 @@ def build_emission_factors_workbook() -> bytes:
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def ensure_demo_emission_factors(db: Session, tenant_id: uuid.UUID, actor_id: uuid.UUID | None) -> int:
+    """Idempotently upserts the same Scope 1/2 factors as
+    build_emission_factors_workbook() directly into the tenant's factor
+    table (FY2024/2025/2026 rows), instead of relying on a human to
+    remember to download that workbook and run it through the Emission
+    Factors bulk-upload before uploading demo entries.
+
+    Without this, a Coal/Diesel/Petrol/... entry uploaded directly (e.g.
+    via Data Entry -> Bulk Upload, skipping the Simulate Sample ordering)
+    has nothing to resolve against and lands "unresolved: missing_factor"
+    -- this was a real, repeated support issue, not a hypothetical. Called
+    from both /admin/demo/clear and /admin/demo/entries-workbook so the
+    factors exist no matter which step a demo run starts from. Matches
+    existing rows by (scope, gas_type or method, effective_date) so
+    re-running never duplicates a tenant's own factor library.
+
+    Returns the number of rows created."""
+    existing = (
+        db.query(EmissionFactor.scope, EmissionFactor.gas_type, EmissionFactor.method, EmissionFactor.effective_date)
+        .filter(EmissionFactor.tenant_id == tenant_id, EmissionFactor.scope.in_([1, 2]))
+        .all()
+    )
+    existing_keys = {(scope, (gas_type or method or "").strip().lower(), eff_date) for scope, gas_type, method, eff_date in existing}
+
+    created = 0
+    for name, unit, source, ref, fy24, fy25, fy26 in _SCOPE1_FACTORS:
+        for year, value in ((2024, fy24), (2025, fy25), (2026, fy26)):
+            eff_date = date(year, 1, 1)
+            key = (1, name.strip().lower(), eff_date)
+            if key in existing_keys:
+                continue
+            db.add(
+                EmissionFactor(
+                    tenant_id=tenant_id,
+                    scope=1,
+                    gas_type=name,
+                    unit=unit,
+                    factor_value=value,
+                    effective_date=eff_date,
+                    version=f"FY{str(year)[2:]}",
+                    source=source,
+                    source_reference=ref,
+                    created_by=actor_id,
+                )
+            )
+            created += 1
+
+    for name, method, unit, source, ref, fy24, fy25, fy26 in _SCOPE2_FACTORS:
+        for year, value in ((2024, fy24), (2025, fy25), (2026, fy26)):
+            eff_date = date(year, 1, 1)
+            key = (2, method.strip().lower(), eff_date)
+            if key in existing_keys:
+                continue
+            db.add(
+                EmissionFactor(
+                    tenant_id=tenant_id,
+                    scope=2,
+                    method=method,
+                    description=name,
+                    unit=unit,
+                    factor_value=value,
+                    effective_date=eff_date,
+                    version=f"FY{str(year)[2:]}",
+                    source=source,
+                    source_reference=ref,
+                    created_by=actor_id,
+                )
+            )
+            created += 1
+
+    return created
 
 
 # ---- Targets --------------------------------------------------------

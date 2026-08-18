@@ -2,7 +2,14 @@ import { DecimalPipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ChartPoint, ChartSeriesDef, RichTrendChartComponent } from '../../../shared/rich-trend-chart/rich-trend-chart.component';
-import { TargetApiService, TargetMonthPerformance, TargetOut, TargetStatus } from '../../../core/target-api.service';
+import {
+  TargetableMetric,
+  TargetApiService,
+  TargetBulkRowIn,
+  TargetMonthPerformance,
+  TargetOut,
+  TargetStatus
+} from '../../../core/target-api.service';
 import { TargetWizardComponent } from './target-wizard.component';
 
 function monthLabel(period: string): string {
@@ -27,6 +34,11 @@ export class TargetsComponent implements OnInit {
 
   showWizard = signal(false);
 
+  bulkUploading = signal(false);
+  bulkUploadError = signal('');
+  bulkUploadResult = signal<{ activated: number; errors: number } | null>(null);
+  metrics = signal<TargetableMetric[]>([]);
+
   // Monthly performance is fetched for every activated/archived target up
   // front (not gated behind a click) so the visual history is the thing the
   // customer sees by default, not a feature they have to discover.
@@ -47,6 +59,11 @@ export class TargetsComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await this.refresh();
+    try {
+      this.metrics.set(await this.api.listMetrics());
+    } catch {
+      // Only needed for the bulk-upload template hint -- the rest of the page works without it.
+    }
   }
 
   async refresh(): Promise<void> {
@@ -228,4 +245,108 @@ export class TargetsComponent implements OnInit {
     }
   }
 
+  downloadBulkTemplate(): void {
+    const headers = [
+      'metric_key',
+      'location_name',
+      'baseline_period_start',
+      'baseline_period_end',
+      'target_period_start',
+      'target_period_end',
+      'reduction_percentage',
+      'rationale'
+    ];
+    const example = this.metrics()[0];
+    const exampleRow = [
+      example?.key ?? 'scope_1_2_location',
+      '',
+      '2025-01-01',
+      '2025-12-01',
+      '2026-01-01',
+      '2026-12-01',
+      '10',
+      'Annual reduction target'
+    ];
+    const metricList = this.metrics().length
+      ? `# Valid metric_key values: ${this.metrics()
+          .map((m) => m.key)
+          .join(', ')}`
+      : '';
+    const lines = [headers.join(','), exampleRow.join(','), '', metricList].filter((l) => l !== '');
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'targets_bulk_upload_template.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async onBulkFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.bulkUploadError.set('');
+    this.bulkUploadResult.set(null);
+    this.bulkUploading.set(true);
+    try {
+      const { parseSpreadsheet } = await import('../../data-entry/bulk-upload-wizard/bulk-upload-wizard.utils');
+      const { headers, rows } = await parseSpreadsheet(file);
+      const idx = (name: string) => headers.findIndex((h) => h.trim().toLowerCase() === name);
+      const iMetric = idx('metric_key');
+      const iLocation = idx('location_name');
+      const iBaselineStart = idx('baseline_period_start');
+      const iBaselineEnd = idx('baseline_period_end');
+      const iTargetStart = idx('target_period_start');
+      const iTargetEnd = idx('target_period_end');
+      const iReduction = idx('reduction_percentage');
+      const iTargetValue = idx('target_value');
+      const iRationale = idx('rationale');
+
+      if (iMetric === -1 || iBaselineStart === -1 || iBaselineEnd === -1 || iTargetStart === -1 || iTargetEnd === -1) {
+        this.bulkUploadError.set('This file is missing expected columns -- download the template and use its headers as-is.');
+        return;
+      }
+
+      const asDateStr = (v: unknown): string => {
+        if (v instanceof Date) return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`;
+        return String(v ?? '').trim();
+      };
+
+      const bulkRows: TargetBulkRowIn[] = rows
+        .filter((row) => String(row[iMetric] ?? '').trim() !== '')
+        .map((row, i) => ({
+          row_index: i + 1,
+          metric_key: String(row[iMetric] ?? '').trim(),
+          location_name: iLocation !== -1 ? String(row[iLocation] ?? '').trim() || null : null,
+          baseline_period_start: asDateStr(row[iBaselineStart]),
+          baseline_period_end: asDateStr(row[iBaselineEnd]),
+          target_period_start: asDateStr(row[iTargetStart]),
+          target_period_end: asDateStr(row[iTargetEnd]),
+          reduction_percentage: iReduction !== -1 && row[iReduction] !== '' ? Number(row[iReduction]) : null,
+          target_value: iTargetValue !== -1 && row[iTargetValue] !== '' ? Number(row[iTargetValue]) : null,
+          rationale: iRationale !== -1 ? String(row[iRationale] ?? '').trim() || null : null
+        }));
+
+      if (bulkRows.length === 0) {
+        this.bulkUploadError.set('No rows found in this file.');
+        return;
+      }
+
+      const response = await this.api.bulkImport({ commit: true, rows: bulkRows });
+      const errors = response.rows.filter((r) => r.status === 'error');
+      this.bulkUploadResult.set({ activated: response.activated_count, errors: response.error_count });
+      if (errors.length > 0) {
+        this.bulkUploadError.set(errors.map((e) => `Row ${e.row_index} (${e.metric_key}): ${e.message}`).join(' · '));
+      } else {
+        this.successMessage.set(`${response.activated_count} target${response.activated_count === 1 ? '' : 's'} created and activated.`);
+      }
+      await this.refresh();
+    } catch {
+      this.bulkUploadError.set('Could not upload this file -- please try again.');
+    } finally {
+      this.bulkUploading.set(false);
+      input.value = '';
+    }
+  }
 }

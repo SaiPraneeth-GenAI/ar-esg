@@ -11,7 +11,12 @@ from sqlalchemy.orm import Session
 from app.core.auth import CurrentUser, require_roles
 from app.db.models import Entry, EmissionTarget, Location, PeerData
 from app.db.session import get_db
-from app.services.demo_data import build_emission_factors_workbook, build_entries_workbook, build_targets_workbook
+from app.services.demo_data import (
+    build_emission_factors_workbook,
+    build_entries_workbook,
+    build_targets_workbook,
+    ensure_demo_emission_factors,
+)
 
 router = APIRouter(prefix="/admin/demo", tags=["admin"])
 
@@ -32,15 +37,19 @@ def clear_demo_data(
     """Deletes every Entry (cascading to Approval/AuditLog/Attachment/
     EmissionCalculation via FK ondelete=CASCADE), every EmissionTarget, and
     every PeerData row for this tenant. Deliberately leaves Users, Roles,
-    Locations, Categories/DataPoints, Emission Factors, and Peer Company
-    names untouched -- those are tenant setup, not demo data, and clearing
-    them would mean redoing setup before every demo instead of just
-    repopulating the numbers."""
+    Locations, Categories/DataPoints, and Peer Company names untouched --
+    those are tenant setup, not demo data, and clearing them would mean
+    redoing setup before every demo instead of just repopulating the
+    numbers. Emission factors are the one exception: ensure_demo_emission_factors()
+    idempotently backfills the Scope 1/2 factors the demo entries need
+    (never removes or overwrites a tenant's own), so a demo entries upload
+    can never land ahead of the factors it needs to calculate against."""
     location_ids = [loc.id for loc in db.query(Location).filter(Location.tenant_id == current.tenant_id).all()]
 
     entries_deleted = db.query(Entry).filter(Entry.location_id.in_(location_ids)).delete(synchronize_session=False)
     targets_deleted = db.query(EmissionTarget).filter(EmissionTarget.tenant_id == current.tenant_id).delete(synchronize_session=False)
     peer_data_deleted = db.query(PeerData).filter(PeerData.tenant_id == current.tenant_id).delete(synchronize_session=False)
+    ensure_demo_emission_factors(db, current.tenant_id, current.id)
     db.commit()
 
     return ClearDemoDataResponse(
@@ -53,6 +62,11 @@ def download_entries_workbook(
     current: CurrentUser = Depends(require_roles("Admin")),
     db: Session = Depends(get_db),
 ):
+    # Belt-and-braces alongside /clear -- guarantees the factors this
+    # workbook's entries need exist at the moment someone is actually about
+    # to upload it, even if /clear ran a while ago or was skipped entirely.
+    ensure_demo_emission_factors(db, current.tenant_id, current.id)
+    db.commit()
     content = build_entries_workbook(db, current.tenant_id)
     return Response(
         content=content,
