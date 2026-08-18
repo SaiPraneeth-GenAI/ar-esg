@@ -2,6 +2,7 @@
 bytes via reportlab -- plain layout code, no AI, no network calls."""
 
 import io
+from pathlib import Path
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -16,6 +17,30 @@ _INK = colors.HexColor("#101828")
 _GREEN = colors.HexColor("#0e2c21")
 _MUTED = colors.HexColor("#667085")
 _BORDER = colors.HexColor("#eaecf0")
+
+_LOGO_PATH = Path(__file__).resolve().parent.parent / "assets" / "amara_raja_logo.png"
+_LOGO_ASPECT = 202 / 682  # height / width of the source lockup
+
+
+def _footer(canvas, doc) -> None:
+    """Amara Raja branding on every page -- what makes an exported report
+    look like it came from a real tenant deployment, not a generic tool."""
+    canvas.saveState()
+    page_w, _ = A4
+    canvas.setStrokeColor(_BORDER)
+    canvas.setLineWidth(0.5)
+    canvas.line(16 * mm, 14 * mm, page_w - 16 * mm, 14 * mm)
+
+    if _LOGO_PATH.exists():
+        logo_w = 26 * mm
+        canvas.drawImage(
+            str(_LOGO_PATH), 16 * mm, 7.5 * mm, width=logo_w, height=logo_w * _LOGO_ASPECT, mask="auto", preserveAspectRatio=True
+        )
+
+    canvas.setFont("Helvetica", 7)
+    canvas.setFillColor(_MUTED)
+    canvas.drawRightString(page_w - 16 * mm, 10 * mm, f"Page {doc.page} · Generated via Enviqo")
+    canvas.restoreState()
 
 
 def build_pdf(sections: list[ReportSection], meta: ReportMeta) -> bytes:
@@ -59,5 +84,5 @@ def build_pdf(sections: list[ReportSection], meta: ReportMeta) -> bytes:
             img = RLImage(io.BytesIO(section.chart_png), width=170 * mm, height=170 * mm * (2.6 / 6.4))
             story.append(img)
 
-    doc.build(story)
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buf.getvalue()

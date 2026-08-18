@@ -22,7 +22,19 @@ export const TARGET_FIELDS: TargetField[] = [
     key: 'period',
     label: 'Period / Month',
     required: false,
-    synonyms: ['period', 'month', 'date', 'reporting period', 'period month']
+    synonyms: ['period', 'date', 'reporting period']
+  },
+  {
+    key: 'year',
+    label: 'Year',
+    required: false,
+    synonyms: ['year', 'yr']
+  },
+  {
+    key: 'month',
+    label: 'Month',
+    required: false,
+    synonyms: ['month', 'mon']
   },
   { key: 'value', label: 'Value', required: true, synonyms: ['value', 'reading', 'amount', 'qty', 'quantity', 'total'] },
   { key: 'unit', label: 'Unit', required: false, synonyms: ['unit', 'uom', 'units'] },
@@ -151,6 +163,41 @@ export function parsePeriodToIso(raw: unknown): string | null {
   }
 
   return null;
+}
+
+/** Combines separate Year and Month cells into an ISO period -- the
+ * counterpart to parsePeriodToIso for files laid out as a time series
+ * (one row per data point per month) rather than a single combined
+ * Period column. Accepts a numeric month (1-12) or a month name/
+ * abbreviation in the Month cell. */
+export function combineYearMonthToIso(yearRaw: unknown, monthRaw: unknown): string | null {
+  const yearStr = String(yearRaw ?? '').trim();
+  const yearMatch = yearStr.match(/^\d{4}$/);
+  if (!yearMatch) {
+    return null;
+  }
+  const year = parseInt(yearStr, 10);
+
+  const monthStr = String(monthRaw ?? '').trim();
+  if (!monthStr) {
+    return null;
+  }
+  let month: number | null = null;
+  if (/^\d{1,2}$/.test(monthStr)) {
+    const n = parseInt(monthStr, 10);
+    if (n >= 1 && n <= 12) {
+      month = n;
+    }
+  } else {
+    const idx = MONTH_NAMES.findIndex((mn) => mn.startsWith(monthStr.toLowerCase()));
+    if (idx >= 0) {
+      month = idx + 1;
+    }
+  }
+  if (month === null) {
+    return null;
+  }
+  return `${year}-${String(month).padStart(2, '0')}-01`;
 }
 
 export function formatPeriodLabel(iso: string): string {

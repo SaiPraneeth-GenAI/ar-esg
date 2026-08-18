@@ -100,11 +100,6 @@
   flex-shrink: 0;
 }
 
-.detail-icon svg {
-  width: 34px;
-  height: 34px;
-}
-
 .detail-category {
   display: block;
   font-size: 0.76rem;

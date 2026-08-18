@@ -284,11 +284,6 @@
   transform: scale(1.06);
 }
 
-.tile-icon svg {
-  width: 24px;
-  height: 24px;
-}
-
 .status-dot {
   width: 8px;
   height: 8px;
@@ -420,11 +415,6 @@
   width: 52px;
   height: 52px;
   border-radius: 14px;
-}
-
-.featured-icon svg {
-  width: 27px;
-  height: 27px;
 }
 
 .featured-tag {

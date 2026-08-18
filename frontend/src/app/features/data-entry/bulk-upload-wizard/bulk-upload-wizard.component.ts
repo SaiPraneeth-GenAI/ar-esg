@@ -6,6 +6,7 @@ import { ColumnSuggestion, MappingApiService, SheetDetectionResult } from '../..
 import {
   TARGET_FIELDS,
   TargetField,
+  combineYearMonthToIso,
   formatPeriodLabel,
   guessMapping,
   parsePeriodToIso,
@@ -398,6 +399,8 @@ export class BulkUploadWizardComponent {
     const categoryIdx = indexOf('category');
     const nameIdx = indexOf('data_point_name');
     const periodIdx = indexOf('period');
+    const yearIdx = indexOf('year');
+    const monthIdx = indexOf('month');
     const valueIdx = indexOf('value');
     const unitIdx = indexOf('unit');
     const noteIdx = indexOf('note');
@@ -408,10 +411,12 @@ export class BulkUploadWizardComponent {
 
     return this.rawRows().map((row, i) => {
       const periodRaw = periodIdx !== undefined ? row[periodIdx] : null;
-      // A blank cell or one we can't parse just falls back to the period
-      // already selected above -- we never leave this looking "empty" in the
-      // Validate table, and we never make that a hard error.
-      const periodIso = (periodRaw ? parsePeriodToIso(periodRaw) : null) ?? this.period;
+      // Either a single Period/Month/Date column, or separate Year + Month
+      // columns (the shape the template now uses for a time series -- one
+      // row per data point per month). A blank/unparseable cell falls back
+      // to the period already selected above -- never a hard error here.
+      const yearMonthIso = yearIdx !== undefined && monthIdx !== undefined ? combineYearMonthToIso(row[yearIdx], row[monthIdx]) : null;
+      const periodIso = (periodRaw ? parsePeriodToIso(periodRaw) : null) ?? yearMonthIso ?? this.period;
       return {
         row_index: i + 2, // +1 for header row, +1 for 1-indexing
         category: categoryIdx !== undefined ? String(row[categoryIdx] ?? '').trim() || null : null,

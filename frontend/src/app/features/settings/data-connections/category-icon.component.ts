@@ -1,14 +1,32 @@
-import { Component, Input } from '@angular/core';
+import { Component, HostBinding, Input } from '@angular/core';
 import { CategoryGroupId } from './connectors.data';
 
 /** One icon per category group, reused across every connector tile in
  * that group -- gives each section its own visual language (spec: "ERP
  * tiles use enterprise visual language, IoT tiles use industrial
  * telemetry language...") without needing 49 distinct connector logos,
- * which would also risk misrepresenting third-party brand marks. */
+ * which would also risk misrepresenting third-party brand marks.
+ *
+ * Sized via the [size] input (host width/height), not a parent
+ * stylesheet rule -- a parent's `.tile-icon svg { width: ... }` selector
+ * cannot reach across view-encapsulation into this component's own
+ * template, so the SVG must size itself from a property this component
+ * actually controls. */
 @Component({
   selector: 'app-category-icon',
   standalone: true,
+  styles: [
+    `
+      :host {
+        display: block;
+      }
+      svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+    `
+  ],
   template: `
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       @switch (group) {
@@ -65,4 +83,12 @@ import { CategoryGroupId } from './connectors.data';
 })
 export class CategoryIconComponent {
   @Input({ required: true }) group!: CategoryGroupId;
+  @Input() size = 24;
+
+  @HostBinding('style.width.px') get widthPx(): number {
+    return this.size;
+  }
+  @HostBinding('style.height.px') get heightPx(): number {
+    return this.size;
+  }
 }

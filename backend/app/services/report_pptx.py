@@ -2,9 +2,11 @@
 bytes via python-pptx -- plain layout code, no AI, no network calls."""
 
 import io
+from pathlib import Path
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt
 
 from app.services.dashboard_report import ReportMeta, ReportSection
@@ -12,6 +14,9 @@ from app.services.dashboard_report import ReportMeta, ReportSection
 _INK = RGBColor(0x10, 0x18, 0x28)
 _GREEN = RGBColor(0x0E, 0x2C, 0x21)
 _MUTED = RGBColor(0x66, 0x70, 0x85)
+
+_LOGO_PATH = Path(__file__).resolve().parent.parent / "assets" / "amara_raja_logo.png"
+_LOGO_ASPECT = 202 / 682  # height / width of the source lockup
 
 
 def build_pptx(sections: list[ReportSection], meta: ReportMeta) -> bytes:
@@ -21,12 +26,29 @@ def build_pptx(sections: list[ReportSection], meta: ReportMeta) -> bytes:
     blank_layout = prs.slide_layouts[6]
 
     _add_title_slide(prs, blank_layout, meta)
-    for section in sections:
-        _add_section_slide(prs, blank_layout, section)
+    for i, section in enumerate(sections):
+        _add_section_slide(prs, blank_layout, section, i + 2)
 
     buf = io.BytesIO()
     prs.save(buf)
     return buf.getvalue()
+
+
+def _add_footer(slide, prs: Presentation, slide_number: int) -> None:
+    """Amara Raja branding on every slide -- what makes an exported deck
+    look like it came from a real tenant deployment, not a generic tool."""
+    if _LOGO_PATH.exists():
+        logo_w = Inches(1.05)
+        slide.shapes.add_picture(
+            str(_LOGO_PATH), Inches(0.4), prs.slide_height - Inches(0.5), width=logo_w, height=logo_w * _LOGO_ASPECT
+        )
+
+    footer_box = slide.shapes.add_textbox(prs.slide_width - Inches(3.6), prs.slide_height - Inches(0.45), Inches(3.2), Inches(0.35))
+    p = footer_box.text_frame.paragraphs[0]
+    p.text = f"Slide {slide_number} · Generated via Enviqo"
+    p.font.size = Pt(9)
+    p.font.color.rgb = _MUTED
+    p.alignment = PP_ALIGN.RIGHT
 
 
 def _add_title_slide(prs: Presentation, layout, meta: ReportMeta) -> None:
@@ -44,8 +66,10 @@ def _add_title_slide(prs: Presentation, layout, meta: ReportMeta) -> None:
     p.font.size = Pt(18)
     p.font.color.rgb = _MUTED
 
+    _add_footer(slide, prs, 1)
 
-def _add_section_slide(prs: Presentation, layout, section: ReportSection) -> None:
+
+def _add_section_slide(prs: Presentation, layout, section: ReportSection, slide_number: int) -> None:
     slide = prs.slides.add_slide(layout)
 
     title_box = slide.shapes.add_textbox(Inches(0.5), Inches(0.3), Inches(12.3), Inches(0.7))
@@ -76,3 +100,5 @@ def _add_section_slide(prs: Presentation, layout, section: ReportSection) -> Non
 
     if section.chart_png:
         slide.shapes.add_picture(io.BytesIO(section.chart_png), Inches(6.0), tiles_top, width=Inches(6.8))
+
+    _add_footer(slide, prs, slide_number)
