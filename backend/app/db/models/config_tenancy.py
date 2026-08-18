@@ -46,7 +46,13 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenant.id", ondelete="CASCADE"), nullable=False)
     email: Mapped[str] = mapped_column(String, nullable=False, unique=True)
-    roles: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, server_default=text("'{}'"))
+    # ARRAY(Text) to match the actual column type (migration 0002 -- `alter
+    # column roles type text[]`). ARRAY(String) generates VARCHAR[] bind
+    # parameters, which have no implicit cast to text[] for Postgres's `&&`
+    # (overlap) operator -- harmless for plain reads/writes, but any query
+    # using .overlap() against this column fails with "operator does not
+    # exist: text[] && character varying[]" until the types match.
+    roles: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, server_default=text("'{}'"))
     location_scope: Mapped[list[uuid.UUID] | None] = mapped_column(ARRAY(UUID(as_uuid=True)))
     auth_provider: Mapped[str | None] = mapped_column(String)
 
