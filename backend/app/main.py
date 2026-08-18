@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 
 from app.api.routes import (
+    admin_demo,
     admin_emission_factors,
     admin_locations,
     admin_mapping_templates,
@@ -55,3 +56,4 @@ app.include_router(safety.router)
 app.include_router(charts.router)
 app.include_router(peers.router)
 app.include_router(reports.router)
+app.include_router(admin_demo.router)

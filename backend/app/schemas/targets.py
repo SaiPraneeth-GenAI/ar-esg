@@ -80,6 +80,38 @@ class TargetActivateRequest(BaseModel):
     rationale: str | None = None
 
 
+class TargetBulkRowIn(BaseModel):
+    row_index: int
+    metric_key: str
+    location_name: str | None = None  # blank/omitted = org-wide
+    baseline_period_start: date
+    baseline_period_end: date
+    target_period_start: date
+    target_period_end: date
+    reduction_percentage: float | None = None
+    target_value: float | None = None
+    rationale: str | None = None
+
+
+class TargetBulkImportRequest(BaseModel):
+    commit: bool = False
+    rows: list[TargetBulkRowIn]
+
+
+class TargetBulkRowResult(BaseModel):
+    row_index: int
+    status: str  # "valid" | "error" | "created" | "activated"
+    metric_key: str
+    message: str | None = None
+    target_id: uuid.UUID | None = None
+
+
+class TargetBulkImportResponse(BaseModel):
+    rows: list[TargetBulkRowResult]
+    activated_count: int
+    error_count: int
+
+
 class TargetOut(BaseModel):
     id: uuid.UUID
     location_id: uuid.UUID | None

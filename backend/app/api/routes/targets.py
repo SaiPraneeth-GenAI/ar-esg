@@ -14,6 +14,9 @@ from app.schemas.targets import (
     BaselinePreviewResponse,
     TargetActivateRequest,
     TargetableMetricOut,
+    TargetBulkImportRequest,
+    TargetBulkImportResponse,
+    TargetBulkRowResult,
     TargetCreate,
     TargetMonthPerformance,
     TargetOut,
@@ -189,6 +192,126 @@ def create_target(
     db.commit()
     db.refresh(target)
     return _target_out(db, target)
+
+
+@router.post("/bulk-import", response_model=TargetBulkImportResponse)
+def bulk_import_targets(
+    payload: TargetBulkImportRequest,
+    current: CurrentUser = Depends(require_roles(*MANAGE_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """One row per target: creates it, computes its baseline, and activates
+    immediately if the baseline is ready -- mirrors what the wizard does in
+    three clicks, for a whole sheet at once. Meant for demo/bulk seeding
+    (see services/demo_data.py's sample workbook), not a replacement for
+    the wizard's baseline preview/monthly-phasing UI, so every target
+    created this way gets an even monthly spread, no custom phasing."""
+    results: list[TargetBulkRowResult] = []
+    activated_count = 0
+    error_count = 0
+    location_cache: dict[str, uuid.UUID | None] = {}
+
+    for row in payload.rows:
+        if row.metric_key not in TARGETABLE_METRIC_KEYS:
+            results.append(TargetBulkRowResult(row_index=row.row_index, status="error", metric_key=row.metric_key, message="Unknown or unsupported target metric."))
+            error_count += 1
+            continue
+
+        location_id: uuid.UUID | None = None
+        if row.location_name and row.location_name.strip():
+            key = row.location_name.strip().lower()
+            if key not in location_cache:
+                loc = (
+                    db.query(Location)
+                    .filter(Location.tenant_id == current.tenant_id, Location.name.ilike(row.location_name.strip()))
+                    .first()
+                )
+                location_cache[key] = loc.id if loc else None
+            location_id = location_cache[key]
+            if location_id is None:
+                results.append(TargetBulkRowResult(row_index=row.row_index, status="error", metric_key=row.metric_key, message=f"Site '{row.location_name}' not found."))
+                error_count += 1
+                continue
+
+        baseline_start = month_start(row.baseline_period_start)
+        baseline_end = month_start(row.baseline_period_end)
+        target_start = month_start(row.target_period_start)
+        target_end = month_start(row.target_period_end)
+
+        if not payload.commit:
+            results.append(TargetBulkRowResult(row_index=row.row_index, status="valid", metric_key=row.metric_key))
+            continue
+
+        baseline = compute_baseline(db, current.tenant_id, location_id, row.metric_key, baseline_start, baseline_end)
+        if not baseline.ready:
+            results.append(TargetBulkRowResult(row_index=row.row_index, status="error", metric_key=row.metric_key, message=baseline.message))
+            error_count += 1
+            continue
+
+        target_value = row.target_value
+        if target_value is None and row.reduction_percentage is not None and baseline.baseline_value is not None:
+            target_value = baseline.baseline_value * (1 - row.reduction_percentage / 100)
+        if target_value is None:
+            results.append(
+                TargetBulkRowResult(row_index=row.row_index, status="error", metric_key=row.metric_key, message="Provide a target value or a reduction percentage.")
+            )
+            error_count += 1
+            continue
+
+        existing_active = (
+            db.query(EmissionTarget)
+            .filter(
+                EmissionTarget.tenant_id == current.tenant_id,
+                EmissionTarget.location_id == location_id,
+                EmissionTarget.metric_key == row.metric_key,
+                EmissionTarget.status == "active",
+            )
+            .first()
+        )
+        if existing_active is not None:
+            results.append(
+                TargetBulkRowResult(
+                    row_index=row.row_index, status="error", metric_key=row.metric_key,
+                    message="An active target already exists for this metric/site -- archive it first.",
+                )
+            )
+            error_count += 1
+            continue
+
+        denominator_id = denominator_mapping_id(db, current.tenant_id, location_id, row.metric_key)
+        all_calc_ids = [str(cid) for m in baseline.months for cid in m.calculation_ids]
+
+        target = EmissionTarget(
+            tenant_id=current.tenant_id,
+            location_id=location_id,
+            metric_key=row.metric_key,
+            baseline_period_start=baseline_start,
+            baseline_period_end=baseline_end,
+            baseline_value=baseline.baseline_value,
+            baseline_completeness_pct=baseline.completeness_pct,
+            baseline_calculation_ids=all_calc_ids,
+            baseline_locked_at=datetime.now(timezone.utc),
+            reduction_percentage=row.reduction_percentage,
+            target_period_start=target_start,
+            target_period_end=target_end,
+            target_value=target_value,
+            monthly_phasing=[],
+            status="active",
+            rationale=row.rationale,
+            boundary_config_hash=boundary_config_hash(current.tenant_id, location_id, row.metric_key, denominator_id),
+            approved_by=current.id,
+            approved_at=datetime.now(timezone.utc),
+            created_by=current.id,
+        )
+        db.add(target)
+        db.flush()
+        results.append(TargetBulkRowResult(row_index=row.row_index, status="activated", metric_key=row.metric_key, target_id=target.id))
+        activated_count += 1
+
+    if payload.commit:
+        db.commit()
+
+    return TargetBulkImportResponse(rows=results, activated_count=activated_count, error_count=error_count)
 
 
 @router.get("", response_model=list[TargetOut])
