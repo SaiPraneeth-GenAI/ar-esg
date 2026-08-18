@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TimeoutError } from 'rxjs';
 import { EntriesApiService, EntryRecord } from '../../../core/entries-api.service';
@@ -10,7 +10,12 @@ import { EntryHistoryComponent } from '../entry-history/entry-history.component'
   standalone: true,
   imports: [FormsModule, EntryHistoryComponent],
   templateUrl: './approval-queue.component.html',
-  styleUrl: './approval-queue.component.css'
+  styleUrl: './approval-queue.component.css',
+  // A 1275-row queue re-checking every row's isSelected()/isSelected-adjacent
+  // bindings on every zone tick (router events, the notification bell's
+  // 45s poll, anything unrelated) is what made "select all" feel slow --
+  // OnPush limits checks to when this component's own signals actually change.
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ApprovalQueueComponent implements OnInit {
   private api = inject(EntriesApiService);
