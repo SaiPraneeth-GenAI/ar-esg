@@ -1,6 +1,17 @@
 import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
+import { EntriesApiService } from '../../core/entries-api.service';
 import { NotificationRecord, NotificationsApiService } from '../../core/notifications-api.service';
+import { ToastService } from '../../core/toast.service';
+
+// "approval_queue" (new entries awaiting approval) and "entries_approved"
+// (an FYI that a decision was already made) both point at state that can
+// go stale between the notification firing and the click -- someone else
+// clears the queue, or there's simply nothing further to do about an
+// approval that already happened. "entries_rejected" is the one kind that
+// always still needs the submitter to act (fix and resubmit), so it never
+// gets the "already completed" treatment.
+const STALE_CHECK_KINDS = new Set(['approval_queue', 'entries_approved']);
 
 const POLL_MS = 45_000;
 
@@ -12,6 +23,8 @@ const POLL_MS = 45_000;
 })
 export class NotificationBellComponent implements OnInit, OnDestroy {
   private api = inject(NotificationsApiService);
+  private entriesApi = inject(EntriesApiService);
+  private toast = inject(ToastService);
   private router = inject(Router);
   private pollHandle?: ReturnType<typeof setInterval>;
 
@@ -66,9 +79,33 @@ export class NotificationBellComponent implements OnInit, OnDestroy {
         // Best-effort -- the badge already updated optimistically.
       }
     }
+
+    if (STALE_CHECK_KINDS.has(n.kind) && (await this.isAlreadyDone(n))) {
+      this.toast.show('Workflow already completed.', 'info');
+      this.router.navigateByUrl('/admin/data-entry');
+      return;
+    }
+
     if (n.link) {
       this.router.navigateByUrl(n.link);
     }
+  }
+
+  // "entries_approved" is itself the record of a finished decision -- no
+  // live check needed, an approval doesn't un-approve itself. "approval_queue"
+  // depends on whether anything is still actually waiting -- someone else
+  // may have cleared it since the notification fired.
+  private async isAlreadyDone(n: NotificationRecord): Promise<boolean> {
+    if (n.kind === 'entries_approved') return true;
+    if (n.kind === 'approval_queue') {
+      try {
+        const queue = await this.entriesApi.getQueue();
+        return queue.length === 0;
+      } catch {
+        return false; // can't tell -- fall through to the normal link rather than block navigation
+      }
+    }
+    return false;
   }
 
   async markAllRead(event: Event): Promise<void> {
