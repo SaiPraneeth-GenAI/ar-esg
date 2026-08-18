@@ -1,0 +1,123 @@
+@if (connector(); as c) {
+  <div class="page" [class]="'style-' + c.categoryGroup">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <a routerLink="/admin/settings/data-connections">Data Connections</a>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m9 18 6-6-6-6" />
+      </svg>
+      <span class="breadcrumb-current">{{ c.name }}</span>
+    </nav>
+
+    <header class="detail-hero">
+      <span class="detail-icon">
+        <app-category-icon [group]="c.categoryGroup"></app-category-icon>
+      </span>
+      <div>
+        <span class="detail-category">{{ categoryLabel() }}</span>
+        <h1>{{ c.name }}</h1>
+        <p class="detail-desc">{{ c.description }}</p>
+        <div class="tile-badges">
+          @for (b of c.badges; track b) {
+            <span class="badge">{{ b }}</span>
+          }
+        </div>
+      </div>
+    </header>
+
+    <section class="detail-block">
+      <h2>Overview</h2>
+      <p>{{ c.detail.overview }}</p>
+    </section>
+
+    <div class="detail-grid">
+      <section class="detail-block">
+        <h2>What it connects</h2>
+        <ul>
+          @for (item of c.detail.connects; track item) {
+            <li>{{ item }}</li>
+          }
+        </ul>
+      </section>
+
+      <section class="detail-block">
+        <h2>Supported data</h2>
+        <ul>
+          @for (item of c.detail.supportedData; track item) {
+            <li>{{ item }}</li>
+          }
+        </ul>
+      </section>
+
+      <section class="detail-block">
+        <h2>Protocols</h2>
+        <div class="chip-row">
+          @for (p of c.detail.protocols; track p) {
+            <span class="chip">{{ p }}</span>
+          }
+        </div>
+      </section>
+
+      <section class="detail-block">
+        <h2>Authentication</h2>
+        <div class="chip-row">
+          @for (a of c.detail.authentication; track a) {
+            <span class="chip">{{ a }}</span>
+          }
+        </div>
+      </section>
+
+      <section class="detail-block">
+        <h2>Sync modes</h2>
+        <div class="chip-row">
+          @for (s of c.detail.syncModes; track s) {
+            <span class="chip">{{ s }}</span>
+          }
+        </div>
+      </section>
+    </div>
+
+    <section class="detail-block">
+      <h2>Example data</h2>
+      <pre class="code-block">{{ c.detail.exampleData }}</pre>
+    </section>
+
+    <section class="detail-block">
+      <h2>Example mapping</h2>
+      <div class="mapping-list">
+        @for (m of c.detail.exampleMapping; track m.source) {
+          <div class="mapping-row">
+            <span class="mapping-source">{{ m.source }}</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+            <span class="mapping-target">{{ m.target }}</span>
+          </div>
+        }
+      </div>
+    </section>
+
+    <section class="detail-block flow-block">
+      <h2>Enviqo data flow</h2>
+      <p>{{ c.detail.dataFlow }}</p>
+    </section>
+
+    <section class="detail-block">
+      <h2>Use cases</h2>
+      <ul class="use-cases">
+        @for (u of c.detail.useCases; track u) {
+          <li>{{ u }}</li>
+        }
+      </ul>
+    </section>
+
+    <div class="detail-footer">
+      <a routerLink="/admin/settings/data-connections" class="secondary-link">← All connectors</a>
+      <button type="button" class="primary-btn" (click)="goNext()">
+        Next
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12h14M13 6l6 6-6 6" />
+        </svg>
+      </button>
+    </div>
+  </div>
+}

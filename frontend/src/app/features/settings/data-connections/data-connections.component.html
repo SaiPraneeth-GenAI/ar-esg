@@ -1,0 +1,126 @@
+<div class="page">
+  <header class="hero">
+    <span class="eyebrow">Settings · Data Connections</span>
+    <h1>Connect Your Enterprise Data</h1>
+    <p class="hero-sub">
+      From ERP systems to industrial IoT, databases, documents and APIs — bring your enterprise data into one
+      canonical ESG layer.
+    </p>
+    <p class="hero-note">40+ connection types across enterprise, operational and ESG data sources.</p>
+  </header>
+
+  <div class="toolbar">
+    <label class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="7" />
+        <path d="m21 21-4.3-4.3" />
+      </svg>
+      <input
+        type="text"
+        placeholder="Search SAP, MQTT, API, database, documents..."
+        [ngModel]="search()"
+        (ngModelChange)="search.set($event)"
+      />
+      @if (search()) {
+        <button type="button" class="clear-search" (click)="search.set('')" aria-label="Clear search">✕</button>
+      }
+    </label>
+
+    <div class="pill-row">
+      @for (pill of pills; track pill.label; let i = $index) {
+        <button type="button" class="pill" [class.active]="activeFilter() === i" (click)="setFilter(i)">{{ pill.label }}</button>
+      }
+    </div>
+  </div>
+
+  @if (!search() && activeFilter() === 0) {
+    <section class="featured-section">
+      <h2 class="section-title">Featured Integrations</h2>
+      <div class="featured-grid">
+        @for (c of featured; track c.id) {
+          <button type="button" class="tile featured-tile" [class]="'style-' + c.categoryGroup" (click)="openConnector(c.id)">
+            <div class="tile-top">
+              <span class="tile-icon featured-icon">
+                <app-category-icon [group]="c.categoryGroup"></app-category-icon>
+              </span>
+              <span class="status-dot" title="Available for exploration"></span>
+            </div>
+            <span class="featured-tag">{{ c.featuredTag }}</span>
+            <h3 class="tile-name">{{ c.name }}</h3>
+            <p class="tile-desc">{{ c.description }}</p>
+            <div class="tile-badges">
+              @for (b of c.badges; track b) {
+                <span class="badge">{{ b }}</span>
+              }
+            </div>
+            <span class="tile-cta">
+              Explore
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </span>
+          </button>
+        }
+      </div>
+    </section>
+  }
+
+  @if (!hasAnyResults()) {
+    <div class="empty-state">
+      <p>No connectors match{{ search() ? ' "' + search() + '"' : ' this filter' }}.</p>
+    </div>
+  }
+
+  @for (section of sections(); track section.group.id) {
+    <section class="category-section" [class.prominent]="section.group.prominent">
+      <div class="section-heading">
+        <h2 class="section-title">{{ section.group.label }}</h2>
+        <p class="section-blurb">{{ section.group.blurb }}</p>
+      </div>
+      <div class="tile-grid">
+        @for (c of section.connectors; track c.id) {
+          <button type="button" class="tile" [class]="'style-' + c.categoryGroup" (click)="openConnector(c.id)">
+            <div class="tile-top">
+              <span class="tile-icon">
+                <app-category-icon [group]="c.categoryGroup"></app-category-icon>
+              </span>
+              <span class="status-dot" title="Available for exploration"></span>
+            </div>
+            <h3 class="tile-name">{{ c.name }}</h3>
+            <span class="tile-category">{{ section.group.label }}</span>
+            <p class="tile-desc">{{ c.description }}</p>
+            <div class="tile-badges">
+              @for (b of c.badges; track b) {
+                <span class="badge">{{ b }}</span>
+              }
+            </div>
+            <span class="tile-cta">
+              Explore
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </span>
+          </button>
+        }
+      </div>
+    </section>
+  }
+
+  <section class="bottom-cta">
+    @if (!requestSent()) {
+      <h2>Don't see your system?</h2>
+      <p>Connect virtually any enterprise data source through our extensible connector framework.</p>
+      <button type="button" class="primary-btn" (click)="requestCustomConnector()">Request Custom Connector</button>
+    } @else {
+      <div class="request-confirmed">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+        <div>
+          <h2>Request received</h2>
+          <p>We've logged your interest in a custom connector. Your Enviqo contact will follow up to scope it.</p>
+        </div>
+      </div>
+    }
+  </section>
+</div>

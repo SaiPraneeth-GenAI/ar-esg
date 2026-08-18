@@ -1,0 +1,47 @@
+@if (connector(); as c) {
+  <div class="page" [class]="'style-' + c.categoryGroup">
+    <div class="coming-soon-card">
+      <span class="cs-icon">
+        <app-category-icon [group]="c.categoryGroup"></app-category-icon>
+      </span>
+
+      <h1>{{ c.name }} Integration</h1>
+      <p class="cs-lead">Production connectivity is coming soon.</p>
+      <p class="cs-sub">The Enviqo connector framework is designed to support this integration.</p>
+
+      <div class="cs-checklist">
+        @for (item of ready; track item) {
+          <div class="cs-item done">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+            <span>{{ item }}</span>
+          </div>
+        }
+        @for (item of upcoming; track item) {
+          <div class="cs-item pending">
+            <span class="cs-dot"></span>
+            <span>{{ item }}</span>
+          </div>
+        }
+      </div>
+
+      @if (!requested()) {
+        <div class="cs-actions">
+          <button type="button" class="primary-btn" (click)="requestConnector()">Request Connector</button>
+          <a routerLink="/admin/settings/data-connections" class="secondary-btn">Explore Other Connectors</a>
+        </div>
+      } @else {
+        <div class="cs-confirmed">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+          <p>Request received — we've logged your interest in the {{ c.name }} connector.</p>
+        </div>
+        <div class="cs-actions">
+          <a routerLink="/admin/settings/data-connections" class="secondary-btn">Explore Other Connectors</a>
+        </div>
+      }
+    </div>
+  </div>
+}

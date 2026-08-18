@@ -85,6 +85,32 @@ export const routes: Routes = [
           import('./features/settings/approval-settings/approval-settings.component').then(
             (m) => m.ApprovalSettingsComponent
           )
+      },
+      {
+        path: 'settings/data-connections',
+        canActivate: [adminGuard],
+        pathMatch: 'full',
+        loadComponent: () =>
+          import('./features/settings/data-connections/data-connections.component').then(
+            (m) => m.DataConnectionsComponent
+          )
+      },
+      {
+        path: 'settings/data-connections/:id',
+        canActivate: [adminGuard],
+        pathMatch: 'full',
+        loadComponent: () =>
+          import('./features/settings/data-connections/connector-detail.component').then(
+            (m) => m.ConnectorDetailComponent
+          )
+      },
+      {
+        path: 'settings/data-connections/:id/coming-soon',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./features/settings/data-connections/connector-coming-soon.component').then(
+            (m) => m.ConnectorComingSoonComponent
+          )
       }
     ]
   },
