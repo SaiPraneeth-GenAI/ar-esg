@@ -47,6 +47,7 @@
       [locationId]="locationId"
       [period]="periodIso"
       (done)="onBulkUploadDone()"
+      (cancelled)="mode.set('entry')"
     ></app-bulk-upload-wizard>
   } @else if (loading()) {
     <div class="skeleton-panel">

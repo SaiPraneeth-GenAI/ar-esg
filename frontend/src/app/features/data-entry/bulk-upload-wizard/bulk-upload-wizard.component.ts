@@ -76,6 +76,7 @@ export class BulkUploadWizardComponent {
    * Entry screen. Used for any row that doesn't specify its own period. */
   @Input({ required: true }) period!: string;
   @Output() done = new EventEmitter<void>();
+  @Output() cancelled = new EventEmitter<void>();
 
   isAllCategories(): boolean {
     return this.category === null;

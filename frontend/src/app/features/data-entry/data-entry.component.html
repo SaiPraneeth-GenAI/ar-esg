@@ -47,6 +47,7 @@
           [locationId]="locationId()"
           [period]="bulkUploadPeriod()"
           (done)="closeBulkUploadAll()"
+          (cancelled)="closeBulkUploadAll()"
         ></app-bulk-upload-wizard>
       } @else if (selectedCategory()) {
         <app-entry-form

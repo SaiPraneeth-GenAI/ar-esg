@@ -5,6 +5,24 @@
   overflow: hidden;
 }
 
+.wizard-back-link {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  color: #667085;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0.9rem 1.75rem 0;
+}
+
+.wizard-back-link:hover {
+  color: #0e2c21;
+}
+
 .wizard-steps {
   display: flex;
   border-bottom: 1px solid #eaecf0;

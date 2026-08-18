@@ -352,7 +352,7 @@ export class CarbonOverviewComponent implements OnChanges {
     this.router.navigate(['/admin/methodology'], {
       queryParams: {
         nodes: nodes.join(','),
-        period: this.period,
+        period: this.periodIso(),
         periodMode: this.periodMode,
         locationId: this.locationId || undefined
       }

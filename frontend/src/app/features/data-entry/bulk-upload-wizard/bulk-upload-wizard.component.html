@@ -1,4 +1,7 @@
 <div class="wizard-card">
+  @if (!commitResult()) {
+    <button type="button" class="wizard-back-link" (click)="cancelled.emit()">← Back to Data Entry</button>
+  }
   <div class="wizard-steps">
     <span class="wizard-step" [class.active]="step() === 'upload'" [class.done]="step() !== 'upload'">1. Upload</span>
     <span class="wizard-step" [class.active]="step() === 'preview'" [class.done]="step() === 'mapping' || step() === 'validate' || step() === 'confirm'">2. Preview</span>
