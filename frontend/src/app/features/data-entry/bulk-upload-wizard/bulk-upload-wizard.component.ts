@@ -150,6 +150,25 @@ export class BulkUploadWizardComponent {
   errorRows = computed(() => this.rows().filter((r) => r.status === 'error'));
   hasUnchecked = computed(() => this.rows().some((r) => r.status === 'unchecked'));
 
+  /** A row that's already valid rarely needs touching -- rendering a live
+   * dropdown (with every category/data-point option) and three bound
+   * inputs for it anyway is what turns a several-hundred-row historical
+   * upload into tens of thousands of DOM nodes and hangs the tab. Only
+   * rows that actually need a fix get the editable form controls; a
+   * valid row just shows its values as text. */
+  isEditableRow(row: EditableRow): boolean {
+    return row.status === 'error';
+  }
+
+  /** The table only renders what needs a look by default -- valid rows
+   * are summarized as a count, not individually rendered, so the review
+   * screen stays instant whether the file has 20 rows or 20,000. A
+   * "Show all rows" toggle reveals the rest on request (now cheap too,
+   * since valid rows render as plain text, not live form controls). */
+  showAllRows = signal(false);
+  needsAttentionRows = computed(() => this.rows().filter((r) => r.status !== 'valid'));
+  visibleRows = computed(() => (this.showAllRows() ? this.rows() : this.needsAttentionRows()));
+
   summaryLabel = computed(() => {
     const rows = this.includedValidRows();
     if (rows.length === 0) {
@@ -223,6 +242,7 @@ export class BulkUploadWizardComponent {
     this.wideDetectResult.set(null);
     this.wideMapping.set({});
     this.autoMappedMessage.set('');
+    this.showAllRows.set(false);
   }
 
   async confirmPreview(): Promise<void> {

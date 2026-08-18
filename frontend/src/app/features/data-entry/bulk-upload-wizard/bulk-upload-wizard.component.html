@@ -189,8 +189,8 @@
       @if (autoMappedMessage()) {
         <div class="banner success">✓ {{ autoMappedMessage() }}</div>
       }
-      @if (validating() && rows().length === 0) {
-        <p class="wizard-intro">Checking every row against your existing data…</p>
+      @if (validating()) {
+        <p class="wizard-intro">Checking every row against your existing data{{ rows().length > 200 ? ' -- ' + rows().length + ' rows, this may take a moment' : '' }}…</p>
       } @else {
         <p class="wizard-intro">
           {{ includedValidRows().length }} valid, {{ errorRows().length }} flagged out of {{ rows().length }} rows.
@@ -198,6 +198,18 @@
           below, then Recheck — or download the file back with every issue and suggested fix marked, fix it in
           Excel, and re-upload.
         </p>
+
+        @if (!showAllRows() && rows().length > visibleRows().length) {
+          <div class="banner success">
+            {{ rows().length - visibleRows().length }} valid row(s) aren't shown below -- nothing to fix on those.
+            <button type="button" class="link-btn" (click)="showAllRows.set(true)">Show all {{ rows().length }} rows</button>
+          </div>
+        } @else if (showAllRows() && rows().length > needsAttentionRows().length) {
+          <div class="banner success">
+            Showing all {{ rows().length }} rows.
+            <button type="button" class="link-btn" (click)="showAllRows.set(false)">Show only the {{ needsAttentionRows().length }} that need attention</button>
+          </div>
+        }
 
         <div class="table-scroll">
           <table class="validation-table">
@@ -218,7 +230,7 @@
               </tr>
             </thead>
             <tbody>
-              @for (row of rows(); track row.row_index) {
+              @for (row of visibleRows(); track row.row_index) {
                 <tr [class.row-error]="row.status === 'error'" [class.row-converted]="!!row.unitNote">
                   <td>
                     @if (row.status !== 'error') {
@@ -228,58 +240,78 @@
                   <td>{{ row.row_index }}</td>
                   @if (isAllCategories()) {
                     <td>
-                      <select [ngModel]="row.category" (ngModelChange)="updateRow(row.row_index, { category: $event || null })">
-                        <option [value]="null">(any category)</option>
-                        @for (cat of allCategories; track cat.id) {
-                          <option [value]="cat.name">{{ cat.name }}</option>
-                        }
-                      </select>
+                      @if (isEditableRow(row)) {
+                        <select [ngModel]="row.category" (ngModelChange)="updateRow(row.row_index, { category: $event || null })">
+                          <option [value]="null">(any category)</option>
+                          @for (cat of allCategories; track cat.id) {
+                            <option [value]="cat.name">{{ cat.name }}</option>
+                          }
+                        </select>
+                      } @else {
+                        <span class="cell-text">{{ row.category || '—' }}</span>
+                      }
                     </td>
                   }
                   <td>
-                    <select
-                      [ngModel]="row.data_point_name"
-                      (ngModelChange)="updateRow(row.row_index, { data_point_name: $event })"
-                    >
-                      <option [value]="row.data_point_name" [hidden]="true">{{ row.data_point_name || '(choose a field)' }}</option>
-                      @if (isAllCategories()) {
-                        @for (cat of allCategories; track cat.id) {
-                          <optgroup [label]="cat.name">
-                            @for (dp of cat.data_points; track dp.id) {
-                              <option [value]="dp.name">{{ dp.name }}</option>
-                            }
-                          </optgroup>
+                    @if (isEditableRow(row)) {
+                      <select
+                        [ngModel]="row.data_point_name"
+                        (ngModelChange)="updateRow(row.row_index, { data_point_name: $event })"
+                      >
+                        <option [value]="row.data_point_name" [hidden]="true">{{ row.data_point_name || '(choose a field)' }}</option>
+                        @if (isAllCategories()) {
+                          @for (cat of allCategories; track cat.id) {
+                            <optgroup [label]="cat.name">
+                              @for (dp of cat.data_points; track dp.id) {
+                                <option [value]="dp.name">{{ dp.name }}</option>
+                              }
+                            </optgroup>
+                          }
+                        } @else {
+                          @for (dp of category!.data_points; track dp.id) {
+                            <option [value]="dp.name">{{ dp.name }}</option>
+                          }
                         }
-                      } @else {
-                        @for (dp of category!.data_points; track dp.id) {
-                          <option [value]="dp.name">{{ dp.name }}</option>
-                        }
-                      }
-                    </select>
+                      </select>
+                    } @else {
+                      <span class="cell-text">{{ row.data_point_name }}</span>
+                    }
                   </td>
                   <td>
-                    <input
-                      type="month"
-                      [ngModel]="row.period_iso ? row.period_iso.slice(0, 7) : ''"
-                      [placeholder]="period | date: 'yyyy-MM'"
-                      (ngModelChange)="updateRow(row.row_index, { period_iso: $event ? $event + '-01' : '' })"
-                    />
+                    @if (isEditableRow(row)) {
+                      <input
+                        type="month"
+                        [ngModel]="row.period_iso ? row.period_iso.slice(0, 7) : ''"
+                        [placeholder]="period | date: 'yyyy-MM'"
+                        (ngModelChange)="updateRow(row.row_index, { period_iso: $event ? $event + '-01' : '' })"
+                      />
+                    } @else {
+                      <span class="cell-text">{{ row.period_iso ? (row.period_iso | date: 'MMM yyyy') : (period | date: 'MMM yyyy') }}</span>
+                    }
                   </td>
                   <td>
-                    <input
-                      type="number"
-                      class="value-input"
-                      [ngModel]="row.value_raw"
-                      (ngModelChange)="updateRow(row.row_index, { value_raw: $event })"
-                    />
+                    @if (isEditableRow(row)) {
+                      <input
+                        type="number"
+                        class="value-input"
+                        [ngModel]="row.value_raw"
+                        (ngModelChange)="updateRow(row.row_index, { value_raw: $event })"
+                      />
+                    } @else {
+                      <span class="cell-text">{{ row.value_raw }}</span>
+                    }
                   </td>
                   <td>
-                    <input
-                      type="text"
-                      class="unit-input"
-                      [ngModel]="row.unit_raw"
-                      (ngModelChange)="updateRow(row.row_index, { unit_raw: $event })"
-                    />
+                    @if (isEditableRow(row)) {
+                      <input
+                        type="text"
+                        class="unit-input"
+                        [ngModel]="row.unit_raw"
+                        (ngModelChange)="updateRow(row.row_index, { unit_raw: $event })"
+                      />
+                    } @else {
+                      <span class="cell-text">{{ row.unit_raw }}</span>
+                    }
                   </td>
                   <td>
                     <span class="row-status" [class]="'status-' + row.status">{{ row.status }}</span>

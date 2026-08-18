@@ -362,6 +362,13 @@
   width: 140px;
 }
 
+.cell-text {
+  display: inline-block;
+  padding: 0.35rem 0.1rem;
+  font-size: 0.82rem;
+  color: #475467;
+}
+
 /* Step 5: confirm */
 
 .confirm-result {

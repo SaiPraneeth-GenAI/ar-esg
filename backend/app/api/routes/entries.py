@@ -672,8 +672,23 @@ def bulk_import(
         dp, cat_name = candidates[0]
         return dp, cat_name, None
 
+    # Batched existing-entry lookup -- was one query per row (N+1), which at
+    # a few hundred rows already meant tens of seconds of pure cross-region
+    # network round trips before any real work happened. One query up
+    # front, keyed in memory, scales to however many rows the file has.
+    existing_entries: dict[tuple[uuid.UUID, date], Entry] = {
+        (e.data_point_id, e.period): e for e in db.query(Entry).filter(Entry.location_id == payload.location_id).all()
+    }
+
     results: list[BulkImportRowResult] = []
     seen_in_file: set[tuple[uuid.UUID, date]] = set()
+    # Deferred to after the loop -- same reasoning as existing_entries above,
+    # but for writes: _upsert_one() used to commit+refresh once per row,
+    # which for a several-hundred-row upload was several hundred more
+    # cross-region round trips before auto-approve/calculation even started.
+    pending_audits: list[tuple[Entry, str, str | None, str]] = []
+    pending_approvals: list[Entry] = []
+    pending_results: list[tuple[int, BulkImportRowResult]] = []  # index into results, filled in after flush
 
     for row in payload.rows:
         dp, resolved_category, resolve_error = resolve_data_point(row)
@@ -776,11 +791,7 @@ def bulk_import(
             )
             continue
 
-        existing = (
-            db.query(Entry)
-            .filter(Entry.data_point_id == dp.id, Entry.location_id == payload.location_id, Entry.period == period)
-            .first()
-        )
+        existing = existing_entries.get(key)
         if existing is not None and existing.status == "Submitted":
             results.append(
                 BulkImportRowResult(
@@ -810,18 +821,51 @@ def bulk_import(
             )
             continue
 
-        entry = _upsert_one(
-            db,
-            current,
-            dp.id,
-            payload.location_id,
-            period,
-            value,
-            row.note,
-            method_of_entry="Bulk Upload",
-            target_status="Submitted",
-            audit_action="bulk_uploaded",
+        # Same upsert semantics as _upsert_one(), built inline instead of
+        # calling it: that helper commits+refreshes on every call, which for
+        # a several-hundred-row file meant that many more cross-region round
+        # trips. Every write here stays pending in the session and goes out
+        # in the single flush/commit after the loop instead.
+        if existing is None:
+            entry = Entry(
+                data_point_id=dp.id,
+                location_id=payload.location_id,
+                period=period,
+                value=value,
+                note=row.note,
+                method_of_entry="Bulk Upload",
+                status="Submitted",
+                submitted_by=current.id,
+            )
+            db.add(entry)
+            existing_entries[key] = entry
+            pending_audits.append((entry, "bulk_uploaded", None, str(value)))
+        else:
+            entry = existing
+            old_value = str(entry.value) if entry.value is not None else None
+            was_approved = entry.status == "Approved"
+            entry.value = value
+            entry.note = row.note
+            entry.method_of_entry = "Bulk Upload"
+            # Same "kick back to Draft rather than silently rewrite an
+            # approved figure" rule as _upsert_one() -- see there for why.
+            entry.status = "Draft" if was_approved else "Submitted"
+            entry.submitted_by = current.id
+            edit_action = "edited_after_approval" if was_approved else "bulk_uploaded"
+            pending_audits.append((entry, edit_action, old_value, str(value)))
+
+        result = BulkImportRowResult(
+            row_index=row.row_index,
+            status="created",
+            data_point_name=row.data_point_name,
+            period=period,
+            value=value,
+            unit_note=unit_note,
+            category=resolved_category,
         )
+        results.append(result)
+        pending_results.append((len(results) - 1, entry))
+
         # Bulk upload previously never benefited from the tenant's
         # auto-approve setting -- manual Submit did (see submit_entries()),
         # but a bulk-imported row landed as "Submitted" and just sat there
@@ -829,19 +873,23 @@ def bulk_import(
         # self-approval guard) reviewed it. Mirrors submit_entries() exactly
         # so the same setting means the same thing everywhere.
         if auto_approve and entry.status == "Submitted":
+            pending_approvals.append(entry)
+
+    if payload.commit and pending_results:
+        # One flush assigns every new entry its id; existing entries already
+        # have one. Audit rows reference entry.id, so they're built here,
+        # after the flush, rather than during the row loop above.
+        db.flush()
+        for entry, action, old_value, new_value in pending_audits:
+            db.add(AuditLog(entry_id=entry.id, actor=current.email, action=action, old_value=old_value, new_value=new_value))
+        for idx, entry in pending_results:
+            results[idx].entry_id = entry.id
+        # _approve_entry_now() does its own commit + real calculate_entry()
+        # work per row -- genuine calculation, not a wasted round trip, so
+        # it's left exactly as-is rather than batched.
+        for entry in pending_approvals:
             _approve_entry_now(db, entry, current.tenant_id, current.id, current.email, auto=True)
-        results.append(
-            BulkImportRowResult(
-                row_index=row.row_index,
-                status="created",
-                data_point_name=row.data_point_name,
-                period=period,
-                value=value,
-                entry_id=entry.id,
-                unit_note=unit_note,
-                category=resolved_category,
-            )
-        )
+        db.commit()
 
     return BulkImportResponse(
         rows=results,
