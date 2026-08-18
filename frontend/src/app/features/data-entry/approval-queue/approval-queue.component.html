@@ -51,7 +51,7 @@
         </tr>
       </thead>
       <tbody>
-        @for (entry of queue(); track entry.id) {
+        @for (entry of pagedQueue(); track entry.id) {
           <tr [class.row-selected]="isSelected(entry)">
             <td class="select-col">
               <input
@@ -95,5 +95,19 @@
         }
       </tbody>
     </table>
+
+    @if (pageCount() > 1) {
+      <div class="pagination">
+        <button type="button" class="secondary-btn" [disabled]="currentPage() === 0" (click)="goToPage(currentPage() - 1)">
+          ← Prev
+        </button>
+        <span class="pagination-label">
+          Page {{ currentPage() + 1 }} of {{ pageCount() }} ({{ queue().length }} total)
+        </span>
+        <button type="button" class="secondary-btn" [disabled]="currentPage() >= pageCount() - 1" (click)="goToPage(currentPage() + 1)">
+          Next →
+        </button>
+      </div>
+    }
   }
 </div>

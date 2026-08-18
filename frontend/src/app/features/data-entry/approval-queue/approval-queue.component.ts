@@ -35,6 +35,17 @@ export class ApprovalQueueComponent implements OnInit {
   bulkRejecting = signal(false);
   bulkRejectNote = '';
 
+  // Rendering all 1275 rows at once (checkboxes, 7 columns each) is what
+  // made the page slow to load and scroll -- selection stays global across
+  // the whole queue regardless of page, only what's rendered is paged.
+  pageSize = 100;
+  currentPage = signal(0);
+  pageCount = computed(() => Math.max(1, Math.ceil(this.queue().length / this.pageSize)));
+  pagedQueue = computed(() => {
+    const start = this.currentPage() * this.pageSize;
+    return this.queue().slice(start, start + this.pageSize);
+  });
+
   selectedCount = computed(() => this.selectedIds().size);
   allSelected = computed(() => this.queue().length > 0 && this.selectedIds().size === this.queue().length);
 
@@ -48,11 +59,16 @@ export class ApprovalQueueComponent implements OnInit {
     try {
       this.queue.set(await this.api.getQueue());
       this.selectedIds.set(new Set());
+      this.currentPage.set(0);
     } catch {
       this.errorMessage.set('Could not load the approval queue.');
     } finally {
       this.loading.set(false);
     }
+  }
+
+  goToPage(page: number): void {
+    this.currentPage.set(Math.max(0, Math.min(page, this.pageCount() - 1)));
   }
 
   isSelected(entry: EntryRecord): boolean {
