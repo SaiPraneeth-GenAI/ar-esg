@@ -101,7 +101,8 @@ def _build_absolute_section(overview, trend) -> ReportSection:
             {"metric": t.label, "actual": t.actual, "target_value": t.target_value, "status": t.status} for t in overview.all_targets
         ],
     }
-    narrative = generate_dashboard_insight(context, fallback) or fallback
+    narrative, _ = generate_dashboard_insight(context, fallback)
+    narrative = narrative or fallback
 
     return ReportSection("Absolute Metrics", narrative, tiles, chart, "Scope 1+2 -- last 6 periods")
 
@@ -158,7 +159,8 @@ def _build_intensity_section(title: str, overview, trend, mode: str) -> ReportSe
             if getattr(overview, f"{key}_{suffix}_target") is not None
         ],
     }
-    narrative = generate_dashboard_insight(context, fallback) or fallback
+    narrative, _ = generate_dashboard_insight(context, fallback)
+    narrative = narrative or fallback
 
     return ReportSection(title, narrative, tiles, chart, f"GHG emissions ({mode}) -- last 6 periods")
 
@@ -196,7 +198,8 @@ def _build_safety_section(overview, trend) -> ReportSection:
             for m in overview.metrics
         ],
     }
-    narrative = generate_dashboard_insight(context, fallback) or fallback
+    narrative, _ = generate_dashboard_insight(context, fallback)
+    narrative = narrative or fallback
 
     return ReportSection("Safety & Trends", narrative, tiles, chart, "LTIFR -- last 6 periods")
 
