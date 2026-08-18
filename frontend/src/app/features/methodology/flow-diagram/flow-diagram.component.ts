@@ -280,6 +280,47 @@ export class FlowDiagramComponent implements OnInit {
 
       const unresolvedCount = carbon.unresolved_count;
 
+      // Worked, value-substituted breakdowns for the aggregate/sum/divide
+      // nodes -- built straight from every calculated row this period
+      // (not a hardcoded set of data point names), so a new GHG source
+      // shows up in the breakdown automatically instead of the total
+      // silently drifting away from what the panel explains.
+      const byContributor = (rows: EmissionCalculationOut[]): [string, number][] => {
+        const totals = new Map<string, number>();
+        for (const r of rows) {
+          totals.set(r.data_point_name, (totals.get(r.data_point_name) ?? 0) + (r.emissions_tco2e ?? 0));
+        }
+        return [...totals.entries()];
+      };
+      const breakdownLine = (parts: [string, number][], total: number | null, unit = 'tCO2e', decimals = 2): string | null => {
+        if (parts.length === 0 || total === null) return null;
+        const terms = parts.map(([name, v]) => `${name} (${v.toFixed(decimals)})`).join(' + ');
+        return `${terms} = ${total.toFixed(decimals)} ${unit}`;
+      };
+      const ratioLine = (numeratorLabel: string, numerator: number | null, denomLabel: string, denominator: number | null, result: number | null, unit: string, decimals = 3): string | null => {
+        if (numerator === null || denominator === null || result === null) return null;
+        return `${numeratorLabel} (${numerator.toFixed(2)}) ÷ ${denomLabel} (${denominator.toFixed(2)}) = ${result.toFixed(decimals)} ${unit}`;
+      };
+
+      const scope1Calcs = allCalcs.filter((c) => c.scope === 1);
+      const scope2Calcs = allCalcs.filter((c) => c.scope === 2 && c.calculation_method !== 'market-based');
+      const scope1Breakdown = breakdownLine(byContributor(scope1Calcs), carbon.scope1_tco2e);
+      const scope2Breakdown = breakdownLine(byContributor(scope2Calcs), carbon.scope2_location_based_tco2e);
+      const totalGhgBreakdown =
+        carbon.scope1_tco2e !== null && carbon.scope2_location_based_tco2e !== null && carbon.scope1_2_location_based_tco2e !== null
+          ? `Scope 1 (${carbon.scope1_tco2e.toFixed(2)}) + Scope 2 (${carbon.scope2_location_based_tco2e.toFixed(2)}) = ${carbon.scope1_2_location_based_tco2e.toFixed(2)} tCO2e`
+          : null;
+      const energyBreakdown =
+        fuelEnergyGj !== null && gridEnergyGj !== null && intensity.energy_gj !== null
+          ? `Fuel (${fuelEnergyGj.toFixed(2)}) + Grid (${gridEnergyGj.toFixed(2)}) = ${intensity.energy_gj.toFixed(2)} GJ`
+          : null;
+      const intensityProductionRatio = ratioLine(
+        'Total GHG', carbon.scope1_2_location_based_tco2e, 'Production', intensity.production_mnah, carbon.intensity_tco2e_per_mnah, 'tCO2e/MnAh'
+      );
+      const intensityRevenueRatio = ratioLine(
+        'Total GHG', carbon.scope1_2_location_based_tco2e, 'Revenue', intensity.revenue_inr_cr, intensity.ghg_per_revenue, 'tCO2e/Cr'
+      );
+
       this.lines = {
         diesel: [activityLine(diesel) ?? 'No approved entry', tco2eLine(sumTco2e(diesel))],
         petrol: [activityLine(petrol) ?? 'No approved entry', tco2eLine(sumTco2e(petrol))],
@@ -298,23 +339,25 @@ export class FlowDiagramComponent implements OnInit {
         'grid-ghg-calc': [tco2eLine(gridGhgTotal)],
         'grid-energy-calc': [numLine(gridEnergyGj, 'GJ', 2)],
 
-        'scope1-total': [numLine(carbon.scope1_tco2e, 'tCO2e', 2)],
-        'scope2-total': [numLine(carbon.scope2_location_based_tco2e, 'tCO2e', 2)],
+        'scope1-total': [numLine(carbon.scope1_tco2e, 'tCO2e', 2), ...(scope1Breakdown ? [scope1Breakdown] : [])],
+        'scope2-total': [numLine(carbon.scope2_location_based_tco2e, 'tCO2e', 2), ...(scope2Breakdown ? [scope2Breakdown] : [])],
         'scope3-total': ['Not calculated yet'],
-        'energy-total': [numLine(intensity.energy_gj, 'GJ', 1)],
+        'energy-total': [numLine(intensity.energy_gj, 'GJ', 1), ...(energyBreakdown ? [energyBreakdown] : [])],
         'water-total': [numLine(intensity.water_kl, 'KL', 0)],
         'waste-total': [numLine(intensity.waste_mt, 'MT', 1)],
 
-        'total-ghg': [numLine(carbon.scope1_2_location_based_tco2e, 'tCO2e', 2)],
+        'total-ghg': [numLine(carbon.scope1_2_location_based_tco2e, 'tCO2e', 2), ...(totalGhgBreakdown ? [totalGhgBreakdown] : [])],
 
         'intensity-production': [
           numLine(carbon.intensity_tco2e_per_mnah, 'tCO2e/MnAh', 3),
+          ...(intensityProductionRatio ? [intensityProductionRatio] : []),
           numLine(intensity.energy_per_production, 'GJ/MnAh', 2),
           numLine(intensity.water_per_production, 'KL/MnAh', 1),
           numLine(intensity.waste_per_production, 'MT/MnAh', 2)
         ],
         'intensity-revenue': [
           numLine(intensity.ghg_per_revenue, 'tCO2e/Cr', 3),
+          ...(intensityRevenueRatio ? [intensityRevenueRatio] : []),
           numLine(intensity.energy_per_revenue, 'GJ/Cr', 2),
           numLine(intensity.water_per_revenue, 'KL/Cr', 1),
           numLine(intensity.waste_per_revenue, 'MT/Cr', 2)
