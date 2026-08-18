@@ -353,6 +353,8 @@
   border: 1px solid #eaecf0;
   border-radius: 6px;
   padding: 0.4rem 0.6rem;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .detail-formula {

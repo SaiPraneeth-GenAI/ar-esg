@@ -89,6 +89,12 @@ class BulkImportRowIn(BaseModel):
     row_index: int
     data_point_name: str
     period_iso: str = ""
+    # Separate Year/Month columns -- the alternative to period_iso for a
+    # file laid out as a time series (one row per data point per month),
+    # matching how the template now presents the period. Used only when
+    # period_iso is blank.
+    year: int | None = None
+    month: int | None = None
     value_raw: str
     unit_raw: str | None = None
     note: str | None = None

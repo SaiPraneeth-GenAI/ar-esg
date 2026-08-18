@@ -590,18 +590,19 @@ def csv_template(
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    # No Period column by default -- the wizard's own period selector covers
-    # the common single-month case. Add one yourself (any header like
-    # "Period" or "Month") if you want to backfill several months at once.
+    # Year/Month pre-filled to the current month -- covers the common
+    # single-month case as-is. To backfill several months in one upload,
+    # duplicate a row per data point and change its Year/Month.
+    today = date.today()
     if category is None:
-        writer.writerow(["category", "data_point_name", "value", "unit", "note"])
+        writer.writerow(["category", "data_point_name", "value", "unit", "note", "year", "month"])
         for dp, cat_name in rows:
-            writer.writerow([cat_name, dp.name, "", dp.unit or "", ""])
+            writer.writerow([cat_name, dp.name, "", dp.unit or "", "", today.year, today.month])
         filename = "all_categories_template.csv"
     else:
-        writer.writerow(["data_point_name", "value", "unit", "note"])
+        writer.writerow(["data_point_name", "value", "unit", "note", "year", "month"])
         for dp, _ in rows:
-            writer.writerow([dp.name, "", dp.unit or "", ""])
+            writer.writerow([dp.name, "", dp.unit or "", "", today.year, today.month])
         filename = f"{category.replace(' ', '_')}_template.csv"
 
     return Response(
@@ -696,16 +697,23 @@ def bulk_import(
                 period = date.fromisoformat(row_period_iso)
             except ValueError:
                 period = None
+        if period is None and row.year and row.month:
+            try:
+                period = date(row.year, row.month, 1)
+            except ValueError:
+                period = None
         if period is None and payload.default_period:
             try:
                 period = date.fromisoformat(payload.default_period)
             except ValueError:
                 period = None
         if period is None:
-            if not row_period_iso and not payload.default_period:
+            if not row_period_iso and not (row.year and row.month) and not payload.default_period:
                 message = "No period given, and no default period was set for this upload"
             elif row_period_iso:
                 message = f"Could not parse period '{row_period_iso}'"
+            elif row.year and row.month:
+                message = f"'{row.year}-{row.month}' is not a valid year/month"
             else:
                 message = f"Could not parse default period '{payload.default_period}'"
             results.append(

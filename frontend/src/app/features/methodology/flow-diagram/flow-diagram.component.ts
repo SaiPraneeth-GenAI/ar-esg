@@ -200,12 +200,18 @@ export class FlowDiagramComponent implements OnInit {
   private lines: Record<string, string[]> = {};
   private extraLines: Record<string, string[]> = {};
 
-  async ngOnInit(): Promise<void> {
-    this.locations.set(await this.api.listLocations());
+  /** Set synchronously in the constructor, before the first render --
+   * see there for why. */
+  private deepLinkNodeIds: string[] | null = null;
 
+  constructor() {
     // A dashboard card can deep-link here with the exact period/site/nodes
-    // it was showing, so the diagram opens already scoped and spotlit
-    // instead of leaving the customer to hunt for the right slice.
+    // it was showing. This runs before Angular's first paint, so the
+    // zoom/spotlight is there from frame one -- computing it later (e.g.
+    // in ngOnInit after awaiting the API calls) would flash the full,
+    // unzoomed diagram first and only snap into place once data arrived.
+    // The geometry itself doesn't need that data at all: it's a pure
+    // graph-topology walk over the static NODES/EDGES arrays.
     const params = this.route.snapshot.queryParamMap;
     const period = params.get('period');
     const periodMode = params.get('periodMode') as PeriodMode | null;
@@ -220,11 +226,22 @@ export class FlowDiagramComponent implements OnInit {
     if (locationId) {
       this.locationId.set(locationId);
     }
+    if (nodeIds) {
+      this.deepLinkNodeIds = nodeIds.split(',').filter(Boolean);
+      this.highlightPath(this.deepLinkNodeIds);
+    }
+  }
 
+  async ngOnInit(): Promise<void> {
+    this.locations.set(await this.api.listLocations());
     await this.load();
 
-    if (nodeIds) {
-      this.highlightPath(nodeIds.split(',').filter(Boolean));
+    if (this.deepLinkNodeIds) {
+      // Re-select now that this.lines/extraLines have real figures --
+      // the panel already opened instantly in the constructor with just
+      // the static title/formula/note; this fills in the numbers.
+      const first = this.nodes.find((n) => n.id === this.deepLinkNodeIds![0]);
+      if (first) await this.selectNode(first);
     }
   }
 
@@ -339,25 +356,23 @@ export class FlowDiagramComponent implements OnInit {
         'grid-ghg-calc': [tco2eLine(gridGhgTotal)],
         'grid-energy-calc': [numLine(gridEnergyGj, 'GJ', 2)],
 
-        'scope1-total': [numLine(carbon.scope1_tco2e, 'tCO2e', 2), ...(scope1Breakdown ? [scope1Breakdown] : [])],
-        'scope2-total': [numLine(carbon.scope2_location_based_tco2e, 'tCO2e', 2), ...(scope2Breakdown ? [scope2Breakdown] : [])],
+        'scope1-total': [numLine(carbon.scope1_tco2e, 'tCO2e', 2)],
+        'scope2-total': [numLine(carbon.scope2_location_based_tco2e, 'tCO2e', 2)],
         'scope3-total': ['Not calculated yet'],
-        'energy-total': [numLine(intensity.energy_gj, 'GJ', 1), ...(energyBreakdown ? [energyBreakdown] : [])],
+        'energy-total': [numLine(intensity.energy_gj, 'GJ', 1)],
         'water-total': [numLine(intensity.water_kl, 'KL', 0)],
         'waste-total': [numLine(intensity.waste_mt, 'MT', 1)],
 
-        'total-ghg': [numLine(carbon.scope1_2_location_based_tco2e, 'tCO2e', 2), ...(totalGhgBreakdown ? [totalGhgBreakdown] : [])],
+        'total-ghg': [numLine(carbon.scope1_2_location_based_tco2e, 'tCO2e', 2)],
 
         'intensity-production': [
           numLine(carbon.intensity_tco2e_per_mnah, 'tCO2e/MnAh', 3),
-          ...(intensityProductionRatio ? [intensityProductionRatio] : []),
           numLine(intensity.energy_per_production, 'GJ/MnAh', 2),
           numLine(intensity.water_per_production, 'KL/MnAh', 1),
           numLine(intensity.waste_per_production, 'MT/MnAh', 2)
         ],
         'intensity-revenue': [
           numLine(intensity.ghg_per_revenue, 'tCO2e/Cr', 3),
-          ...(intensityRevenueRatio ? [intensityRevenueRatio] : []),
           numLine(intensity.energy_per_revenue, 'GJ/Cr', 2),
           numLine(intensity.water_per_revenue, 'KL/Cr', 1),
           numLine(intensity.waste_per_revenue, 'MT/Cr', 2)
@@ -374,9 +389,20 @@ export class FlowDiagramComponent implements OnInit {
         dashboard: []
       };
 
-      this.extraLines = {};
+      // Worked breakdowns -- panel-only (see extraValues in selectNode()),
+      // deliberately kept out of `lines` so they never get squeezed onto
+      // the small on-canvas node box.
+      this.extraLines = {
+        ...(scope1Breakdown ? { 'scope1-total': [scope1Breakdown] } : {}),
+        ...(scope2Breakdown ? { 'scope2-total': [scope2Breakdown] } : {}),
+        ...(totalGhgBreakdown ? { 'total-ghg': [totalGhgBreakdown] } : {}),
+        ...(energyBreakdown ? { 'energy-total': [energyBreakdown] } : {}),
+        ...(intensityProductionRatio ? { 'intensity-production': [intensityProductionRatio] } : {}),
+        ...(intensityRevenueRatio ? { 'intensity-revenue': [intensityRevenueRatio] } : {})
+      };
     } catch {
       this.lines = {};
+      this.extraLines = {};
     } finally {
       this.loading.set(false);
     }
@@ -526,7 +552,11 @@ export class FlowDiagramComponent implements OnInit {
       title: node.label,
       live: node.live,
       value: nodeLines[0] ?? null,
-      extraValues: nodeLines.slice(1),
+      // Worked breakdowns live in extraLines, not lines -- lines also
+      // drives the on-canvas node text (see nodeLines()/contentTop()), and
+      // a full "Diesel (1.21) + Petrol (0.36) + ... = 2.42 tCO2e" string
+      // has no business being squeezed into a 190x60 box on the diagram.
+      extraValues: [...nodeLines.slice(1), ...(this.extraLines[node.id] ?? [])],
       formula: this.formulaFor(node),
       note: this.noteFor(node),
       loading: !!node.sourceName,
