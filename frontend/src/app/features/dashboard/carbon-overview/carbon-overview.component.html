@@ -77,11 +77,11 @@
           <div class="card-value">{{ overview()!.intensity_tco2e_per_mnah | number: '1.3-3' }}<span class="card-unit">tCO2e/MnAh</span></div>
           @if (showPrior()) {
             <div class="card-comparison" [class]="'comparison-' + comparisonStatus(overview()!.intensity_tco2e_per_mnah, overview()!.prior_intensity_tco2e_per_mnah)">
-              {{ comparisonLabel(overview()!.intensity_tco2e_per_mnah, overview()!.prior_intensity_tco2e_per_mnah, priorLabel()) }}
+              {{ comparisonLabel(overview()!.intensity_tco2e_per_mnah, overview()!.prior_intensity_tco2e_per_mnah, priorLabel(), 'tCO2e/MnAh') }}
             </div>
           }
           <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(overview()!.intensity_tco2e_per_mnah, overview()!.prior_year_intensity_tco2e_per_mnah)">
-            {{ comparisonLabel(overview()!.intensity_tco2e_per_mnah, overview()!.prior_year_intensity_tco2e_per_mnah, priorYearLabelText()) }}
+            {{ comparisonLabel(overview()!.intensity_tco2e_per_mnah, overview()!.prior_year_intensity_tco2e_per_mnah, priorYearLabelText(), 'tCO2e/MnAh') }}
           </div>
           @if (overview()!.intensity_target) {
             <div class="target-comparison">

@@ -159,12 +159,10 @@ export class TargetsComponent implements OnInit {
         : `${gap > 0 ? 'reduce' : 'grow'} by ${Math.abs(gap).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${t.metric_unit} more`;
 
     switch (t.current_status_label) {
-      case 'On track':
-        return `On track — hold this pace through ${byWhen} to land on target.`;
-      case 'Watch':
-        return `Slipping — needs to ${closeText} to get back on pace for ${byWhen}.`;
-      case 'Off track':
-        return `Behind pace — needs to ${closeText} before ${byWhen} to catch up.`;
+      case 'Non Exceeded':
+        return `Non Exceeded — hold this pace through ${byWhen} to remain within target.`;
+      case 'Exceeded':
+        return `Exceeded — needs to ${closeText} before ${byWhen} to return within target.`;
       default:
         return `Tracking toward ${byWhen}.`;
     }
@@ -180,11 +178,9 @@ export class TargetsComponent implements OnInit {
 
   statusClass(label: string | null): string {
     switch (label) {
-      case 'On track':
+      case 'Non Exceeded':
         return 'status-green';
-      case 'Watch':
-        return 'status-amber';
-      case 'Off track':
+      case 'Exceeded':
         return 'status-red';
       default:
         return 'status-neutral';

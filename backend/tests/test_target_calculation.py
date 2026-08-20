@@ -119,17 +119,14 @@ def test_target_value_for_month_uses_rate_target_as_is_not_divided():
     assert target_value_for_month([], date(2026, 1, 1), 4.2, 12, "energy_per_revenue") == 4.2
 
 
-def test_classify_status_on_track_when_at_or_below_target():
-    assert classify_status(9.5, 10.0) == "On track"
-    assert classify_status(10.0, 10.0) == "On track"
+def test_classify_status_is_non_exceeded_when_at_or_below_target():
+    assert classify_status(9.5, 10.0) == "Non Exceeded"
+    assert classify_status(10.0, 10.0) == "Non Exceeded"
 
 
-def test_classify_status_watch_within_margin():
-    assert classify_status(10.4, 10.0) == "Watch"
-
-
-def test_classify_status_off_track_beyond_margin():
-    assert classify_status(12.0, 10.0) == "Off track"
+def test_classify_status_is_exceeded_above_target():
+    assert classify_status(10.4, 10.0) == "Exceeded"
+    assert classify_status(12.0, 10.0) == "Exceeded"
 
 
 def test_classify_status_not_enough_data_when_actual_missing():

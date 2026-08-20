@@ -1,6 +1,19 @@
-__pycache__/
-*.pyc
+# Never include credentials, local environments, or development artifacts in
+# the image build context.
 .env
+.env.*
+!.env.example
 .venv/
 venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Source-control and local-editor artifacts are not required at runtime.
 .git/
+.gitignore
+.dockerignore
+
+# Tests and one-off operational scripts are not part of the API container.
+tests/
+scripts/

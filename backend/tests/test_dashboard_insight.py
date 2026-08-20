@@ -6,7 +6,7 @@ from app.services.dashboard_insight import hash_context
 
 
 def test_hash_context_deterministic_for_identical_input():
-    context = {"scope1_tco2e": 7.28, "targets": [{"metric": "Scope 1", "status": "Off track"}]}
+    context = {"scope1_tco2e": 7.28, "targets": [{"metric": "Scope 1", "status": "Exceeded"}]}
     assert hash_context(context) == hash_context(dict(context))
 
 
@@ -23,6 +23,6 @@ def test_hash_context_changes_when_a_figure_changes():
 
 
 def test_hash_context_changes_when_targets_change():
-    a = {"scope1_tco2e": 7.28, "targets": [{"metric": "Scope 1", "status": "On track"}]}
-    b = {"scope1_tco2e": 7.28, "targets": [{"metric": "Scope 1", "status": "Off track"}]}
+    a = {"scope1_tco2e": 7.28, "targets": [{"metric": "Scope 1", "status": "Non Exceeded"}]}
+    b = {"scope1_tco2e": 7.28, "targets": [{"metric": "Scope 1", "status": "Exceeded"}]}
     assert hash_context(a) != hash_context(b)

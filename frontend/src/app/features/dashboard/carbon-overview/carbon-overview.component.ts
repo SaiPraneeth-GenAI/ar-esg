@@ -327,11 +327,12 @@ export class CarbonOverviewComponent implements OnChanges {
     return showsPriorPeriod(this.periodMode);
   }
 
-  comparisonLabel(current: number | null, prior: number | null, against = 'last month'): string {
+  comparisonLabel(current: number | null, prior: number | null, against = 'last month', unit = 'tCO2e'): string {
     if (current === null) return 'No data yet';
-    if (prior === null || prior === 0) return `No comparison available`;
-    const pct = ((current - prior) / prior) * 100;
-    return `${Math.abs(pct).toFixed(0)}% ${pct > 0 ? 'higher' : 'lower'} than ${against}`;
+    if (prior === null) return `No comparison available`;
+    const difference = current - prior;
+    if (difference === 0) return `Matches ${against}`;
+    return `${Math.abs(difference).toFixed(2)} ${unit} ${difference > 0 ? 'higher' : 'lower'} than ${against}`;
   }
 
   comparisonStatus(current: number | null, prior: number | null): 'green' | 'amber' | 'red' | 'neutral' {
@@ -361,11 +362,9 @@ export class CarbonOverviewComponent implements OnChanges {
 
   targetStatusClass(status: string): string {
     switch (status) {
-      case 'On track':
+      case 'Non Exceeded':
         return 'status-green';
-      case 'Watch':
-        return 'status-amber';
-      case 'Off track':
+      case 'Exceeded':
         return 'status-red';
       default:
         return 'status-neutral';
@@ -393,15 +392,13 @@ export class CarbonOverviewComponent implements OnChanges {
     return `${t.label}: ${actualStr} vs goal ${t.target_value.toFixed(2)} ${t.unit} — ${t.status}`;
   }
 
-  /** The whole card is colored by target status, not a small dot -- On
-   * track is the only "good" state; Watch and Off track both read as
-   * exceeding the target, just at different severity. A target that
-   * hasn't started/ended yet, or doesn't exist, leaves the card neutral
-   * since there's nothing to judge it against. */
+  /** The whole card is colored by target status, not a small dot. A target
+   * is either within its limit or exceeded; unavailable target states stay
+   * neutral because there is nothing to judge yet. */
   cardTargetClass(target: TargetComparison | null | undefined): string {
     if (!target) return '';
-    if (target.status === 'On track') return 'card-target-met';
-    if (target.status === 'Watch' || target.status === 'Off track') return 'card-target-exceeded';
+    if (target.status === 'Non Exceeded') return 'card-target-met';
+    if (target.status === 'Exceeded') return 'card-target-exceeded';
     return '';
   }
 

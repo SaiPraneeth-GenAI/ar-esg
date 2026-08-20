@@ -1,10 +1,11 @@
 """One-time seed: creates the single default Admin account that exists before
 anyone logs in. Everyone else gets added from inside the app by this Admin.
 
-NOTE: ADMIN_PASSWORD below is a placeholder for the demo only -- change it
-immediately after first login, it is not meant to stay as-is.
+Set ADMIN_PASSWORD before running this script. ADMIN_EMAIL is optional and
+defaults to the original administrator address.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -14,8 +15,8 @@ from app.core.supabase_admin import create_auth_user, get_auth_user_by_email  # 
 from app.db.models import Location, Tenant, User  # noqa: E402
 from app.db.session import SessionLocal  # noqa: E402
 
-ADMIN_EMAIL = "saipraneeth836@gmail.com"
-ADMIN_PASSWORD = "admin@123456"  # demo placeholder -- rotate after first login
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "saipraneeth836@gmail.com").strip()
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 DEFAULT_TENANT_NAME = "Amara Raja"
 DEFAULT_LOCATION_NAME = "ARE&M"
 
@@ -29,6 +30,11 @@ LOGO_ASSET = "converted/Amara_Raja_lockup.png"
 
 
 def main() -> None:
+    if not ADMIN_EMAIL:
+        raise RuntimeError("ADMIN_EMAIL must be set")
+    if not ADMIN_PASSWORD:
+        raise RuntimeError("ADMIN_PASSWORD must be set before running this seed script")
+
     db = SessionLocal()
     try:
         tenant = db.query(Tenant).filter(Tenant.name == DEFAULT_TENANT_NAME).first()

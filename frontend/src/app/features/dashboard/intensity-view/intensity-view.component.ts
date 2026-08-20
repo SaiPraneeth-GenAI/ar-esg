@@ -133,18 +133,16 @@ export class IntensityViewComponent implements OnChanges {
 
   cardTargetClass(target: TargetComparison | null): string {
     if (!target) return '';
-    if (target.status === 'On track') return 'card-target-met';
-    if (target.status === 'Watch' || target.status === 'Off track') return 'card-target-exceeded';
+    if (target.status === 'Non Exceeded') return 'card-target-met';
+    if (target.status === 'Exceeded') return 'card-target-exceeded';
     return '';
   }
 
   targetStatusClass(status: string): string {
     switch (status) {
-      case 'On track':
+      case 'Non Exceeded':
         return 'status-green';
-      case 'Watch':
-        return 'status-amber';
-      case 'Off track':
+      case 'Exceeded':
         return 'status-red';
       default:
         return 'status-neutral';

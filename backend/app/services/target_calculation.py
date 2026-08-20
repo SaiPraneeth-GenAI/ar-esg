@@ -29,7 +29,6 @@ from app.services.intensity_calculation import (
 )
 
 BASELINE_READY_COMPLETENESS_PCT = 95.0
-STATUS_WATCH_MARGIN_PCT = 5.0
 
 # Targets are scoped to GHG + intensity for now -- Safety metrics need a
 # reduce-vs-increase direction concept the engine doesn't have yet
@@ -466,15 +465,9 @@ def active_target_comparison(
 
 
 def classify_status(actual: float | None, target: float | None) -> str:
-    """On track / Watch / Off track / Not enough data -- a target is a
-    reduction, so at-or-below target is good. Mirrors the dashboard's
-    0%/10% comparison thresholds in spirit, with a tighter 5% watch band
-    since this is being measured against a committed number, not just a
-    prior-period comparison."""
+    """Classify lower-is-better targets with a clear binary result."""
     if actual is None or target is None:
         return "Not enough data"
     if actual <= target:
-        return "On track"
-    if actual <= target * (1 + STATUS_WATCH_MARGIN_PCT / 100):
-        return "Watch"
-    return "Off track"
+        return "Non Exceeded"
+    return "Exceeded"
