@@ -7,9 +7,10 @@ import { PeriodMode } from '../../core/intensity-api.service';
 import { ReportFormat, ReportsApiService } from '../../core/reports-api.service';
 import { AbsoluteMetricsViewComponent } from './absolute-metrics-view/absolute-metrics-view.component';
 import { IntensityViewComponent } from './intensity-view/intensity-view.component';
+import { OverallViewComponent } from './overall-view/overall-view.component';
 import { SafetyViewComponent } from './safety-view/safety-view.component';
 
-type TabId = 'absolute' | 'production' | 'revenue' | 'safety';
+type TabId = 'overall' | 'absolute' | 'production' | 'revenue' | 'safety';
 
 function currentMonthValue(): string {
   const now = new Date();
@@ -28,7 +29,7 @@ export interface PickerOption {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [FormsModule, RouterLink, AbsoluteMetricsViewComponent, IntensityViewComponent, SafetyViewComponent],
+  imports: [FormsModule, RouterLink, OverallViewComponent, AbsoluteMetricsViewComponent, IntensityViewComponent, SafetyViewComponent],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.css'
 })
@@ -40,7 +41,7 @@ export class DashboardComponent implements OnInit {
   period = signal(currentMonthValue());
   periodMode = signal<PeriodMode>('month');
   locationId = signal<string>(''); // '' = company-wide
-  activeTab = signal<TabId>('absolute');
+  activeTab = signal<TabId>('overall');
   locations = signal<AdminLocation[]>([]);
   unresolvedCount = signal(0);
   // Bumped on every click of the unresolved badge -- passed down through

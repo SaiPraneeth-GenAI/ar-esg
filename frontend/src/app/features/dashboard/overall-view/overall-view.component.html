@@ -1,0 +1,98 @@
+<section class="overall-view">
+  <header class="overall-hero">
+    <div>
+      <p class="overall-eyebrow">Executive overview</p>
+      <h2>Performance at a glance</h2>
+      <p>All 18 tracked measures across environment, efficiency, and safety—without the spreadsheet view.</p>
+    </div>
+    <div class="overview-facts" aria-label="Overview coverage">
+      <span><strong>18</strong> measures</span>
+      <span><strong>4</strong> performance areas</span>
+      <span>Selected period</span>
+    </div>
+  </header>
+
+  @if (errorMessage()) {
+    <div class="overall-error">{{ errorMessage() }}</div>
+  }
+
+  @if (loading()) {
+    <div class="group-grid loading-grid" aria-label="Loading overall performance">
+      @for (item of [1, 2, 3, 4]; track item) {
+        <div class="group-skeleton"></div>
+      }
+    </div>
+  } @else {
+    <div class="group-grid" [class.has-focus]="focusedGroup() !== null">
+      @for (group of groups(); track group.key) {
+        <article
+          class="performance-group"
+          [class]="'accent-' + group.accent"
+          [class.focused]="focusedGroup() === group.key"
+          [class.deemphasized]="focusedGroup() !== null && focusedGroup() !== group.key"
+        >
+          <button type="button" class="group-header" (click)="toggleGroup(group.key)" [attr.aria-expanded]="focusedGroup() === group.key">
+            <span class="group-icon" aria-hidden="true">
+              @switch (group.key) {
+                @case ('absolute') { ◇ }
+                @case ('production') { P }
+                @case ('revenue') { R }
+                @case ('safety') { + }
+              }
+            </span>
+            <span class="group-heading-copy">
+              <span class="group-kicker">{{ group.kicker }}</span>
+              <strong>{{ group.title }}</strong>
+              @if (group.context) { <small>{{ group.context }}</small> }
+            </span>
+            <span class="group-summary" [class.has-attention]="groupAttentionCount(group) > 0">
+              {{ groupAttentionCount(group) > 0 ? groupAttentionCount(group) + ' to review' : 'Looking good' }}
+            </span>
+            <span class="expand-icon">{{ focusedGroup() === group.key ? '−' : '+' }}</span>
+          </button>
+
+          <div class="metric-list">
+            @for (metric of group.metrics; track metric.key) {
+              <button
+                type="button"
+                class="metric-visual"
+                [class.selected]="selectedMetric() === metric.key"
+                (click)="toggleMetric(metric.key)"
+              >
+                <span class="metric-main">
+                  <span class="metric-name">{{ metric.label }}</span>
+                  <span class="metric-reading">
+                    <strong>{{ formatValue(metric.current) }}</strong>
+                    <small>{{ metric.unit }}</small>
+                  </span>
+                </span>
+
+                <span class="comparison-rail" aria-hidden="true">
+                  <span class="rail-fill" [class]="'state-' + metricState(metric)" [style.width.%]="barWidth(metric)"></span>
+                  @if (metric.target !== null || metric.priorYear !== null) {
+                    <span class="rail-marker" [style.left.%]="markerPosition(metric)"></span>
+                  }
+                </span>
+
+                <span class="metric-meta">
+                  <span class="state-label" [class]="'state-' + metricState(metric)"><span class="state-dot"></span>{{ stateLabel(metric) }}</span>
+                  <span>{{ markerLabel(metric) }}: <strong>{{ formatValue(metric.target ?? metric.priorYear) }}</strong></span>
+                </span>
+
+                @if (selectedMetric() === metric.key) {
+                  <span class="metric-detail">
+                    <span><small>Selected period</small><strong>{{ formatValue(metric.current) }} {{ metric.unit }}</strong></span>
+                    <span><small>Same period last year</small><strong>{{ formatValue(metric.priorYear) }} {{ metric.unit }}</strong></span>
+                    <span><small>Target</small><strong>{{ metric.target === null ? 'Not set' : formatValue(metric.target) + ' ' + metric.unit }}</strong></span>
+                  </span>
+                }
+              </button>
+            }
+          </div>
+        </article>
+      }
+    </div>
+
+    <p class="interaction-hint">Select a performance area to focus it, or select any measure to see its full comparison.</p>
+  }
+</section>

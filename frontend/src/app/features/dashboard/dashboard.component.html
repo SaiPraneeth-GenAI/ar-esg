@@ -79,6 +79,7 @@
     }
 
     <nav class="tabs">
+      <button type="button" class="tab" [class.active]="activeTab() === 'overall'" (click)="setTab('overall')">Overall</button>
       <button type="button" class="tab" [class.active]="activeTab() === 'absolute'" (click)="setTab('absolute')">Absolute Metrics</button>
       <button type="button" class="tab" [class.active]="activeTab() === 'production'" (click)="setTab('production')">Intensity by Production</button>
       <button type="button" class="tab" [class.active]="activeTab() === 'revenue'" (click)="setTab('revenue')">Intensity by Revenue</button>
@@ -88,6 +89,9 @@
 
   <div class="tab-content">
     @switch (activeTab()) {
+      @case ('overall') {
+        <app-overall-view [period]="period()" [locationId]="effectiveLocationId()" [periodMode]="periodMode()"></app-overall-view>
+      }
       @case ('absolute') {
         <app-absolute-metrics-view
           [period]="period()"
