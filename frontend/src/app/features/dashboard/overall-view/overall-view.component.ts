@@ -177,15 +177,35 @@ export class OverallViewComponent implements OnChanges {
     return Math.min((metric.current / maximum) * 100, 100);
   }
 
-  markerPosition(metric: OverallMetric): number {
-    const marker = metric.target ?? metric.priorYear;
+  private markerPosition(metric: OverallMetric, marker: number | null): number {
     if (marker === null) return 0;
     const maximum = Math.max(metric.current ?? 0, metric.priorYear ?? 0, metric.target ?? 0, 0.0001) * 1.12;
     return Math.min((marker / maximum) * 100, 100);
   }
 
-  markerLabel(metric: OverallMetric): string {
-    return metric.target !== null ? 'Target' : 'Prior year';
+  priorMarkerPosition(metric: OverallMetric): number {
+    return this.markerPosition(metric, metric.priorYear);
+  }
+
+  targetMarkerPosition(metric: OverallMetric): number {
+    return this.markerPosition(metric, metric.target);
+  }
+
+  businessInsight(metric: OverallMetric): string {
+    if (metric.current === null) return 'Current-period data is not available yet.';
+    if (metric.target !== null) {
+      const gap = Math.abs(metric.current - metric.target);
+      if (metric.current <= metric.target) {
+        return `Performance is within the target by ${this.formatValue(gap)} ${metric.unit}.`;
+      }
+      return `The target is exceeded by ${this.formatValue(gap)} ${metric.unit}; this needs attention.`;
+    }
+    if (metric.priorYear === null) return 'A prior-year comparison and target are not available yet.';
+    const change = Math.abs(metric.current - metric.priorYear);
+    const favourable = metric.goodDown ? metric.current <= metric.priorYear : metric.current >= metric.priorYear;
+    return favourable
+      ? `Performance improved by ${this.formatValue(change)} ${metric.unit} compared with the same time previous year.`
+      : `Performance moved away from the preferred direction by ${this.formatValue(change)} ${metric.unit} compared with the same time previous year.`;
   }
 
   formatValue(value: number | null): string {

@@ -88,12 +88,4 @@ export class AbsoluteMetricsViewComponent implements OnChanges {
     return Math.abs(pct) <= 10 ? 'amber' : 'red';
   }
 
-  tableStatus(m: AbsoluteMetric): 'green' | 'amber' | 'red' | 'neutral' {
-    return this.comparisonStatus(m.current, m.priorYear, m.goodDown);
-  }
-
-  formatTableValue(value: number | null): string {
-    if (value === null) return '—';
-    return value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 });
-  }
 }

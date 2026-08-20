@@ -69,21 +69,32 @@
 
                 <span class="comparison-rail" aria-hidden="true">
                   <span class="rail-fill" [class]="'state-' + metricState(metric)" [style.width.%]="barWidth(metric)"></span>
-                  @if (metric.target !== null || metric.priorYear !== null) {
-                    <span class="rail-marker" [style.left.%]="markerPosition(metric)"></span>
+                  @if (metric.priorYear !== null) {
+                    <span class="rail-marker prior-marker" [style.left.%]="priorMarkerPosition(metric)"></span>
+                  }
+                  @if (metric.target !== null) {
+                    <span class="rail-marker target-marker" [style.left.%]="targetMarkerPosition(metric)"></span>
                   }
                 </span>
 
                 <span class="metric-meta">
                   <span class="state-label" [class]="'state-' + metricState(metric)"><span class="state-dot"></span>{{ stateLabel(metric) }}</span>
-                  <span>{{ markerLabel(metric) }}: <strong>{{ formatValue(metric.target ?? metric.priorYear) }}</strong></span>
+                  <span class="benchmark-list">
+                    <span class="benchmark benchmark-prior">
+                      <small>Same time previous year</small>
+                      <strong>{{ formatValue(metric.priorYear) }} <em>{{ metric.priorYear === null ? '' : metric.unit }}</em></strong>
+                    </span>
+                    <span class="benchmark benchmark-target" [class.not-set]="metric.target === null">
+                      <small>Target value</small>
+                      <strong>{{ metric.target === null ? 'Not set' : formatValue(metric.target) }} <em>{{ metric.target === null ? '' : metric.unit }}</em></strong>
+                    </span>
+                  </span>
                 </span>
 
                 @if (selectedMetric() === metric.key) {
                   <span class="metric-detail">
-                    <span><small>Selected period</small><strong>{{ formatValue(metric.current) }} {{ metric.unit }}</strong></span>
-                    <span><small>Same period last year</small><strong>{{ formatValue(metric.priorYear) }} {{ metric.unit }}</strong></span>
-                    <span><small>Target</small><strong>{{ metric.target === null ? 'Not set' : formatValue(metric.target) + ' ' + metric.unit }}</strong></span>
+                    <span class="insight-icon" aria-hidden="true">i</span>
+                    <span class="insight-copy"><small>Business takeaway</small><strong>{{ businessInsight(metric) }}</strong></span>
                   </span>
                 }
               </button>
