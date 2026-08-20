@@ -23,6 +23,6 @@ def test_hash_context_changes_when_a_figure_changes():
 
 
 def test_hash_context_changes_when_targets_change():
-    a = {"scope1_tco2e": 7.28, "targets": [{"metric": "Scope 1", "status": "Non Exceeded"}]}
+    a = {"scope1_tco2e": 7.28, "targets": [{"metric": "Scope 1", "status": "Within safe limits"}]}
     b = {"scope1_tco2e": 7.28, "targets": [{"metric": "Scope 1", "status": "Exceeded"}]}
     assert hash_context(a) != hash_context(b)

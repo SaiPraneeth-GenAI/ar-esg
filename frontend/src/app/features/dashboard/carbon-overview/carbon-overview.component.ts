@@ -332,7 +332,7 @@ export class CarbonOverviewComponent implements OnChanges {
     if (prior === null) return `No comparison available`;
     const difference = current - prior;
     if (difference === 0) return `Matches ${against}`;
-    return `${Math.abs(difference).toFixed(2)} ${unit} ${difference > 0 ? 'higher' : 'lower'} than ${against}`;
+    return `Change: ${Math.abs(difference).toFixed(2)} ${unit} vs ${against}`;
   }
 
   comparisonStatus(current: number | null, prior: number | null): 'green' | 'amber' | 'red' | 'neutral' {
@@ -362,7 +362,7 @@ export class CarbonOverviewComponent implements OnChanges {
 
   targetStatusClass(status: string): string {
     switch (status) {
-      case 'Non Exceeded':
+      case 'Within safe limits':
         return 'status-green';
       case 'Exceeded':
         return 'status-red';
@@ -397,7 +397,7 @@ export class CarbonOverviewComponent implements OnChanges {
    * neutral because there is nothing to judge yet. */
   cardTargetClass(target: TargetComparison | null | undefined): string {
     if (!target) return '';
-    if (target.status === 'Non Exceeded') return 'card-target-met';
+    if (target.status === 'Within safe limits') return 'card-target-met';
     if (target.status === 'Exceeded') return 'card-target-exceeded';
     return '';
   }

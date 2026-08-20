@@ -110,7 +110,7 @@ class TargetComparison(BaseModel):
     # the target itself has no annual figure recorded (shouldn't normally
     # happen for an active target, but the type reflects what's possible).
     target_value: float | None
-    status: str  # Non Exceeded | Exceeded | Not enough data | Not started yet | Target period ended
+    status: str  # Within safe limits | Exceeded | Not enough data | Not started yet | Target period ended
 
 
 class TargetStatusOut(BaseModel):

@@ -469,5 +469,5 @@ def classify_status(actual: float | None, target: float | None) -> str:
     if actual is None or target is None:
         return "Not enough data"
     if actual <= target:
-        return "Non Exceeded"
+        return "Within safe limits"
     return "Exceeded"

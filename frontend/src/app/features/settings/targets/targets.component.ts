@@ -159,8 +159,8 @@ export class TargetsComponent implements OnInit {
         : `${gap > 0 ? 'reduce' : 'grow'} by ${Math.abs(gap).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${t.metric_unit} more`;
 
     switch (t.current_status_label) {
-      case 'Non Exceeded':
-        return `Non Exceeded — hold this pace through ${byWhen} to remain within target.`;
+      case 'Within safe limits':
+        return `Within safe limits — hold this pace through ${byWhen} to remain within target.`;
       case 'Exceeded':
         return `Exceeded — needs to ${closeText} before ${byWhen} to return within target.`;
       default:
@@ -178,7 +178,7 @@ export class TargetsComponent implements OnInit {
 
   statusClass(label: string | null): string {
     switch (label) {
-      case 'Non Exceeded':
+      case 'Within safe limits':
         return 'status-green';
       case 'Exceeded':
         return 'status-red';

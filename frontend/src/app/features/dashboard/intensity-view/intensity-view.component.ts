@@ -133,14 +133,14 @@ export class IntensityViewComponent implements OnChanges {
 
   cardTargetClass(target: TargetComparison | null): string {
     if (!target) return '';
-    if (target.status === 'Non Exceeded') return 'card-target-met';
+    if (target.status === 'Within safe limits') return 'card-target-met';
     if (target.status === 'Exceeded') return 'card-target-exceeded';
     return '';
   }
 
   targetStatusClass(status: string): string {
     switch (status) {
-      case 'Non Exceeded':
+      case 'Within safe limits':
         return 'status-green';
       case 'Exceeded':
         return 'status-red';

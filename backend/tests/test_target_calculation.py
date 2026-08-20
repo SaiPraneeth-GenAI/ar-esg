@@ -119,9 +119,9 @@ def test_target_value_for_month_uses_rate_target_as_is_not_divided():
     assert target_value_for_month([], date(2026, 1, 1), 4.2, 12, "energy_per_revenue") == 4.2
 
 
-def test_classify_status_is_non_exceeded_when_at_or_below_target():
-    assert classify_status(9.5, 10.0) == "Non Exceeded"
-    assert classify_status(10.0, 10.0) == "Non Exceeded"
+def test_classify_status_is_within_safe_limits_when_at_or_below_target():
+    assert classify_status(9.5, 10.0) == "Within safe limits"
+    assert classify_status(10.0, 10.0) == "Within safe limits"
 
 
 def test_classify_status_is_exceeded_above_target():
