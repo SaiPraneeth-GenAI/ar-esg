@@ -152,24 +152,24 @@ export class OverallViewComponent implements OnChanges {
       const variance = Math.abs(metric.current - metric.target) / Math.abs(metric.target || 1);
       return variance <= 0.05 ? 'amber' : 'red';
     }
-    if (metric.priorYear === null) return 'neutral';
-    const change = (metric.current - metric.priorYear) / Math.abs(metric.priorYear || 1);
-    const favourable = metric.goodDown ? change <= 0 : change >= 0;
-    if (favourable) return 'green';
-    return Math.abs(change) <= 0.1 ? 'amber' : 'red';
+    return 'neutral';
   }
 
   stateLabel(metric: OverallMetric): string {
     switch (this.metricState(metric)) {
-      case 'green': return metric.target !== null ? 'Within target' : 'Favourable';
-      case 'amber': return 'Review';
-      case 'red': return 'Needs attention';
-      default: return 'Awaiting data';
+      case 'green': return 'Within target';
+      case 'amber': return 'Near target';
+      case 'red': return metric.goodDown ? 'Above target' : 'Below target';
+      default: return metric.current === null ? 'Awaiting data' : 'Target not set';
     }
   }
 
   groupAttentionCount(group: OverallGroup): number {
     return group.metrics.filter((metric) => ['amber', 'red'].includes(this.metricState(metric))).length;
+  }
+
+  groupMissingTargets(group: OverallGroup): number {
+    return group.metrics.filter((metric) => metric.target === null).length;
   }
 
   allMetrics(): OverallMetric[] {
@@ -197,22 +197,41 @@ export class OverallViewComponent implements OnChanges {
 
   barWidth(metric: OverallMetric): number {
     if (metric.current === null) return 0;
-    const maximum = Math.max(metric.current, metric.priorYear ?? 0, metric.target ?? 0, 0.0001) * 1.12;
+    const maximum = Math.max(metric.current, metric.target ?? 0, 0.0001) * 1.12;
     return Math.min((metric.current / maximum) * 100, 100);
   }
 
   private markerPosition(metric: OverallMetric, marker: number | null): number {
     if (marker === null) return 0;
-    const maximum = Math.max(metric.current ?? 0, metric.priorYear ?? 0, metric.target ?? 0, 0.0001) * 1.12;
+    const maximum = Math.max(metric.current ?? 0, metric.target ?? 0, 0.0001) * 1.12;
     return Math.min((marker / maximum) * 100, 100);
-  }
-
-  priorMarkerPosition(metric: OverallMetric): number {
-    return this.markerPosition(metric, metric.priorYear);
   }
 
   targetMarkerPosition(metric: OverallMetric): number {
     return this.markerPosition(metric, metric.target);
+  }
+
+  yearDelta(metric: OverallMetric): number | null {
+    if (metric.current === null || metric.priorYear === null) return null;
+    return Math.abs(metric.current - metric.priorYear);
+  }
+
+  yearArrow(metric: OverallMetric): string {
+    if (metric.current === null || metric.priorYear === null || metric.current === metric.priorYear) return '→';
+    return metric.current > metric.priorYear ? '↑' : '↓';
+  }
+
+  yearComparisonState(metric: OverallMetric): MetricState {
+    if (metric.current === null || metric.priorYear === null) return 'neutral';
+    const favourable = metric.goodDown ? metric.current <= metric.priorYear : metric.current >= metric.priorYear;
+    return favourable ? 'green' : 'red';
+  }
+
+  yearComparisonLabel(metric: OverallMetric): string {
+    const delta = this.yearDelta(metric);
+    if (delta === null) return 'No last-year comparison';
+    if (delta === 0) return `No change from last year`;
+    return `${this.yearArrow(metric)} ${this.formatValue(delta)} ${metric.unit} ${metric.current! > metric.priorYear! ? 'higher' : 'lower'} than last year`;
   }
 
   businessInsight(metric: OverallMetric): string {
@@ -227,7 +246,7 @@ export class OverallViewComponent implements OnChanges {
         ? `The target is exceeded by ${this.formatValue(gap)} ${metric.unit}; this needs attention.`
         : `Performance is ${this.formatValue(gap)} ${metric.unit} below target; this needs attention.`;
     }
-    if (metric.priorYear === null) return 'A prior-year comparison and target are not available yet.';
+    if (metric.priorYear === null) return 'A target is not set and a prior-year comparison is not available yet.';
     const change = Math.abs(metric.current - metric.priorYear);
     const favourable = metric.goodDown ? metric.current <= metric.priorYear : metric.current >= metric.priorYear;
     return favourable

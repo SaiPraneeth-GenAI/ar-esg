@@ -61,7 +61,9 @@
               @if (group.context) { <small>{{ group.context }}</small> }
             </span>
             <span class="group-summary" [class.has-attention]="groupAttentionCount(group) > 0">
-              {{ groupAttentionCount(group) > 0 ? groupAttentionCount(group) + ' to review' : 'Looking good' }}
+              {{ groupAttentionCount(group) > 0
+                ? groupAttentionCount(group) + ' targets missed'
+                : (groupMissingTargets(group) > 0 ? groupMissingTargets(group) + ' targets not set' : 'All targets met') }}
             </span>
             <span class="expand-icon">{{ focusedGroup() === group.key ? '−' : '+' }}</span>
           </button>
@@ -84,9 +86,6 @@
 
                 <span class="comparison-rail" aria-hidden="true">
                   <span class="rail-fill" [class]="'state-' + metricState(metric)" [style.width.%]="barWidth(metric)"></span>
-                  @if (metric.priorYear !== null) {
-                    <span class="rail-marker prior-marker" [style.left.%]="priorMarkerPosition(metric)"></span>
-                  }
                   @if (metric.target !== null) {
                     <span class="rail-marker target-marker" [style.left.%]="targetMarkerPosition(metric)"></span>
                   }
@@ -94,13 +93,10 @@
 
                 <span class="metric-meta">
                   <span class="state-label" [class]="'state-' + metricState(metric)"><span class="state-dot"></span>{{ stateLabel(metric) }}</span>
-                  <span class="benchmark-list">
-                    <span class="benchmark benchmark-prior">
-                      <small>Same time previous year</small>
-                      <strong>{{ formatValue(metric.priorYear) }} <em>{{ metric.priorYear === null ? '' : metric.unit }}</em></strong>
-                    </span>
-                    <span class="benchmark benchmark-target" [class.not-set]="metric.target === null">
-                      <small>Target value</small>
+                  <span class="comparison-summary">
+                    <span class="year-delta" [class]="'state-' + yearComparisonState(metric)">{{ yearComparisonLabel(metric) }}</span>
+                    <span class="target-indicator" [class.not-set]="metric.target === null">
+                      <small>Target</small><span class="target-symbol">◆</span>
                       <strong>{{ metric.target === null ? 'Not set' : formatValue(metric.target) }} <em>{{ metric.target === null ? '' : metric.unit }}</em></strong>
                     </span>
                   </span>
