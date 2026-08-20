@@ -93,9 +93,13 @@
 }
 
 .nav-item svg {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
+  stroke-width: 1.9;
+  opacity: 0.92;
+  filter: drop-shadow(0 0 3px rgba(148, 163, 184, 0.18));
+  transition: color 0.16s ease, filter 0.16s ease, transform 0.16s ease, opacity 0.16s ease;
 }
 
 .nav-item span {
@@ -133,10 +137,31 @@
   color: #d1d5db;
 }
 
+.nav-item:hover svg {
+  opacity: 1;
+  transform: translateY(-1px);
+  filter: drop-shadow(0 0 5px rgba(110, 231, 168, 0.36));
+}
+
 .nav-item.active {
   background: #1e3a2c;
   color: #6ee7a8;
   border-left-color: #4fd1a5;
+}
+
+.nav-item.active svg {
+  opacity: 1;
+  filter: drop-shadow(0 0 5px rgba(79, 209, 165, 0.58));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-item svg {
+    transition: none;
+  }
+
+  .nav-item:hover svg {
+    transform: none;
+  }
 }
 
 /* Rendered in the DOM whenever settingsOpen() is true, independent of
