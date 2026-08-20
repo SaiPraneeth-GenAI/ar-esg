@@ -375,19 +375,18 @@ def build_targets_workbook() -> bytes:
     ws = wb.active
     ws.title = "Targets"
     headers = [
-        "metric_key", "location_name", "baseline_period_start", "baseline_period_end",
-        "target_period_start", "target_period_end", "reduction_percentage", "rationale",
+        "metric_key", "location_name", "target_period_start", "target_period_end",
+        "reduction_percentage", "rationale",
     ]
     ws.append(headers)
     _style_header(ws, len(headers))
 
     for metric_key, (percentage, rationale) in _TARGET_SPECS.items():
         ws.append([
-            metric_key, "", "2025-01-01", "2025-12-01", "2026-01-01", "2026-12-01",
-            percentage, rationale,
+            metric_key, "", "2026-01-01", "2026-12-01", percentage, rationale,
         ])
 
-    for col, width in zip("ABCDEFGH", [26, 16, 18, 18, 18, 18, 18, 42]):
+    for col, width in zip("ABCDEF", [26, 16, 18, 18, 18, 42]):
         ws.column_dimensions[col].width = width
 
     buf = io.BytesIO()

@@ -258,14 +258,12 @@ export class ApprovalSettingsComponent implements OnInit {
       const idx = (name: string) => headers.findIndex((h) => h.trim().toLowerCase() === name);
       const iMetric = idx('metric_key');
       const iLocation = idx('location_name');
-      const iBaselineStart = idx('baseline_period_start');
-      const iBaselineEnd = idx('baseline_period_end');
       const iTargetStart = idx('target_period_start');
       const iTargetEnd = idx('target_period_end');
       const iReduction = idx('reduction_percentage');
       const iRationale = idx('rationale');
 
-      if (iMetric === -1 || iBaselineStart === -1 || iBaselineEnd === -1 || iTargetStart === -1 || iTargetEnd === -1) {
+      if (iMetric === -1 || iTargetStart === -1 || iTargetEnd === -1) {
         this.targetsUploadError.set('This file is missing expected columns -- use the downloaded sample workbook as-is.');
         return;
       }
@@ -275,17 +273,21 @@ export class ApprovalSettingsComponent implements OnInit {
         return String(v ?? '').trim();
       };
 
-      const bulkRows: TargetBulkRowIn[] = rows.map((row, i) => ({
-        row_index: i + 1,
-        metric_key: String(row[iMetric] ?? '').trim(),
-        location_name: iLocation !== -1 ? String(row[iLocation] ?? '').trim() || null : null,
-        baseline_period_start: asDateStr(row[iBaselineStart]),
-        baseline_period_end: asDateStr(row[iBaselineEnd]),
-        target_period_start: asDateStr(row[iTargetStart]),
-        target_period_end: asDateStr(row[iTargetEnd]),
-        reduction_percentage: iReduction !== -1 && row[iReduction] !== '' ? Number(row[iReduction]) : null,
-        rationale: iRationale !== -1 ? String(row[iRationale] ?? '').trim() || null : null
-      }));
+      const bulkRows: TargetBulkRowIn[] = rows.map((row, i) => {
+        const targetStart = asDateStr(row[iTargetStart]);
+        const targetYear = Number(targetStart.slice(0, 4));
+        return {
+          row_index: i + 1,
+          metric_key: String(row[iMetric] ?? '').trim(),
+          location_name: iLocation !== -1 ? String(row[iLocation] ?? '').trim() || null : null,
+          baseline_period_start: `${targetYear - 1}-01-01`,
+          baseline_period_end: `${targetYear - 1}-12-01`,
+          target_period_start: targetStart,
+          target_period_end: asDateStr(row[iTargetEnd]),
+          reduction_percentage: iReduction !== -1 && row[iReduction] !== '' ? Number(row[iReduction]) : null,
+          rationale: iRationale !== -1 ? String(row[iRationale] ?? '').trim() || null : null
+        };
+      });
 
       const response = await this.targetApi.bulkImport({ commit: true, rows: bulkRows });
       const errors = response.rows.filter((r) => r.status === 'error');
