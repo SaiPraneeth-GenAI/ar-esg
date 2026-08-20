@@ -1,0 +1,220 @@
+<div class="assurance-page">
+  <header class="hero">
+    <div>
+      <div class="eyebrow">SOURCE-TO-REPORT CONTROL LAYER</div>
+      <h1>Energy Data Assurance</h1>
+      <p>Validate, reconcile and trace operational energy data before it enters the ESG reporting system.</p>
+    </div>
+    <div class="hero-status">
+      <span class="demo-pill"><span></span> Synthetic demonstration</span>
+      @if (workspace(); as ws) {
+        <div class="site-select">
+          <label>Workspace</label>
+          <strong>{{ ws.active_site.name }}</strong>
+        </div>
+        <div class="site-select period-control">
+          <label>Control period</label>
+          <input type="month" [(ngModel)]="periodMonth" (change)="changePeriod()" />
+        </div>
+      }
+    </div>
+  </header>
+
+  @if (errorMessage()) { <div class="banner error">{{ errorMessage() }}</div> }
+  @if (successMessage()) { <div class="banner success">{{ successMessage() }}</div> }
+
+  @if (loading()) {
+    <div class="empty-state"><div class="spinner"></div><h2>Loading assurance controls…</h2></div>
+  } @else if (!workspace()) {
+    <section class="empty-state welcome">
+      <div class="welcome-mark">EA</div>
+      <h2>Start the isolated assurance showcase</h2>
+      <p>This creates a fictional battery plant, three energy sources, four meters and deliberate control exceptions. It does not touch the existing ESG entries or dashboard.</p>
+      <button class="primary" (click)="seedDemo()" [disabled]="actionBusy()">
+        {{ actionBusy() ? 'Preparing…' : 'Load synthetic demonstration' }}
+      </button>
+    </section>
+  } @else {
+    @if (workspace(); as ws) {
+    <nav class="workflow-tabs" aria-label="Energy Assurance workflow">
+      @for (tab of tabs; track tab.id) {
+        <button [class.active]="activeTab() === tab.id" (click)="setTab(tab.id)">
+          <span>{{ tab.number }}</span>{{ tab.label }}
+        </button>
+      }
+    </nav>
+
+    @if (activeTab() === 'overview') {
+      <section class="section-heading">
+        <div><span class="section-kicker">REPORTING READINESS</span><h2>Can this month's energy number be trusted?</h2></div>
+        <span class="readiness" [class.ready]="ws.summary.reporting_status === 'Ready'">{{ ws.summary.reporting_status }}</span>
+      </section>
+
+      <div class="metric-grid">
+        <article class="metric-card">
+          <span class="metric-label">Data completeness</span>
+          <strong>{{ ws.summary.completeness_pct }}<small>%</small></strong>
+          <div class="progress"><i [style.width.%]="ws.summary.completeness_pct"></i></div>
+          <p>{{ ws.summary.readings_received }} of {{ ws.summary.readings_expected }} active meters received</p>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Evidence coverage</span>
+          <strong>{{ ws.summary.evidence_coverage_pct }}<small>%</small></strong>
+          <div class="progress evidence"><i [style.width.%]="ws.summary.evidence_coverage_pct"></i></div>
+          <p>Readings linked to a source document</p>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Sources reconciled</span>
+          <strong>{{ ws.summary.sources_reconciled }}<small>/{{ ws.summary.sources_total }}</small></strong>
+          <div class="progress reconcile"><i [style.width.%]="ws.summary.sources_total ? ws.summary.sources_reconciled / ws.summary.sources_total * 100 : 0"></i></div>
+          <p>Independent reference checks passed</p>
+        </article>
+        <article class="metric-card exception">
+          <span class="metric-label">Open control exceptions</span>
+          <strong>{{ ws.summary.open_exceptions }}</strong>
+          <div class="exception-icons"><span>!</span><span>REVIEW REQUIRED</span></div>
+          <p>Resolve before publishing downstream</p>
+        </article>
+      </div>
+
+      <section class="control-panel">
+        <div class="control-head"><div><span class="section-kicker">CONTROL SUMMARY</span><h3>Source health for August 2026</h3></div><button class="text-button" (click)="setTab('reconciliation')">Review all controls →</button></div>
+        <div class="control-list">
+          @for (row of ws.reconciliations; track row.source_id) {
+            <div class="control-row">
+              <div class="source-avatar" [class.renewable]="row.source_type.includes('renewable')">{{ sourceIcon(row.source_type) }}</div>
+              <div class="control-name"><strong>{{ row.source_name }}</strong><span>{{ sourceType(row.source_type) }}</span></div>
+              <div class="control-value"><span>Meter total</span><strong>{{ formatNumber(row.meter_total_kwh) }} kWh</strong></div>
+              <div class="control-value"><span>{{ row.reference_type ? sourceType(row.reference_type) : 'Reference' }}</span><strong>{{ formatNumber(row.reference_value_kwh) }} kWh</strong></div>
+              <span class="status" [class]="row.status">{{ row.status }}</span>
+            </div>
+          }
+        </div>
+      </section>
+
+      <section class="process-strip">
+        <div><span>01</span><strong>Operational sources</strong><small>Grid, solar and generator</small></div>
+        <i>→</i><div><span>02</span><strong>Validation</strong><small>Units, duplicates and evidence</small></div>
+        <i>→</i><div><span>03</span><strong>Reconciliation</strong><small>Meter versus independent record</small></div>
+        <i>→</i><div><span>04</span><strong>Traceable result</strong><small>Formula back to source</small></div>
+      </section>
+    }
+
+    @if (activeTab() === 'registry') {
+      <section class="section-heading">
+        <div><span class="section-kicker">ASSET REGISTRY</span><h2>Sources and measurement points</h2><p>A database-backed map of how energy enters or is generated at the site.</p></div>
+        <div class="heading-actions"><button class="secondary" (click)="showSourceForm.set(!showSourceForm())">+ Add source</button><button class="primary" (click)="startMeterForm()">+ Add meter</button></div>
+      </section>
+
+      @if (showSourceForm()) {
+        <div class="inline-form">
+          <input [(ngModel)]="sourceForm.name" placeholder="Source name" />
+          <select [(ngModel)]="sourceForm.source_type"><option value="grid">Grid</option><option value="onsite_renewable">Onsite renewable</option><option value="offsite_renewable">Offsite renewable</option><option value="captive">Captive</option><option value="generator">Generator</option><option value="other">Other</option></select>
+          <input [(ngModel)]="sourceForm.supplier" placeholder="Supplier / operator" />
+          <label class="checkbox"><input type="checkbox" [(ngModel)]="sourceForm.renewable" /> Renewable</label>
+          <button class="primary" (click)="addSource()" [disabled]="actionBusy()">Save source</button>
+        </div>
+      }
+      @if (showMeterForm()) {
+        <div class="inline-form meter-form">
+          <select [(ngModel)]="meterForm.source_id"><option value="">Select source</option>@for (source of ws.sources; track source.id) { <option [value]="source.id">{{ source.name }}</option> }</select>
+          <input [(ngModel)]="meterForm.meter_code" placeholder="Meter code" />
+          <input [(ngModel)]="meterForm.name" placeholder="Meter name" />
+          <select [(ngModel)]="meterForm.direction"><option value="import">Import</option><option value="generation">Generation</option><option value="export">Export</option><option value="consumption">Consumption</option></select>
+          <button class="primary" (click)="addMeter()" [disabled]="actionBusy()">Save meter</button>
+        </div>
+      }
+
+      <div class="source-grid">
+        @for (source of ws.sources; track source.id) {
+          <article class="source-card">
+            <div class="source-card-head"><div class="source-avatar large" [class.renewable]="source.renewable">{{ sourceIcon(source.source_type) }}</div><button class="icon-button" title="Edit source" (click)="editSource(source)">•••</button></div>
+            <span class="source-type">{{ sourceType(source.source_type) }}</span>
+            <h3>{{ source.name }}</h3>
+            <p>{{ source.supplier || 'Supplier not configured' }}</p>
+            <footer><span>{{ source.meter_count }} meter{{ source.meter_count === 1 ? '' : 's' }}</span><button (click)="startMeterForm(source.id)">Add meter</button></footer>
+          </article>
+        }
+      </div>
+
+      <section class="table-card">
+        <div class="table-head"><div><span class="section-kicker">METER MASTER</span><h3>Registered measurement points</h3></div><span>{{ ws.meters.length }} records</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Meter code</th><th>Meter name</th><th>Energy source</th><th>Direction</th><th>Unit</th><th>Status</th><th></th></tr></thead>
+          <tbody>@for (meter of ws.meters; track meter.id) {<tr><td><code>{{ meter.meter_code }}</code></td><td>{{ meter.name }}</td><td>{{ meter.source_name }}</td><td>{{ sourceType(meter.direction) }}</td><td>{{ meter.unit }}</td><td><span class="mini-status active">Active</span></td><td><button class="row-action" (click)="editMeter(meter)">Edit</button></td></tr>}</tbody>
+        </table></div>
+      </section>
+    }
+
+    @if (activeTab() === 'ledger') {
+      <section class="section-heading">
+        <div><span class="section-kicker">CONTROLLED INGESTION</span><h2>Energy reading ledger</h2><p>Every meter remains a separate record. Raw rows are validated before they become reportable.</p></div>
+        <div class="heading-actions"><button class="secondary" (click)="downloadSampleWorkbook()">Download synthetic sample</button><label class="upload-button">Upload Excel / CSV<input type="file" accept=".xlsx,.xls,.csv" (change)="onFileSelected($event)" /></label></div>
+      </section>
+
+      @if (fileName()) {
+        <section class="import-panel">
+          <div class="import-title"><div class="file-icon">XLS</div><div><strong>{{ fileName() }}</strong><span>{{ rawRows().length }} rows · first worksheet</span></div><span class="isolated-tag">STAGING ONLY</span></div>
+          <div class="mapping-grid">
+            @for (field of mappingFields; track field.key) {
+              <label><span>{{ field.label }} @if(field.required){<b>*</b>}</span><select [(ngModel)]="importMapping[field.key]"><option value="">Not mapped</option>@for (header of headers(); track header) {<option [value]="header">{{ header }}</option>}</select></label>
+            }
+          </div>
+          <div class="import-actions"><button class="secondary" (click)="previewImport(false)" [disabled]="actionBusy()">Validate rows</button>@if (importResult() && importResult()!.valid_count > 0) {<button class="primary" (click)="previewImport(true)" [disabled]="actionBusy()">Import {{ importResult()!.valid_count }} valid rows</button>}</div>
+          @if (importResult(); as result) {
+            <div class="import-summary"><span class="ok">{{ result.valid_count }} valid</span><span class="bad">{{ result.error_count }} exceptions</span><span>{{ result.imported_count }} imported</span></div>
+            @if (result.error_count) {<div class="validation-list">@for (row of result.rows; track row.row_index) {@if(row.status === 'error'){<div><strong>Row {{ row.row_index }} · {{ row.meter_code || 'No meter' }}</strong><span>{{ row.message }}</span></div>}}</div>}
+          }
+        </section>
+      }
+
+      <section class="table-card">
+        <div class="table-head"><div><span class="section-kicker">AUGUST 2026</span><h3>Controlled source readings</h3></div><span>{{ ws.readings.length }} records</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Meter</th><th>Source</th><th>Raw value</th><th>Normalized</th><th>Evidence</th><th>Status</th><th></th></tr></thead>
+          <tbody>@for (reading of ws.readings; track reading.id) {<tr><td><code>{{ reading.meter_code }}</code><small>{{ reading.meter_name }}</small></td><td>{{ reading.source_name }}</td><td>{{ formatNumber(reading.value) }} {{ reading.unit }}</td><td>{{ formatNumber(reading.normalized_kwh) }} kWh</td><td><span [class.missing]="!reading.evidence_reference">{{ reading.evidence_reference || 'Missing evidence' }}</span></td><td><span class="mini-status" [class.active]="reading.status === 'approved'">{{ reading.status }}</span></td><td><button class="row-action" (click)="editReading(reading)">Edit</button></td></tr>}</tbody>
+        </table></div>
+      </section>
+    }
+
+    @if (activeTab() === 'reconciliation') {
+      <section class="section-heading">
+        <div><span class="section-kicker">INDEPENDENT CONTROL CHECKS</span><h2>Reconciliation centre</h2><p>Compare meter totals with bills, claims and operating statements before reporting.</p></div>
+        <span class="exception-count">{{ exceptionReconciliations().length }} controls need attention</span>
+      </section>
+      <div class="recon-grid">
+        @for (row of ws.reconciliations; track row.source_id) {
+          <article class="recon-card" [class]="row.status">
+            <header><div class="source-avatar" [class.renewable]="row.source_type.includes('renewable')">{{ sourceIcon(row.source_type) }}</div><div><span>{{ sourceType(row.source_type) }}</span><h3>{{ row.source_name }}</h3></div><span class="status" [class]="row.status">{{ row.status }}</span></header>
+            <div class="recon-values"><div><span>Meter ledger</span><strong>{{ formatNumber(row.meter_total_kwh) }}</strong><small>kWh</small></div><div class="compare">↔</div><div><span>{{ row.reference_type ? sourceType(row.reference_type) : 'Reference' }}</span><strong>{{ formatNumber(row.reference_value_kwh) }}</strong><small>kWh</small></div></div>
+            <div class="variance"><span>Absolute variance</span><strong>{{ formatNumber(row.variance_kwh) }} kWh</strong><span>Relative variance</span><strong>{{ row.variance_pct == null ? '—' : row.variance_pct.toFixed(2) + '%' }}</strong></div>
+            <div class="control-message"><strong>{{ row.status === 'passed' ? 'Control passed' : 'Action required' }}</strong><p>{{ row.message }}</p></div>
+            <footer><span>Evidence</span><strong>{{ row.evidence_reference || 'No independent evidence attached' }}</strong></footer>
+          </article>
+        }
+      </div>
+      <div class="policy-note"><strong>Demonstration control policy</strong><span>≤2% passes · 2–5% requires review · &gt;5% fails. Actual thresholds will be agreed during contractual discovery.</span></div>
+    }
+
+    @if (activeTab() === 'lineage') {
+      <section class="section-heading">
+        <div><span class="section-kicker">AUDITABLE CALCULATION</span><h2>Source-to-result trace</h2><p>One result, reproducible from its factor, approved readings and evidence.</p></div>
+        <span class="trace-badge">FULLY TRACEABLE</span>
+      </section>
+      <section class="trace-result">
+        <div class="result-card"><span>{{ ws.trace.metric_name }}</span><strong>{{ ws.trace.result_value.toFixed(2) }} <small>{{ ws.trace.unit }}</small></strong><p>August 2026 · Synthetic Battery Plant</p></div>
+        <div class="trace-arrow">←</div>
+        <div class="formula-card"><span>CALCULATION FORMULA</span><code>{{ ws.trace.formula }}</code><div><span>Activity</span><strong>{{ formatNumber(ws.trace.activity_value_kwh) }} kWh</strong><span>Factor</span><strong>{{ ws.trace.factor_value }} {{ ws.trace.factor_unit }}</strong></div></div>
+      </section>
+      <section class="lineage-tree">
+        <div class="tree-title"><span class="tree-dot result"></span><div><small>REPORTABLE RESULT</small><strong>{{ ws.trace.result_value.toFixed(2) }} {{ ws.trace.unit }}</strong></div></div>
+        <div class="tree-branch">
+          <div class="tree-node factor"><span class="tree-dot"></span><div><small>FACTOR SNAPSHOT</small><strong>{{ ws.trace.factor_value }} {{ ws.trace.factor_unit }}</strong><p>{{ ws.trace.factor_source }}</p></div></div>
+          @for (input of ws.trace.inputs; track input.reading_id) {
+            <div class="tree-node input"><span class="tree-dot"></span><div><small>APPROVED SOURCE READING</small><strong>{{ input.meter_code }} · {{ formatNumber(input.value_kwh) }} kWh</strong><p>{{ input.source_name }}</p><span class="evidence-link">▣ {{ input.evidence_reference || 'Evidence missing' }} @if(input.source_row){ · row {{ input.source_row }}}</span></div></div>
+          }
+        </div>
+      </section>
+      <div class="boundary-note"><strong>Isolation boundary</strong><p>This demonstration result is calculated inside Energy Assurance only. It has not changed the existing ESG entries, carbon dashboard, targets or reports.</p></div>
+    }
+    }
+  }
+</div>

@@ -2,6 +2,14 @@ from app.db.models.carbon import CarbonInsight, EmissionCalculation, EmissionTar
 from app.db.models.chart import SavedChart
 from app.db.models.column_mapping_memory import ColumnMappingMemory
 from app.db.models.config_tenancy import Category, DataPoint, Location, Tenant, User
+from app.db.models.energy_assurance import (
+    EnergyAssuranceImportBatch,
+    EnergyAssuranceMeter,
+    EnergyAssuranceReading,
+    EnergyAssuranceReference,
+    EnergyAssuranceSite,
+    EnergyAssuranceSource,
+)
 from app.db.models.intensity import RevenueMapping
 from app.db.models.mapping_template import MappingTemplate
 from app.db.models.peer import PeerCompany, PeerData
@@ -53,4 +61,10 @@ __all__ = [
     "SavedChart",
     "PeerCompany",
     "PeerData",
+    "EnergyAssuranceSite",
+    "EnergyAssuranceSource",
+    "EnergyAssuranceMeter",
+    "EnergyAssuranceImportBatch",
+    "EnergyAssuranceReading",
+    "EnergyAssuranceReference",
 ]
