@@ -49,10 +49,31 @@
           <button type="button" class="group-header" (click)="toggleGroup(group.key)" [attr.aria-expanded]="focusedGroup() === group.key">
             <span class="group-icon" aria-hidden="true">
               @switch (group.key) {
-                @case ('absolute') { ◇ }
-                @case ('production') { P }
-                @case ('revenue') { R }
-                @case ('safety') { + }
+                @case ('absolute') {
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 4.5c-7.5.2-12.6 3-14.7 7.2-1.7 3.4.2 6.8 3.7 7.1 4.8.4 8.6-4.6 11-14.3Z" />
+                    <path d="M4 20c2.2-4.7 5.7-7.9 10.8-10.2" />
+                  </svg>
+                }
+                @case ('production') {
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 20V9l6 3V8l6 4V5h3v15" />
+                    <path d="M2 20h20M7 16h2m3 0h2m3 0h2" />
+                  </svg>
+                }
+                @case ('revenue') {
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 19V5m0 14h16" />
+                    <path d="m7 15 4-4 3 2 5-6" />
+                    <path d="M16 7h3v3" />
+                  </svg>
+                }
+                @case ('safety') {
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3 20 6v5c0 5-3.2 8.2-8 10-4.8-1.8-8-5-8-10V6l8-3Z" />
+                    <path d="m8.5 12 2.2 2.2 4.8-5" />
+                  </svg>
+                }
               }
             </span>
             <span class="group-heading-copy">
