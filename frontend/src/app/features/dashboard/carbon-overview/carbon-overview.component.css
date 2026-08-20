@@ -395,6 +395,13 @@
   white-space: nowrap;
 }
 
+.target-chip-values {
+  color: #667085;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* Bullet-bar: fill shows the actual, the tick shows the goal -- close
    the gap and it's obviously on track, no numbers required to read it. */
 .target-bar {

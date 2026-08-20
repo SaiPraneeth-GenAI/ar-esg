@@ -161,11 +161,10 @@ export class IntensityViewComponent implements OnChanges {
     return showsPriorPeriod(this.periodMode);
   }
 
-  comparisonLabel(current: number | null, prior: number | null, against = 'last month'): string {
+  comparisonLabel(current: number | null, prior: number | null, against = 'last month', unit = ''): string {
     if (current === null) return 'Data required';
-    if (prior === null || prior === 0) return `No comparison available`;
-    const pct = ((current - prior) / prior) * 100;
-    return `${Math.abs(pct).toFixed(0)}% ${pct > 0 ? 'higher' : 'lower'} than ${against}`;
+    if (prior === null) return `No comparison available`;
+    return `${prior.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} ${unit} during ${against}`;
   }
 
   comparisonStatus(current: number | null, prior: number | null): 'green' | 'amber' | 'red' | 'neutral' {

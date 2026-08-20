@@ -74,11 +74,10 @@ export class AbsoluteMetricsViewComponent implements OnChanges {
     return showsPriorPeriod(this.periodMode);
   }
 
-  comparisonLabel(current: number | null, prior: number | null, against = 'last month'): string {
+  comparisonLabel(current: number | null, prior: number | null, against = 'last month', unit = ''): string {
     if (current === null) return 'Not yet entered';
-    if (prior === null || prior === 0) return `No comparison available`;
-    const pct = ((current - prior) / prior) * 100;
-    return `${Math.abs(pct).toFixed(0)}% ${pct > 0 ? 'higher' : 'lower'} than ${against}`;
+    if (prior === null) return `No comparison available`;
+    return `${prior.toFixed(1)} ${unit} during ${against}`;
   }
 
   comparisonStatus(current: number | null, prior: number | null, goodDown: boolean): 'green' | 'amber' | 'red' | 'neutral' {
@@ -87,5 +86,14 @@ export class AbsoluteMetricsViewComponent implements OnChanges {
     const favorable = goodDown ? pct <= 0 : pct >= 0;
     if (favorable) return 'green';
     return Math.abs(pct) <= 10 ? 'amber' : 'red';
+  }
+
+  tableStatus(m: AbsoluteMetric): 'green' | 'amber' | 'red' | 'neutral' {
+    return this.comparisonStatus(m.current, m.priorYear, m.goodDown);
+  }
+
+  formatTableValue(value: number | null): string {
+    if (value === null) return '—';
+    return value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 });
   }
 }

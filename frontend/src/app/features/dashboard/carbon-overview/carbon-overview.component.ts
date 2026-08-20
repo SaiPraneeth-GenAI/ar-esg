@@ -330,9 +330,8 @@ export class CarbonOverviewComponent implements OnChanges {
   comparisonLabel(current: number | null, prior: number | null, against = 'last month', unit = 'tCO2e'): string {
     if (current === null) return 'No data yet';
     if (prior === null) return `No comparison available`;
-    const difference = current - prior;
-    if (difference === 0) return `Matches ${against}`;
-    return `Change: ${Math.abs(difference).toFixed(2)} ${unit} vs ${against}`;
+    const fractionDigits = unit.includes('/') ? 3 : 2;
+    return `${prior.toFixed(fractionDigits)} ${unit} during ${against}`;
   }
 
   comparisonStatus(current: number | null, prior: number | null): 'green' | 'amber' | 'red' | 'neutral' {
@@ -390,6 +389,12 @@ export class CarbonOverviewComponent implements OnChanges {
   targetTooltip(t: TargetStatusOut): string {
     const actualStr = t.actual !== null ? t.actual.toFixed(2) : 'no data yet';
     return `${t.label}: ${actualStr} vs goal ${t.target_value.toFixed(2)} ${t.unit} — ${t.status}`;
+  }
+
+  targetValueSummary(t: TargetStatusOut): string {
+    const fractionDigits = t.unit.includes('/') ? 3 : 2;
+    const actual = t.actual === null ? 'No data' : t.actual.toFixed(fractionDigits);
+    return `${actual} vs ${t.target_value.toFixed(fractionDigits)} ${t.unit}`;
   }
 
   /** The whole card is colored by target status, not a small dot. A target

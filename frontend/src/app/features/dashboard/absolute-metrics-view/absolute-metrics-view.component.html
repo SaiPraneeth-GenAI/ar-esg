@@ -32,9 +32,9 @@
             @if (m.current !== null) {
               <div class="card-value">{{ m.current | number: '1.0-1' }}<span class="card-unit">{{ m.unit }}</span></div>
               @if (showPrior()) {
-                <div class="card-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.prior, m.goodDown)">{{ comparisonLabel(m.current, m.prior, priorLabel()) }}</div>
+                <div class="card-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.prior, m.goodDown)">{{ comparisonLabel(m.current, m.prior, priorLabel(), m.unit) }}</div>
               }
-              <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.priorYear, m.goodDown)">{{ comparisonLabel(m.current, m.priorYear, priorYearLabelText()) }}</div>
+              <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.priorYear, m.goodDown)">{{ comparisonLabel(m.current, m.priorYear, priorYearLabelText(), m.unit) }}</div>
             } @else {
               <div class="card-empty">Not yet entered</div>
             }
@@ -43,4 +43,52 @@
       </div>
     }
   </section>
+
+  @if (!loading() && metrics().length > 0) {
+    <section class="performance-table-section" aria-labelledby="performance-table-title">
+      <div class="performance-table-heading">
+        <div>
+          <p class="eyebrow">Performance snapshot</p>
+          <h2 id="performance-table-title">Environmental performance</h2>
+          <p>See the selected period alongside the same period last year.</p>
+        </div>
+        <span class="table-context">Selected period</span>
+      </div>
+
+      <div class="performance-table-scroll">
+        <table class="performance-table">
+          <thead>
+            <tr>
+              <th scope="col">Metric</th>
+              <th scope="col">Unit</th>
+              <th scope="col">Same period last year</th>
+              <th scope="col">Selected period</th>
+              <th scope="col" class="status-heading">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (m of metrics(); track m.label) {
+              <tr>
+                <th scope="row">{{ m.label }}</th>
+                <td><span class="unit-chip">{{ m.unit }}</span></td>
+                <td class="historical-value">{{ formatTableValue(m.priorYear) }}</td>
+                <td class="current-value">{{ formatTableValue(m.current) }}</td>
+                <td>
+                  <span class="table-status" [class]="'table-status-' + tableStatus(m)">
+                    <span class="status-dot"></span>
+                    @switch (tableStatus(m)) {
+                      @case ('green') { Favourable }
+                      @case ('amber') { Review }
+                      @case ('red') { Needs attention }
+                      @default { No comparison }
+                    }
+                  </span>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
 </div>

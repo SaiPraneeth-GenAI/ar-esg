@@ -196,7 +196,7 @@
 
     @if (aiInsightTyped() || overview()!.insight) {
       <p class="insight ai-insight">
-        <span class="ai-badge">AI insight</span>
+        <span class="ai-badge">Insight</span>
         <span class="ai-insight-text">{{ aiInsightTyped() || overview()!.insight }}@if (aiInsightBusy()) {<span class="type-cursor"></span>}</span>
       </p>
     }
@@ -208,6 +208,7 @@
           <span class="target-chip" [title]="targetTooltip(t)">
             <span class="status-pill" [class]="targetStatusClass(t.status)">{{ t.status }}</span>
             <span class="target-chip-label">{{ t.label }}</span>
+            <span class="target-chip-values">{{ targetValueSummary(t) }}</span>
             <span class="target-bar">
               <span class="target-bar-fill" [class]="targetStatusClass(t.status)" [style.width.%]="targetFillPct(t)"></span>
               <span class="target-bar-goal" [style.left.%]="targetGoalPct(t)"></span>

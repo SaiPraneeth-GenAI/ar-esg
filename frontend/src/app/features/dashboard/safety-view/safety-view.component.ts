@@ -93,9 +93,8 @@ export class SafetyViewComponent implements OnChanges {
     const prior = against === 'month' ? m.prior_value : m.prior_year_value;
     const label = against === 'month' ? priorPeriodLabel(this.periodMode) : priorYearLabel(this.periodMode);
     if (m.value === null) return 'Not yet entered';
-    if (prior === null || prior === 0) return `No comparison available`;
-    const pct = ((m.value - prior) / prior) * 100;
-    return `${Math.abs(pct).toFixed(0)}% ${pct > 0 ? 'higher' : 'lower'} than ${label}`;
+    if (prior === null) return `No comparison available`;
+    return `${prior.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${m.unit} during ${label}`;
   }
 
   comparisonStatus(m: SafetyMetric, against: 'month' | 'year' = 'month'): 'green' | 'amber' | 'red' | 'neutral' {

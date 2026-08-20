@@ -33,11 +33,11 @@
             <div class="card-value">{{ m.current | number: '1.2-4' }}<span class="card-unit">{{ m.unit }}</span></div>
             @if (showPrior()) {
               <div class="card-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.prior)">
-                {{ comparisonLabel(m.current, m.prior, priorLabel()) }}
+                {{ comparisonLabel(m.current, m.prior, priorLabel(), m.unit) }}
               </div>
             }
             <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.priorYear)">
-              {{ comparisonLabel(m.current, m.priorYear, priorYearLabelText()) }}
+              {{ comparisonLabel(m.current, m.priorYear, priorYearLabelText(), m.unit) }}
             </div>
             @if (m.target) {
               <div class="target-comparison">
