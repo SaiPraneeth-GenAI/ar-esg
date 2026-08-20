@@ -28,14 +28,17 @@ from app.services.target_calculation import (
     TARGETABLE_METRIC_KEYS,
     boundary_config_hash,
     denominator_mapping_id,
-    classify_status,
+    classify_metric_status,
     compute_baseline,
     extract_metric_value,
     extract_metric_value_batch,
     metric_label,
+    metric_aggregation,
+    metric_direction,
     metric_unit,
     months_between,
     target_value_for_month,
+    target_from_percentage,
     validate_monthly_phasing,
 )
 
@@ -89,7 +92,7 @@ def _target_out(db: Session, target: EmissionTarget) -> TargetOut:
             month_target = target_value_for_month(
                 target.monthly_phasing, period, float(target.target_value) if target.target_value is not None else None, num_months, target.metric_key
             )
-            status_label = classify_status(value, month_target)
+            status_label = classify_metric_status(value, month_target, target.metric_key)
 
     return TargetOut(
         id=target.id,
@@ -127,7 +130,10 @@ def list_targetable_metrics(current: CurrentUser = Depends(require_roles(*VIEW_R
     """The exact same metrics the dashboards show -- picking a target is
     picking one of these, nothing else to configure."""
     return [
-        TargetableMetricOut(key=k, label=CHARTABLE_METRICS[k]["label"], unit=CHARTABLE_METRICS[k]["unit"], group=CHARTABLE_METRICS[k]["group"])
+        TargetableMetricOut(
+            key=k, label=CHARTABLE_METRICS[k]["label"], unit=CHARTABLE_METRICS[k]["unit"],
+            group=CHARTABLE_METRICS[k]["group"], aggregation=metric_aggregation(k), direction=metric_direction(k),
+        )
         for k in TARGETABLE_METRIC_KEYS
     ]
 
@@ -250,7 +256,7 @@ def bulk_import_targets(
 
         target_value = row.target_value
         if target_value is None and row.reduction_percentage is not None and baseline.baseline_value is not None:
-            target_value = baseline.baseline_value * (1 - row.reduction_percentage / 100)
+            target_value = target_from_percentage(baseline.baseline_value, row.reduction_percentage, row.metric_key)
         if target_value is None:
             results.append(
                 TargetBulkRowResult(row_index=row.row_index, status="error", metric_key=row.metric_key, message="Provide a target value or a reduction percentage.")
@@ -502,7 +508,7 @@ def target_performance(
         out_months.append(
             TargetMonthPerformance(
                 period=period, actual=actual, target=month_target, variance_pct=variance_pct,
-                status=classify_status(actual, month_target), completeness_pct=completeness,
+                status=classify_metric_status(actual, month_target, target.metric_key), completeness_pct=completeness,
             )
         )
 

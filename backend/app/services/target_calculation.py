@@ -27,17 +27,16 @@ from app.services.intensity_calculation import (
     compute_intensity_overview_range,
     get_active_revenue_mapping,
 )
+from app.services.safety_calculation import aggregate_metric_range, metric_values_batch
 
 BASELINE_READY_COMPLETENESS_PCT = 95.0
 
-# Targets are scoped to GHG + intensity for now -- Safety metrics need a
-# reduce-vs-increase direction concept the engine doesn't have yet
-# (Defensive Driving Training is "higher is better", unlike everything
-# here, which is a reduction target).
 TARGETABLE_METRIC_KEYS = [
+    "energy_absolute", "water_absolute", "waste_absolute", "production_absolute",
     "scope1_tco2e", "scope2_tco2e", "scope1_2_tco2e",
     "ghg_intensity_production", "energy_per_production", "water_per_production", "waste_per_production",
     "ghg_per_revenue", "energy_per_revenue", "water_per_revenue", "waste_per_revenue",
+    "safety_fatality", "safety_ltifr", "safety_training", "safety_unsafe", "safety_near_miss",
 ]
 
 # metric_key -> field name on a compute_range_totals()/compute_period_totals() dict
@@ -52,12 +51,40 @@ _OTHER_RATE_FIELD = {
     "water_per_revenue": "water_per_revenue",
     "waste_per_revenue": "waste_per_revenue",
 }
+_OTHER_ABSOLUTE_FIELD = {
+    "energy_absolute": "energy_gj",
+    "water_absolute": "water_kl",
+    "waste_absolute": "waste_mt",
+    "production_absolute": "production_mnah",
+}
+_SAFETY_FIELD = {
+    "safety_fatality": "Fatality",
+    "safety_ltifr": "LTIFR",
+    "safety_training": "Defensive Driving Training",
+    "safety_unsafe": "Unsafe Conditions",
+    "safety_near_miss": "Near Miss",
+}
+HIGHER_IS_BETTER_KEYS = {"production_absolute", "safety_training"}
 
 # A rate (tCO2e/MnAh, GJ/Cr, ...) is compared against the same annual
 # figure every month; a budget (a plain tCO2e total) is spread evenly
 # across months by default. Dividing a rate by the month count would be
 # meaningless -- see target_value_for_month.
-RATE_METRIC_KEYS = set(_GHG_RATE_FIELD) | set(_OTHER_RATE_FIELD)
+RATE_METRIC_KEYS = set(_GHG_RATE_FIELD) | set(_OTHER_RATE_FIELD) | {"safety_ltifr", "safety_training"}
+
+
+def metric_direction(metric_key: str) -> str:
+    return "higher" if metric_key in HIGHER_IS_BETTER_KEYS else "lower"
+
+
+def metric_aggregation(metric_key: str) -> str:
+    return "rate" if metric_key in RATE_METRIC_KEYS else "budget"
+
+
+def target_from_percentage(baseline: float, percentage: float, metric_key: str) -> float:
+    factor = 1 + percentage / 100 if metric_key in HIGHER_IS_BETTER_KEYS else 1 - percentage / 100
+    value = baseline * factor
+    return min(value, 100.0) if metric_key == "safety_training" else value
 
 
 def metric_unit(metric_key: str) -> str:
@@ -116,8 +143,12 @@ def extract_metric_value(
         totals = compute_range_totals(db, tenant_id, location_id, months)
         field = _GHG_ABSOLUTE_FIELD.get(metric_key) or _GHG_RATE_FIELD.get(metric_key)
         return totals[field], totals["completeness_pct"]
+    if metric_key in _SAFETY_FIELD:
+        values = metric_values_batch(db, tenant_id, location_id, months)
+        value, _ = aggregate_metric_range(_SAFETY_FIELD[metric_key], values[_SAFETY_FIELD[metric_key]], months)
+        return value, (100.0 if value is not None else None)
     overview = compute_intensity_overview_range(db, tenant_id, location_id, months)
-    value = getattr(overview, _OTHER_RATE_FIELD[metric_key])
+    value = getattr(overview, (_OTHER_RATE_FIELD | _OTHER_ABSOLUTE_FIELD)[metric_key])
     return value, (100.0 if value is not None else None)
 
 
@@ -133,8 +164,12 @@ def extract_metric_value_batch(
         by_month = compute_period_totals_batch(db, tenant_id, location_id, months)
         field = _GHG_ABSOLUTE_FIELD.get(metric_key) or _GHG_RATE_FIELD.get(metric_key)
         return {m: (by_month[m][field], by_month[m]["completeness_pct"]) for m in months}
+    if metric_key in _SAFETY_FIELD:
+        values = metric_values_batch(db, tenant_id, location_id, months)
+        name = _SAFETY_FIELD[metric_key]
+        return {m: (values[name][m][0], 100.0 if values[name][m][0] is not None else None) for m in months}
     overview_by_month = compute_intensity_overview_batch(db, tenant_id, location_id, months)
-    attr = _OTHER_RATE_FIELD[metric_key]
+    attr = (_OTHER_RATE_FIELD | _OTHER_ABSOLUTE_FIELD)[metric_key]
     return {
         m: (getattr(overview_by_month[m], attr), 100.0 if getattr(overview_by_month[m], attr) is not None else None)
         for m in months
@@ -195,9 +230,20 @@ def compute_baseline(
         overall_completeness = range_totals["completeness_pct"]
         any_data = any(by_month[m]["calculated_count"] > 0 or by_month[m]["unresolved_count"] > 0 for m in months)
         any_incomplete = any((by_month[m]["completeness_pct"] or 0) < BASELINE_READY_COMPLETENESS_PCT for m in months)
+    elif metric_key in _SAFETY_FIELD:
+        values = metric_values_batch(db, tenant_id, location_id, months)
+        name = _SAFETY_FIELD[metric_key]
+        month_results = [
+            MonthBaseline(period=m, value=values[name][m][0], completeness_pct=(100.0 if values[name][m][0] is not None else None))
+            for m in months
+        ]
+        baseline_value, _ = aggregate_metric_range(name, values[name], months)
+        overall_completeness = 100.0 if baseline_value is not None else None
+        any_data = any(values[name][m][0] is not None for m in months)
+        any_incomplete = False
     else:
         overview_by_month = compute_intensity_overview_batch(db, tenant_id, location_id, months)
-        attr = _OTHER_RATE_FIELD[metric_key]
+        attr = (_OTHER_RATE_FIELD | _OTHER_ABSOLUTE_FIELD)[metric_key]
         month_results = [
             MonthBaseline(
                 period=m, value=getattr(overview_by_month[m], attr),
@@ -326,13 +372,15 @@ def all_target_comparisons(db: Session, tenant_id: uuid.UUID, location_id: uuid.
     # Batched once for every target this call needs, instead of each
     # target re-running its own compute_range_totals/
     # compute_intensity_overview_range (which would otherwise re-scan the
-    # same approved calculations/production data once per target -- see
-    # extract_metric_value). A dashboard with all 11 metrics targeted
-    # would otherwise cost ~200 queries here instead of these 2.
+    # same approved calculations/production/safety data once per target --
+    # see extract_metric_value). Even a fully targeted dashboard therefore
+    # performs one batched read per source rather than one per measure.
     needs_ghg = any(t.metric_key in _GHG_ABSOLUTE_FIELD or t.metric_key in _GHG_RATE_FIELD for t in targets)
-    needs_other = any(t.metric_key in _OTHER_RATE_FIELD for t in targets)
+    needs_other = any(t.metric_key in _OTHER_RATE_FIELD or t.metric_key in _OTHER_ABSOLUTE_FIELD for t in targets)
+    needs_safety = any(t.metric_key in _SAFETY_FIELD for t in targets)
     ghg_by_month = compute_period_totals_batch(db, tenant_id, location_id, months) if needs_ghg else None
     other_by_month = compute_intensity_overview_batch(db, tenant_id, location_id, months) if needs_other else None
+    safety_by_month = metric_values_batch(db, tenant_id, location_id, months) if needs_safety else None
 
     results: list[TargetStatus] = []
     for target in targets:
@@ -358,9 +406,12 @@ def all_target_comparisons(db: Session, tenant_id: uuid.UUID, location_id: uuid.
             totals = compute_range_totals(db, tenant_id, location_id, window, by_month=ghg_by_month)
             field = _GHG_ABSOLUTE_FIELD.get(target.metric_key) or _GHG_RATE_FIELD.get(target.metric_key)
             actual = totals[field]
+        elif target.metric_key in _SAFETY_FIELD:
+            name = _SAFETY_FIELD[target.metric_key]
+            actual, _ = aggregate_metric_range(name, safety_by_month[name], window)
         else:
             overview = compute_intensity_overview_range(db, tenant_id, location_id, window, by_month=other_by_month)
-            actual = getattr(overview, _OTHER_RATE_FIELD[target.metric_key])
+            actual = getattr(overview, (_OTHER_RATE_FIELD | _OTHER_ABSOLUTE_FIELD)[target.metric_key])
         results.append(
             TargetStatus(
                 target_id=target.id,
@@ -369,7 +420,7 @@ def all_target_comparisons(db: Session, tenant_id: uuid.UUID, location_id: uuid.
                 unit=metric_unit(target.metric_key),
                 actual=actual,
                 target_value=range_target,
-                status=classify_status(actual, range_target),
+                status=classify_metric_status(actual, range_target, target.metric_key),
             )
         )
     return results
@@ -461,13 +512,16 @@ def active_target_comparison(
     range_target = target_value_for_bucket(target, metric_key, months)
     if range_target is None:
         return None
-    return TargetComparison(target_id=target.id, target_value=range_target, status=classify_status(actual, range_target))
+    return TargetComparison(target_id=target.id, target_value=range_target, status=classify_metric_status(actual, range_target, metric_key))
+
+
+def classify_metric_status(actual: float | None, target: float | None, metric_key: str) -> str:
+    if actual is None or target is None:
+        return "Not enough data"
+    within = actual >= target if metric_key in HIGHER_IS_BETTER_KEYS else actual <= target
+    return "Within safe limits" if within else "Exceeded"
 
 
 def classify_status(actual: float | None, target: float | None) -> str:
-    """Classify lower-is-better targets with a clear binary result."""
-    if actual is None or target is None:
-        return "Not enough data"
-    if actual <= target:
-        return "Within safe limits"
-    return "Exceeded"
+    """Backward-compatible lower-is-better classification helper."""
+    return classify_metric_status(actual, target, "scope1_2_tco2e")

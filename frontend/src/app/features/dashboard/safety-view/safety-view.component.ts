@@ -106,4 +106,10 @@ export class SafetyViewComponent implements OnChanges {
     if (favorable) return 'green';
     return Math.abs(pct) <= 10 ? 'amber' : 'red';
   }
+
+  targetStatus(m: SafetyMetric): 'green' | 'red' | 'neutral' {
+    const target = m.target?.target_value;
+    if (m.value === null || target === null || target === undefined) return 'neutral';
+    return (GOOD_DOWN.has(m.name) ? m.value <= target : m.value >= target) ? 'green' : 'red';
+  }
 }

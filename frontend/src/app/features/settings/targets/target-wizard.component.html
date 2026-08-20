@@ -98,13 +98,13 @@
       }
 
       <button type="button" class="link-btn" (click)="showReductionHelper.set(!showReductionHelper())">
-        {{ showReductionHelper() ? 'Hide % reduction calculator' : 'Not sure? Calculate from a % reduction' }}
+        {{ showReductionHelper() ? 'Hide % calculator' : (isHigherBetter() ? 'Not sure? Calculate from a % improvement' : 'Not sure? Calculate from a % reduction') }}
       </button>
 
       @if (showReductionHelper()) {
         <div class="reduction-helper">
           <label class="field">
-            <span class="field-label">Reduction vs. {{ baselineYear() }} (%)</span>
+            <span class="field-label">{{ isHigherBetter() ? 'Improvement' : 'Reduction' }} vs. {{ baselineYear() }} (%)</span>
             <input type="number" min="0" max="100" step="0.1" [ngModel]="reductionPercentage()" (ngModelChange)="reductionPercentage.set($event)" />
           </label>
           @if (suggestedFromReduction() !== null) {

@@ -13,7 +13,9 @@ class TargetableMetricOut(BaseModel):
     key: str
     label: str
     unit: str
-    group: str  # "GHG" | "Intensity by production" | "Intensity by revenue"
+    group: str
+    aggregation: str  # "budget" | "rate"
+    direction: str  # "lower" | "higher"
 
 
 class BaselinePreviewRequest(BaseModel):

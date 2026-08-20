@@ -12,8 +12,12 @@ from app.services.target_calculation import (
     _GHG_ABSOLUTE_FIELD,
     _GHG_RATE_FIELD,
     _OTHER_RATE_FIELD,
+    _OTHER_ABSOLUTE_FIELD,
+    _SAFETY_FIELD,
     boundary_config_hash,
     classify_status,
+    classify_metric_status,
+    target_from_percentage,
     months_between,
     target_value_for_month,
     validate_monthly_phasing,
@@ -61,13 +65,13 @@ def test_targetable_metric_keys_have_no_gaps_or_overlaps():
     # lookup -- a metric present in more than one map, or in none, is a
     # silent bug in extract_metric_value's dispatch.
     ghg_keys = set(_GHG_ABSOLUTE_FIELD) | set(_GHG_RATE_FIELD)
-    other_keys = set(_OTHER_RATE_FIELD)
+    other_keys = set(_OTHER_RATE_FIELD) | set(_OTHER_ABSOLUTE_FIELD) | set(_SAFETY_FIELD)
     assert ghg_keys & other_keys == set()
     assert ghg_keys | other_keys == set(TARGETABLE_METRIC_KEYS)
 
 
-def test_rate_metric_keys_are_exactly_the_intensity_metrics():
-    assert RATE_METRIC_KEYS == set(_GHG_RATE_FIELD) | set(_OTHER_RATE_FIELD)
+def test_rate_metric_keys_include_intensity_and_safety_rates():
+    assert RATE_METRIC_KEYS == set(_GHG_RATE_FIELD) | set(_OTHER_RATE_FIELD) | {"safety_ltifr", "safety_training"}
     assert "scope1_tco2e" not in RATE_METRIC_KEYS
     assert "scope1_2_tco2e" not in RATE_METRIC_KEYS
 
@@ -135,3 +139,10 @@ def test_classify_status_not_enough_data_when_actual_missing():
 
 def test_classify_status_not_enough_data_when_target_missing():
     assert classify_status(9.0, None) == "Not enough data"
+
+
+def test_higher_is_better_target_status_and_percentage():
+    assert classify_metric_status(95.0, 90.0, "safety_training") == "Within safe limits"
+    assert classify_metric_status(85.0, 90.0, "safety_training") == "Exceeded"
+    assert target_from_percentage(80.0, 10.0, "safety_training") == 88.0
+    assert target_from_percentage(98.0, 10.0, "safety_training") == 100.0

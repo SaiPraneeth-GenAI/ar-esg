@@ -83,11 +83,11 @@ export class OverallViewComponent implements OnChanges {
         accent: 'emerald',
         context: null,
         metrics: [
-          { key: 'absolute-energy', label: 'Energy consumption', unit: 'GJ', current: ov.energy_gj, priorYear: ov.prior_year_energy_gj, target: null, targetStatus: null, goodDown: true },
-          { key: 'absolute-ghg', label: 'GHG emissions', unit: 'tCO2e', current: ov.ghg_tco2e, priorYear: ov.prior_year_ghg_tco2e, target: null, targetStatus: null, goodDown: true },
-          { key: 'absolute-water', label: 'Water withdrawal', unit: 'KL', current: ov.water_kl, priorYear: ov.prior_year_water_kl, target: null, targetStatus: null, goodDown: true },
-          { key: 'absolute-waste', label: 'Waste generated', unit: 'MT', current: ov.waste_mt, priorYear: ov.prior_year_waste_mt, target: null, targetStatus: null, goodDown: true },
-          { key: 'absolute-production', label: 'Battery production', unit: 'Mn Ah', current: ov.production_mnah, priorYear: ov.prior_year_production_mnah, target: null, targetStatus: null, goodDown: false }
+          { key: 'absolute-energy', label: 'Energy consumption', unit: 'GJ', current: ov.energy_gj, priorYear: ov.prior_year_energy_gj, ...target(ov.energy_absolute_target), goodDown: true },
+          { key: 'absolute-ghg', label: 'GHG emissions', unit: 'tCO2e', current: ov.ghg_tco2e, priorYear: ov.prior_year_ghg_tco2e, ...target(ov.ghg_absolute_target), goodDown: true },
+          { key: 'absolute-water', label: 'Water withdrawal', unit: 'KL', current: ov.water_kl, priorYear: ov.prior_year_water_kl, ...target(ov.water_absolute_target), goodDown: true },
+          { key: 'absolute-waste', label: 'Waste generated', unit: 'MT', current: ov.waste_mt, priorYear: ov.prior_year_waste_mt, ...target(ov.waste_absolute_target), goodDown: true },
+          { key: 'absolute-production', label: 'Battery production', unit: 'Mn Ah', current: ov.production_mnah, priorYear: ov.prior_year_production_mnah, ...target(ov.production_absolute_target), goodDown: false }
         ]
       },
       {
@@ -128,8 +128,8 @@ export class OverallViewComponent implements OnChanges {
           unit: metric.unit,
           current: metric.value,
           priorYear: metric.prior_year_value,
-          target: null,
-          targetStatus: null,
+          target: metric.target?.target_value ?? null,
+          targetStatus: metric.target?.status ?? null,
           goodDown: SAFETY_GOOD_DOWN.has(metric.name)
         }))
       }
@@ -147,8 +147,9 @@ export class OverallViewComponent implements OnChanges {
   metricState(metric: OverallMetric): MetricState {
     if (metric.current === null) return 'neutral';
     if (metric.target !== null) {
-      if (metric.current <= metric.target) return 'green';
-      const variance = (metric.current - metric.target) / Math.abs(metric.target || 1);
+      const within = metric.goodDown ? metric.current <= metric.target : metric.current >= metric.target;
+      if (within) return 'green';
+      const variance = Math.abs(metric.current - metric.target) / Math.abs(metric.target || 1);
       return variance <= 0.05 ? 'amber' : 'red';
     }
     if (metric.priorYear === null) return 'neutral';
@@ -169,6 +170,29 @@ export class OverallViewComponent implements OnChanges {
 
   groupAttentionCount(group: OverallGroup): number {
     return group.metrics.filter((metric) => ['amber', 'red'].includes(this.metricState(metric))).length;
+  }
+
+  allMetrics(): OverallMetric[] {
+    return this.groups().flatMap((group) => group.metrics);
+  }
+
+  targetCoverage(): number {
+    return this.allMetrics().filter((metric) => metric.target !== null).length;
+  }
+
+  needsAttention(): number {
+    return this.allMetrics().filter((metric) => ['amber', 'red'].includes(this.metricState(metric))).length;
+  }
+
+  withinTarget(): number {
+    return this.allMetrics().filter((metric) => metric.target !== null && this.metricState(metric) === 'green').length;
+  }
+
+  priorityMetric(): OverallMetric | null {
+    const ranked = this.allMetrics().filter((metric) => metric.current !== null);
+    return ranked.find((metric) => this.metricState(metric) === 'red')
+      ?? ranked.find((metric) => this.metricState(metric) === 'amber')
+      ?? null;
   }
 
   barWidth(metric: OverallMetric): number {
@@ -195,10 +219,13 @@ export class OverallViewComponent implements OnChanges {
     if (metric.current === null) return 'Current-period data is not available yet.';
     if (metric.target !== null) {
       const gap = Math.abs(metric.current - metric.target);
-      if (metric.current <= metric.target) {
+      const within = metric.goodDown ? metric.current <= metric.target : metric.current >= metric.target;
+      if (within) {
         return `Performance is within the target by ${this.formatValue(gap)} ${metric.unit}.`;
       }
-      return `The target is exceeded by ${this.formatValue(gap)} ${metric.unit}; this needs attention.`;
+      return metric.goodDown
+        ? `The target is exceeded by ${this.formatValue(gap)} ${metric.unit}; this needs attention.`
+        : `Performance is ${this.formatValue(gap)} ${metric.unit} below target; this needs attention.`;
     }
     if (metric.priorYear === null) return 'A prior-year comparison and target are not available yet.';
     const change = Math.abs(metric.current - metric.priorYear);

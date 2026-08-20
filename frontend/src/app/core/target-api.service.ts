@@ -16,6 +16,8 @@ export interface TargetableMetric {
   label: string;
   unit: string;
   group: string;
+  aggregation: 'budget' | 'rate';
+  direction: 'lower' | 'higher';
 }
 
 export interface BaselinePreviewRequest {

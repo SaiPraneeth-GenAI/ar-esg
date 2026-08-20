@@ -36,6 +36,13 @@ _REVENUE_METRIC_KEYS = {
     "water": "water_per_revenue",
     "waste": "waste_per_revenue",
 }
+_ABSOLUTE_METRIC_KEYS = {
+    "energy": "energy_absolute",
+    "ghg": "scope1_2_tco2e",
+    "water": "water_absolute",
+    "waste": "waste_absolute",
+    "production": "production_absolute",
+}
 
 
 @router.get("/overview", response_model=IntensityOverviewOut)
@@ -60,6 +67,22 @@ def intensity_overview(
     current_ov = compute_intensity_overview_range(db, current.tenant_id, location_id, current_months)
     prior_ov = compute_intensity_overview_range(db, current.tenant_id, location_id, prior_months)
     prior_year_ov = compute_intensity_overview_range(db, current.tenant_id, location_id, prior_year_months)
+
+    energy_absolute_target = active_target_comparison(
+        db, current.tenant_id, location_id, _ABSOLUTE_METRIC_KEYS["energy"], current_months, current_ov.energy_gj
+    )
+    ghg_absolute_target = active_target_comparison(
+        db, current.tenant_id, location_id, _ABSOLUTE_METRIC_KEYS["ghg"], current_months, current_ov.ghg_tco2e
+    )
+    water_absolute_target = active_target_comparison(
+        db, current.tenant_id, location_id, _ABSOLUTE_METRIC_KEYS["water"], current_months, current_ov.water_kl
+    )
+    waste_absolute_target = active_target_comparison(
+        db, current.tenant_id, location_id, _ABSOLUTE_METRIC_KEYS["waste"], current_months, current_ov.waste_mt
+    )
+    production_absolute_target = active_target_comparison(
+        db, current.tenant_id, location_id, _ABSOLUTE_METRIC_KEYS["production"], current_months, current_ov.production_mnah
+    )
 
     ghg_per_production_target = active_target_comparison(
         db, current.tenant_id, location_id, _PRODUCTION_METRIC_KEYS["ghg"], current_months, current_ov.ghg_per_production
@@ -133,6 +156,11 @@ def intensity_overview(
         prior_year_waste_mt=prior_year_ov.waste_mt,
         prior_year_production_mnah=prior_year_ov.production_mnah,
         prior_year_revenue_inr_cr=prior_year_ov.revenue_inr_cr,
+        energy_absolute_target=energy_absolute_target,
+        ghg_absolute_target=ghg_absolute_target,
+        water_absolute_target=water_absolute_target,
+        waste_absolute_target=waste_absolute_target,
+        production_absolute_target=production_absolute_target,
         ghg_per_production_target=ghg_per_production_target,
         energy_per_production_target=energy_per_production_target,
         water_per_production_target=water_per_production_target,

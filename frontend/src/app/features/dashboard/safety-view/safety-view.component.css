@@ -142,3 +142,6 @@
   color: #98a2b3;
   font-style: italic;
 }
+.target-line { display: flex; justify-content: space-between; gap: .5rem; margin-top: .7rem; padding-top: .6rem; border-top: 1px solid #eaecf0; font-size: .7rem; }
+.target-line span { color: #667085; font-weight: 600; }
+.target-line strong { font-variant-numeric: tabular-nums; }

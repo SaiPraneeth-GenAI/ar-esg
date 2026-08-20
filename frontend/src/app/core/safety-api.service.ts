@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { PeriodMode } from './intensity-api.service';
+import { TargetComparison } from './carbon-api.service';
 import { SupabaseService } from './supabase.service';
 
 export interface SafetyMetric {
@@ -11,6 +12,7 @@ export interface SafetyMetric {
   unit: string;
   prior_value: number | null;
   prior_year_value: number | null;
+  target: TargetComparison | null;
 }
 
 export interface SafetyOverview {

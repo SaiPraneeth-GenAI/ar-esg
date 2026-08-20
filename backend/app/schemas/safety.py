@@ -2,6 +2,8 @@ from datetime import date
 
 from pydantic import BaseModel
 
+from app.schemas.carbon import TargetComparison
+
 
 class SafetyMetricOut(BaseModel):
     name: str
@@ -9,6 +11,7 @@ class SafetyMetricOut(BaseModel):
     unit: str
     prior_value: float | None
     prior_year_value: float | None = None
+    target: TargetComparison | None = None
 
 
 class SafetyOverviewOut(BaseModel):

@@ -14,6 +14,18 @@
 .overview-facts strong { color: #6ee7a8; }
 
 .overall-error { padding: 0.75rem 1rem; border: 1px solid #fecdca; border-radius: 10px; background: #fef3f2; color: #b42318; font-size: 0.82rem; }
+.decision-strip { display: grid; grid-template-columns: repeat(3, minmax(125px,.55fr)) minmax(280px,1.8fr); gap: .7rem; }
+.decision-stat, .priority-callout { min-width: 0; padding: .85rem 1rem; border: 1px solid #e4e7ec; border-radius: 12px; background: #fff; box-shadow: 0 2px 6px rgba(16,24,40,.03); }
+.decision-stat { display: grid; grid-template-columns: 1fr auto; align-items: end; }
+.decision-stat small, .priority-callout small { grid-column: 1 / -1; color: #667085; font-size: .6rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+.decision-stat strong { color: #101828; font-size: 1.45rem; line-height: 1.1; }
+.decision-stat span { color: #667085; font-size: .63rem; text-align: right; }
+.decision-stat.attention { border-left: 4px solid #f04438; }
+.decision-stat.positive { border-left: 4px solid #12b76a; }
+.decision-stat.coverage { border-left: 4px solid #2e90fa; }
+.priority-callout { display: flex; flex-direction: column; justify-content: center; gap: .18rem; border-color: #fedf89; background: #fffcf5; }
+.priority-callout strong { color: #93370d; font-size: .82rem; }
+.priority-callout span { color: #475467; font-size: .67rem; line-height: 1.35; }
 .group-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: start; }
 .performance-group { min-width: 0; overflow: hidden; border: 1px solid #e4e7ec; border-radius: 16px; background: #fff; box-shadow: 0 2px 8px rgba(16,24,40,.04); transition: grid-column .2s, opacity .2s, box-shadow .2s; }
 .performance-group.focused { grid-column: 1 / -1; box-shadow: 0 10px 26px rgba(16,24,40,.09); }
@@ -81,6 +93,8 @@
   .group-grid { grid-template-columns: 1fr; }
   .performance-group.focused { grid-column: auto; }
   .focused .metric-list { grid-template-columns: 1fr; }
+  .decision-strip { grid-template-columns: repeat(3, 1fr); }
+  .priority-callout { grid-column: 1 / -1; }
 }
 @media (max-width: 520px) {
   .overall-hero { padding: 1.1rem; }
@@ -88,4 +102,6 @@
   .group-header { grid-template-columns: auto minmax(0,1fr) auto; }
   .metric-meta { align-items: stretch; flex-direction: column; }
   .benchmark-list { justify-content: flex-start; }
+  .decision-strip { grid-template-columns: 1fr; }
+  .priority-callout { grid-column: auto; }
 }

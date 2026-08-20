@@ -46,10 +46,8 @@ export class TargetWizardComponent implements OnInit {
   metricKey = signal<string>('');
   selectedMetric = computed(() => this.metrics().find((m) => m.key === this.metricKey()));
 
-  /** A GHG metric (Scope 1/2/1+2) is a budget -- a plain total, spread
-   * evenly across months by default. Every intensity metric is a rate --
-   * the same figure applies every month, so there's nothing to "spread". */
-  isRateMetric = computed(() => this.selectedMetric()?.group !== 'GHG');
+  isRateMetric = computed(() => this.selectedMetric()?.aggregation === 'rate');
+  isHigherBetter = computed(() => this.selectedMetric()?.direction === 'higher');
 
   today = new Date();
   baselineYear = signal<number>(currentYear() - 1);
@@ -73,7 +71,8 @@ export class TargetWizardComponent implements OnInit {
     const baseline = this.baselinePreview()?.baseline_value;
     const pct = this.reductionPercentage();
     if (baseline === null || baseline === undefined || pct === null) return null;
-    return baseline * (1 - pct / 100);
+    const value = baseline * (this.isHigherBetter() ? 1 + pct / 100 : 1 - pct / 100);
+    return this.metricKey() === 'safety_training' ? Math.min(value, 100) : value;
   });
 
   phasedTotal = computed(() => this.phasedMonths().reduce((sum, m) => sum + (m.value || 0), 0));

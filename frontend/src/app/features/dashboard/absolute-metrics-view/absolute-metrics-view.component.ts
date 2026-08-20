@@ -9,6 +9,7 @@ import {
   showsPriorPeriod
 } from '../../../core/intensity-api.service';
 import { CarbonOverviewComponent } from '../carbon-overview/carbon-overview.component';
+import { TargetComparison } from '../../../core/carbon-api.service';
 
 interface AbsoluteMetric {
   label: string;
@@ -17,6 +18,7 @@ interface AbsoluteMetric {
   priorYear: number | null;
   unit: string;
   goodDown: boolean;
+  target: TargetComparison | null;
 }
 
 @Component({
@@ -54,11 +56,11 @@ export class AbsoluteMetricsViewComponent implements OnChanges {
     const ov = this.overview();
     if (!ov) return [];
     return [
-      { label: 'Total energy consumption', current: ov.energy_gj, prior: ov.prior_energy_gj, priorYear: ov.prior_year_energy_gj, unit: 'GJ', goodDown: true },
-      { label: 'Total water withdrawal', current: ov.water_kl, prior: ov.prior_water_kl, priorYear: ov.prior_year_water_kl, unit: 'KL', goodDown: true },
-      { label: 'Total waste generated', current: ov.waste_mt, prior: ov.prior_waste_mt, priorYear: ov.prior_year_waste_mt, unit: 'MT', goodDown: true },
-      { label: 'Battery production', current: ov.production_mnah, prior: ov.prior_production_mnah, priorYear: ov.prior_year_production_mnah, unit: 'Mn Ah', goodDown: false },
-      { label: 'Revenue', current: ov.revenue_inr_cr, prior: ov.prior_revenue_inr_cr, priorYear: ov.prior_year_revenue_inr_cr, unit: 'INR Cr', goodDown: false }
+      { label: 'Total energy consumption', current: ov.energy_gj, prior: ov.prior_energy_gj, priorYear: ov.prior_year_energy_gj, unit: 'GJ', goodDown: true, target: ov.energy_absolute_target },
+      { label: 'Total water withdrawal', current: ov.water_kl, prior: ov.prior_water_kl, priorYear: ov.prior_year_water_kl, unit: 'KL', goodDown: true, target: ov.water_absolute_target },
+      { label: 'Total waste generated', current: ov.waste_mt, prior: ov.prior_waste_mt, priorYear: ov.prior_year_waste_mt, unit: 'MT', goodDown: true, target: ov.waste_absolute_target },
+      { label: 'Battery production', current: ov.production_mnah, prior: ov.prior_production_mnah, priorYear: ov.prior_year_production_mnah, unit: 'Mn Ah', goodDown: false, target: ov.production_absolute_target },
+      { label: 'Revenue', current: ov.revenue_inr_cr, prior: ov.prior_revenue_inr_cr, priorYear: ov.prior_year_revenue_inr_cr, unit: 'INR Cr', goodDown: false, target: null }
     ];
   }
 
@@ -86,6 +88,12 @@ export class AbsoluteMetricsViewComponent implements OnChanges {
     const favorable = goodDown ? pct <= 0 : pct >= 0;
     if (favorable) return 'green';
     return Math.abs(pct) <= 10 ? 'amber' : 'red';
+  }
+
+  targetStatus(metric: AbsoluteMetric): 'green' | 'red' | 'neutral' {
+    const target = metric.target?.target_value;
+    if (target === null || target === undefined || metric.current === null) return 'neutral';
+    return (metric.goodDown ? metric.current <= target : metric.current >= target) ? 'green' : 'red';
   }
 
 }

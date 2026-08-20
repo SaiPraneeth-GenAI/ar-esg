@@ -11,6 +11,22 @@ target_calculation.py for its dashboard target-comparison card, so this
 registry can't live inside any route module those two might import."""
 
 CHARTABLE_METRICS: dict[str, dict] = {
+    "energy_absolute": {
+        "label": "Total energy consumption", "unit": "GJ", "group": "Absolute metrics",
+        "source": "intensity", "field": "energy_gj", "prior_field": "prior_year_energy_gj",
+    },
+    "water_absolute": {
+        "label": "Total water withdrawal", "unit": "KL", "group": "Absolute metrics",
+        "source": "intensity", "field": "water_kl", "prior_field": "prior_year_water_kl",
+    },
+    "waste_absolute": {
+        "label": "Total waste generated", "unit": "MT", "group": "Absolute metrics",
+        "source": "intensity", "field": "waste_mt", "prior_field": "prior_year_waste_mt",
+    },
+    "production_absolute": {
+        "label": "Battery production", "unit": "Mn Ah", "group": "Absolute metrics",
+        "source": "intensity", "field": "production_mnah", "prior_field": "prior_year_production_mnah",
+    },
     "scope1_tco2e": {
         "label": "Scope 1", "unit": "tCO2e", "group": "GHG",
         "source": "carbon", "field": "scope1_tco2e", "prior_field": "prior_year_scope1_tco2e",

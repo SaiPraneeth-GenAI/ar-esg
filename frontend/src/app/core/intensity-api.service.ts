@@ -88,6 +88,11 @@ export interface IntensityOverview {
   prior_year_waste_mt: number | null;
   prior_year_production_mnah: number | null;
   prior_year_revenue_inr_cr: number | null;
+  energy_absolute_target: TargetComparison | null;
+  ghg_absolute_target: TargetComparison | null;
+  water_absolute_target: TargetComparison | null;
+  waste_absolute_target: TargetComparison | null;
+  production_absolute_target: TargetComparison | null;
   ghg_per_production_target: TargetComparison | null;
   energy_per_production_target: TargetComparison | null;
   water_per_production_target: TargetComparison | null;

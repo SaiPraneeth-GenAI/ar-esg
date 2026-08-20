@@ -23,6 +23,21 @@
       }
     </div>
   } @else {
+    <section class="decision-strip" aria-label="Executive decision summary">
+      <div class="decision-stat attention"><small>Needs attention</small><strong>{{ needsAttention() }}</strong><span>measures to review</span></div>
+      <div class="decision-stat positive"><small>Within target</small><strong>{{ withinTarget() }}</strong><span>declared targets met</span></div>
+      <div class="decision-stat coverage"><small>Target coverage</small><strong>{{ targetCoverage() }}/18</strong><span>measures have targets</span></div>
+      <div class="priority-callout">
+        <small>First business priority</small>
+        @if (priorityMetric(); as priority) {
+          <strong>{{ priority.label }}</strong>
+          <span>{{ businessInsight(priority) }}</span>
+        } @else {
+          <strong>No immediate exception</strong><span>All available measures are moving in the preferred direction.</span>
+        }
+      </div>
+    </section>
+
     <div class="group-grid" [class.has-focus]="focusedGroup() !== null">
       @for (group of groups(); track group.key) {
         <article

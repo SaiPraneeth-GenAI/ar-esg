@@ -52,6 +52,11 @@ class IntensityOverviewOut(BaseModel):
     prior_year_waste_mt: float | None = None
     prior_year_production_mnah: float | None = None
     prior_year_revenue_inr_cr: float | None = None
+    energy_absolute_target: TargetComparison | None = None
+    ghg_absolute_target: TargetComparison | None = None
+    water_absolute_target: TargetComparison | None = None
+    waste_absolute_target: TargetComparison | None = None
+    production_absolute_target: TargetComparison | None = None
     # Active target comparisons -- None (not a fabricated "no target"
     # placeholder) when nothing's been declared for that metric/location.
     ghg_per_production_target: TargetComparison | None = None

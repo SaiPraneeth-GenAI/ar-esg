@@ -35,6 +35,10 @@
                 <div class="card-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.prior, m.goodDown)">{{ comparisonLabel(m.current, m.prior, priorLabel(), m.unit) }}</div>
               }
               <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(m.current, m.priorYear, m.goodDown)">{{ comparisonLabel(m.current, m.priorYear, priorYearLabelText(), m.unit) }}</div>
+              <div class="target-line" [class]="'comparison-' + targetStatus(m)">
+                <span>Target value</span>
+                <strong>{{ m.target?.target_value === null || m.target?.target_value === undefined ? 'Not set' : (m.target!.target_value | number: '1.0-2') + ' ' + m.unit }}</strong>
+              </div>
             } @else {
               <div class="card-empty">Not yet entered</div>
             }
