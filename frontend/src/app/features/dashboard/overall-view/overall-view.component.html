@@ -1,4 +1,17 @@
 <section class="overall-view">
+  <header class="overall-hero">
+    <div>
+      <p class="overall-eyebrow">Executive overview</p>
+      <h2>Performance at a glance</h2>
+      <p>All 18 tracked measures across environment, efficiency, and safety—without the spreadsheet view.</p>
+    </div>
+    <div class="overview-facts" aria-label="Overview coverage">
+      <span><strong>18</strong> measures</span>
+      <span><strong>4</strong> performance areas</span>
+      <span>Selected period</span>
+    </div>
+  </header>
+
   @if (errorMessage()) {
     <div class="overall-error">{{ errorMessage() }}</div>
   }
@@ -10,8 +23,8 @@
   } @else {
     <section class="decision-strip" aria-label="Executive decision summary">
       <div class="decision-stat attention"><small>Needs attention</small><strong>{{ needsAttention() }}</strong><span>measures to review</span></div>
-      <div class="decision-stat positive"><small>Within target</small><strong>{{ withinTarget() }}</strong><span>targets achieved</span></div>
-      <div class="decision-stat coverage"><small>Target coverage</small><strong>{{ targetCoverage() }}/{{ allMetrics().length }}</strong><span>measures governed</span></div>
+      <div class="decision-stat positive"><small>Within target</small><strong>{{ withinTarget() }}</strong><span>declared targets met</span></div>
+      <div class="decision-stat coverage"><small>Target coverage</small><strong>{{ targetCoverage() }}/{{ allMetrics().length }}</strong><span>measures have targets</span></div>
       <div class="priority-callout">
         <small>First business priority</small>
         @if (priorityMetric(); as priority) {
