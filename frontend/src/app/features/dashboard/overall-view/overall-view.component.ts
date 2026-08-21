@@ -55,7 +55,11 @@ export class OverallViewComponent implements OnChanges {
   async ngOnChanges(): Promise<void> {
     this.loading.set(true);
     this.errorMessage.set('');
-    const anchor = `${this.period}-01`;
+    // The executive matrix is a fixed operating scorecard, not another
+    // rendering of the dashboard's Monthly / Quarterly / YTD selector.
+    // It always compares the live current month and quarter with current-
+    // year YTD, while the selected site remains an applicable boundary.
+    const anchor = `${this.currentPeriod()}-01`;
     const location = this.locationId ?? undefined;
     try {
       const [month, quarter, ytd, safetyMonth, safetyYtd] = await Promise.all([
@@ -196,9 +200,14 @@ export class OverallViewComponent implements OnChanges {
     return 'The value is reported, but no approved target has been configured for this measure.';
   }
 
-  monthLabel(): string { return new Date(`${this.period}-01T00:00:00`).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }); }
-  quarterLabel(): string { const date = new Date(`${this.period}-01T00:00:00`); return `Q${Math.floor(date.getMonth() / 3) + 1} ${String(date.getFullYear()).slice(2)}`; }
-  currentYear(): number { return Number(this.period.slice(0, 4)); }
+  private currentPeriod(): string {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  monthLabel(): string { return new Date(`${this.currentPeriod()}-01T00:00:00`).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }); }
+  quarterLabel(): string { const date = new Date(`${this.currentPeriod()}-01T00:00:00`); return `Q${Math.floor(date.getMonth() / 3) + 1} ${String(date.getFullYear()).slice(2)}`; }
+  currentYear(): number { return new Date().getFullYear(); }
   previousYear(): number { return this.currentYear() - 1; }
   toggleMetric(key: string): void { this.selectedMetric.set(this.selectedMetric() === key ? null : key); }
   groupExceptionCount(group: MatrixGroup): number { return group.metrics.filter((metric) => this.metricState(metric) === 'red').length; }
