@@ -1,141 +1,79 @@
 <section class="overall-view">
-  <header class="overall-hero">
-    <div>
-      <p class="overall-eyebrow">Executive overview</p>
-      <h2>Performance at a glance</h2>
-      <p>All 18 tracked measures across environment, efficiency, and safety—without the spreadsheet view.</p>
-    </div>
-    <div class="overview-facts" aria-label="Overview coverage">
-      <span><strong>18</strong> measures</span>
-      <span><strong>4</strong> performance areas</span>
-      <span>Selected period</span>
-    </div>
-  </header>
-
   @if (errorMessage()) {
     <div class="overall-error">{{ errorMessage() }}</div>
   }
 
   @if (loading()) {
-    <div class="group-grid loading-grid" aria-label="Loading overall performance">
-      @for (item of [1, 2, 3, 4]; track item) {
-        <div class="group-skeleton"></div>
-      }
+    <div class="matrix-grid loading-grid" aria-label="Loading executive performance matrix">
+      @for (item of [1, 2, 3, 4]; track item) { <div class="panel-skeleton"></div> }
     </div>
   } @else {
     <section class="decision-strip" aria-label="Executive decision summary">
       <div class="decision-stat attention"><small>Needs attention</small><strong>{{ needsAttention() }}</strong><span>measures to review</span></div>
-      <div class="decision-stat positive"><small>Within target</small><strong>{{ withinTarget() }}</strong><span>declared targets met</span></div>
-      <div class="decision-stat coverage"><small>Target coverage</small><strong>{{ targetCoverage() }}/18</strong><span>measures have targets</span></div>
+      <div class="decision-stat positive"><small>Within target</small><strong>{{ withinTarget() }}</strong><span>targets achieved</span></div>
+      <div class="decision-stat coverage"><small>Target coverage</small><strong>{{ targetCoverage() }}/{{ allMetrics().length }}</strong><span>measures governed</span></div>
       <div class="priority-callout">
         <small>First business priority</small>
         @if (priorityMetric(); as priority) {
-          <strong>{{ priority.label }}</strong>
-          <span>{{ businessInsight(priority) }}</span>
+          <strong>{{ priority.label }}</strong><span>{{ businessInsight(priority) }}</span>
         } @else {
-          <strong>No immediate exception</strong><span>All available measures are moving in the preferred direction.</span>
+          <strong>No immediate exception</strong><span>All available measures are within their approved thresholds.</span>
         }
       </div>
     </section>
 
-    <div class="group-grid" [class.has-focus]="focusedGroup() !== null">
+    <div class="matrix-grid">
       @for (group of groups(); track group.key) {
-        <article
-          class="performance-group"
-          [class]="'accent-' + group.accent"
-          [class.focused]="focusedGroup() === group.key"
-          [class.deemphasized]="focusedGroup() !== null && focusedGroup() !== group.key"
-        >
-          <button type="button" class="group-header" (click)="toggleGroup(group.key)" [attr.aria-expanded]="focusedGroup() === group.key">
-            <span class="group-icon" aria-hidden="true">
+        <article class="matrix-panel" [class]="'accent-' + group.accent">
+          <header class="panel-header">
+            <span class="panel-icon" aria-hidden="true">
               @switch (group.key) {
-                @case ('absolute') {
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M20 4.5c-7.5.2-12.6 3-14.7 7.2-1.7 3.4.2 6.8 3.7 7.1 4.8.4 8.6-4.6 11-14.3Z" />
-                    <path d="M4 20c2.2-4.7 5.7-7.9 10.8-10.2" />
-                  </svg>
-                }
-                @case ('production') {
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 20V9l6 3V8l6 4V5h3v15" />
-                    <path d="M2 20h20M7 16h2m3 0h2m3 0h2" />
-                  </svg>
-                }
-                @case ('revenue') {
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M4 19V5m0 14h16" />
-                    <path d="m7 15 4-4 3 2 5-6" />
-                    <path d="M16 7h3v3" />
-                  </svg>
-                }
-                @case ('safety') {
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 3 20 6v5c0 5-3.2 8.2-8 10-4.8-1.8-8-5-8-10V6l8-3Z" />
-                    <path d="m8.5 12 2.2 2.2 4.8-5" />
-                  </svg>
-                }
+                @case ('production') { <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 20V9l6 3V8l6 4V5h3v15M2 20h20"/></svg> }
+                @case ('safety') { <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 20 6v5c0 5-3.2 8.2-8 10-4.8-1.8-8-5-8-10V6l8-3Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg> }
+                @case ('revenue') { <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5m0 14h16m-13-4 4-4 3 2 5-6"/></svg> }
+                @case ('absolute') { <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 4.5c-7.5.2-12.6 3-14.7 7.2-1.7 3.4.2 6.8 3.7 7.1 4.8.4 8.6-4.6 11-14.3Z"/><path d="M4 20c2.2-4.7 5.7-7.9 10.8-10.2"/></svg> }
               }
             </span>
-            <span class="group-heading-copy">
-              <span class="group-kicker">{{ group.kicker }}</span>
-              <strong>{{ group.title }}</strong>
-              @if (group.context) { <small>{{ group.context }}</small> }
+            <span class="panel-title"><small>{{ group.kicker }}</small><strong>{{ group.title }}</strong><span>{{ group.context }}</span></span>
+            <span class="panel-health" [class.has-attention]="groupExceptionCount(group) > 0">
+              <span class="health-dot"></span>{{ groupExceptionCount(group) || 'No' }} exceptions
             </span>
-            <span class="group-summary" [class.has-attention]="groupAttentionCount(group) > 0">
-              {{ groupAttentionCount(group) > 0
-                ? groupAttentionCount(group) + ' targets missed'
-                : (groupMissingTargets(group) > 0 ? groupMissingTargets(group) + ' targets not set' : 'All targets met') }}
-            </span>
-            <span class="expand-icon">{{ focusedGroup() === group.key ? '−' : '+' }}</span>
-          </button>
+          </header>
 
-          <div class="metric-list">
-            @for (metric of group.metrics; track metric.key) {
-              <button
-                type="button"
-                class="metric-visual"
-                [class.selected]="selectedMetric() === metric.key"
-                (click)="toggleMetric(metric.key)"
-              >
-                <span class="metric-main">
-                  <span class="metric-name">{{ metric.label }}</span>
-                  <span class="metric-reading">
-                    <strong>{{ formatValue(metric.current) }}</strong>
-                    <small>{{ metric.unit }}</small>
+          <div class="table-scroll">
+            <div class="matrix-table" role="table" [attr.aria-label]="group.title">
+              <div class="matrix-row matrix-head" role="row">
+                <span role="columnheader">Measure</span>
+                <span role="columnheader">UOM</span>
+                <span role="columnheader"><small>Prior-year YTD</small>{{ previousYear() }}</span>
+                <span role="columnheader"><small>Current FY</small>Target</span>
+                <span role="columnheader"><small>Current FY</small>YTD {{ currentYear() }}</span>
+                <span role="columnheader"><small>Current period</small>{{ group.periodLabel }}</span>
+              </div>
+
+              @for (metric of group.metrics; track metric.key) {
+                <button type="button" class="matrix-row metric-row" [class.selected]="selectedMetric() === metric.key" (click)="toggleMetric(metric.key)" role="row">
+                  <span class="measure-cell" role="cell"><strong>{{ metric.label }}</strong><small [class]="'state-' + metricState(metric)"><i></i>{{ stateLabel(metric) }}</small></span>
+                  <span class="unit-cell" role="cell">{{ metric.unit }}</span>
+                  <span class="value-cell muted" role="cell">{{ formatValue(metric.priorYear) }}</span>
+                  <span class="value-cell target-cell" role="cell">{{ formatValue(metric.target) }}</span>
+                  <span class="value-cell actual-cell" [class]="'state-' + metricState(metric)" role="cell">
+                    <b>{{ trendArrow(metric, metric.ytd) }}</b><strong>{{ formatValue(metric.ytd) }}</strong><small>{{ varianceLabel(metric) }}</small>
                   </span>
-                </span>
-
-                <span class="comparison-rail" aria-hidden="true">
-                  <span class="rail-fill" [class]="'state-' + metricState(metric)" [style.width.%]="barWidth(metric)"></span>
-                  @if (metric.target !== null) {
-                    <span class="rail-marker target-marker" [style.left.%]="targetMarkerPosition(metric)"></span>
-                  }
-                </span>
-
-                <span class="metric-meta">
-                  <span class="state-label" [class]="'state-' + metricState(metric)"><span class="state-dot"></span>{{ stateLabel(metric) }}</span>
-                  <span class="comparison-summary">
-                    <span class="year-delta" [class]="'state-' + yearComparisonState(metric)">{{ yearComparisonLabel(metric) }}</span>
-                    <span class="target-indicator" [class.not-set]="metric.target === null">
-                      <small>Target</small><span class="target-symbol">◆</span>
-                      <strong>{{ metric.target === null ? 'Not set' : formatValue(metric.target) }} <em>{{ metric.target === null ? '' : metric.unit }}</em></strong>
-                    </span>
+                  <span class="value-cell current-cell" [class]="'state-' + trendState(metric, metric.currentPeriod)" role="cell">
+                    <b>{{ trendArrow(metric, metric.currentPeriod) }}</b><strong>{{ formatValue(metric.currentPeriod) }}</strong>
                   </span>
-                </span>
-
+                </button>
                 @if (selectedMetric() === metric.key) {
-                  <span class="metric-detail">
-                    <span class="insight-icon" aria-hidden="true">i</span>
-                    <span class="insight-copy"><small>Business takeaway</small><strong>{{ businessInsight(metric) }}</strong></span>
-                  </span>
+                  <div class="insight-row"><span>Decision insight</span><strong>{{ businessInsight(metric) }}</strong></div>
                 }
-              </button>
-            }
+              }
+            </div>
           </div>
         </article>
       }
     </div>
 
-    <p class="interaction-hint">Select a performance area to focus it, or select any measure to see its full comparison.</p>
+    <footer class="matrix-footnote"><span><i class="legend-dot green"></i> On target / favourable</span><span><i class="legend-dot amber"></i> Within 5% of target</span><span><i class="legend-dot red"></i> Needs attention</span><span>Select any row for a decision-ready explanation.</span></footer>
   }
 </section>

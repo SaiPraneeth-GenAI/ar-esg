@@ -27,7 +27,6 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
   isTargetsRoute = computed(() => this.currentUrl().startsWith('/admin/targets'));
   isMethodologyRoute = computed(() => this.currentUrl().startsWith('/admin/methodology'));
   isChartsRoute = computed(() => this.currentUrl().startsWith('/admin/charts'));
-  isEnergyAssuranceRoute = computed(() => this.currentUrl().startsWith('/admin/energy-assurance'));
   isDashboardRoute = computed(
     () =>
       !this.isSettingsRoute() &&
@@ -35,8 +34,7 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
       !this.isEmissionFactorsRoute() &&
       !this.isTargetsRoute() &&
       !this.isMethodologyRoute() &&
-      !this.isChartsRoute() &&
-      !this.isEnergyAssuranceRoute()
+      !this.isChartsRoute()
   );
   canAccessDataEntry = computed(() => {
     const r = this.roles();
@@ -64,7 +62,6 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
     if (this.isTargetsRoute()) return { icon: 'targets', title: 'Targets' };
     if (this.isMethodologyRoute()) return { icon: 'methodology', title: 'Calculations' };
     if (this.isChartsRoute()) return { icon: 'charts', title: 'Charts' };
-    if (this.isEnergyAssuranceRoute()) return { icon: 'energy-assurance', title: 'Energy Assurance' };
     return { icon: 'home', title: 'Dashboard' };
   });
 
@@ -113,11 +110,6 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
   goToTargets(): void {
     this.settingsOpen.set(false);
     this.router.navigateByUrl('/admin/targets');
-  }
-
-  goToEnergyAssurance(): void {
-    this.settingsOpen.set(false);
-    this.router.navigateByUrl('/admin/energy-assurance');
   }
 
   openSettings(): void {

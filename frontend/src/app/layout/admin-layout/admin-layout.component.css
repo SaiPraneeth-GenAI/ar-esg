@@ -219,36 +219,6 @@
   background: #1a2f24;
 }
 
-.nav-divider {
-  margin: 0.8rem 0.55rem 0.35rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid #2b2f36;
-  color: #666d76;
-  font-size: 0.58rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  white-space: nowrap;
-}
-
-.assurance-item {
-  color: #aeb8c4;
-}
-
-.assurance-item svg {
-  color: #54dca7;
-}
-
-.lab-badge {
-  flex: 0 0 auto !important;
-  padding: 0.16rem 0.3rem;
-  border: 1px solid #355e4c;
-  border-radius: 4px;
-  color: #72e3b5;
-  font-size: 0.52rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
 /* Main area */
 .main {
   flex: 1;

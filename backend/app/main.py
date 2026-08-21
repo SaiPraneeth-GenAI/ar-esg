@@ -20,7 +20,6 @@ from app.api.routes import (
     charts,
     dashboard,
     entries,
-    energy_assurance,
     health,
     intensity,
     notifications,
@@ -30,16 +29,11 @@ from app.api.routes import (
     targets,
 )
 from app.core.config import get_settings
-from app.services.energy_assurance_schema import ensure_energy_assurance_schema
 
 settings = get_settings()
 
 app = FastAPI(title="Envigo API", version="0.1.0")
 
-
-@app.on_event("startup")
-def prepare_isolated_showcase_schema() -> None:
-    ensure_energy_assurance_schema()
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,7 +49,6 @@ app.include_router(admin_locations.router)
 app.include_router(admin_tenant_settings.router)
 app.include_router(dashboard.router)
 app.include_router(entries.router)
-app.include_router(energy_assurance.router)
 app.include_router(admin_mapping_templates.router)
 app.include_router(admin_emission_factors.router)
 app.include_router(carbon.router)

@@ -3,27 +3,28 @@ import { TargetComparison } from '../../../core/carbon-api.service';
 import { IntensityApiService, IntensityOverview, PeriodMode } from '../../../core/intensity-api.service';
 import { SafetyApiService, SafetyMetric } from '../../../core/safety-api.service';
 
-type GroupKey = 'absolute' | 'production' | 'revenue' | 'safety';
+type GroupKey = 'production' | 'safety' | 'revenue' | 'absolute';
 type MetricState = 'green' | 'amber' | 'red' | 'neutral';
 
-interface OverallMetric {
+interface MatrixMetric {
   key: string;
   label: string;
   unit: string;
-  current: number | null;
   priorYear: number | null;
   target: number | null;
-  targetStatus: string | null;
+  ytd: number | null;
+  currentPeriod: number | null;
   goodDown: boolean;
 }
 
-interface OverallGroup {
+interface MatrixGroup {
   key: GroupKey;
   title: string;
   kicker: string;
   accent: string;
+  periodLabel: string;
   context: string | null;
-  metrics: OverallMetric[];
+  metrics: MatrixMetric[];
 }
 
 const SAFETY_GOOD_DOWN = new Set(['Fatality', 'LTIFR', 'Unsafe Conditions', 'Near Miss']);
@@ -44,218 +45,166 @@ export class OverallViewComponent implements OnChanges {
 
   loading = signal(true);
   errorMessage = signal('');
-  overview = signal<IntensityOverview | null>(null);
-  safetyMetrics = signal<SafetyMetric[]>([]);
-  focusedGroup = signal<GroupKey | null>(null);
+  monthOverview = signal<IntensityOverview | null>(null);
+  quarterOverview = signal<IntensityOverview | null>(null);
+  ytdOverview = signal<IntensityOverview | null>(null);
+  monthSafety = signal<SafetyMetric[]>([]);
+  ytdSafety = signal<SafetyMetric[]>([]);
   selectedMetric = signal<string | null>(null);
 
   async ngOnChanges(): Promise<void> {
     this.loading.set(true);
     this.errorMessage.set('');
+    const anchor = `${this.period}-01`;
+    const location = this.locationId ?? undefined;
     try {
-      const [overview, safety] = await Promise.all([
-        this.intensityApi.getOverview(`${this.period}-01`, this.locationId ?? undefined, this.periodMode),
-        this.safetyApi.getOverview(`${this.period}-01`, this.locationId ?? undefined, this.periodMode)
+      const [month, quarter, ytd, safetyMonth, safetyYtd] = await Promise.all([
+        this.intensityApi.getOverview(anchor, location, 'month'),
+        this.intensityApi.getOverview(anchor, location, 'quarter'),
+        this.intensityApi.getOverview(anchor, location, 'ytd'),
+        this.safetyApi.getOverview(anchor, location, 'month'),
+        this.safetyApi.getOverview(anchor, location, 'ytd')
       ]);
-      this.overview.set(overview);
-      this.safetyMetrics.set(safety.metrics);
+      this.monthOverview.set(month);
+      this.quarterOverview.set(quarter);
+      this.ytdOverview.set(ytd);
+      this.monthSafety.set(safetyMonth.metrics);
+      this.ytdSafety.set(safetyYtd.metrics);
     } catch {
-      this.errorMessage.set('Could not load the overall performance view.');
+      this.errorMessage.set('Could not load the executive performance matrix.');
     } finally {
       this.loading.set(false);
     }
   }
 
-  groups(): OverallGroup[] {
-    const ov = this.overview();
-    if (!ov) return [];
+  groups(): MatrixGroup[] {
+    const month = this.monthOverview();
+    const quarter = this.quarterOverview();
+    const ytd = this.ytdOverview();
+    if (!month || !quarter || !ytd) return [];
 
-    const target = (comparison: TargetComparison | null): Pick<OverallMetric, 'target' | 'targetStatus'> => ({
-      target: comparison?.target_value ?? null,
-      targetStatus: comparison?.status ?? null
-    });
+    const targetValue = (comparison: TargetComparison | null): number | null => comparison?.target_value ?? null;
+    const monthSafety = new Map(this.monthSafety().map((metric) => [metric.name, metric]));
 
     return [
       {
-        key: 'absolute',
-        title: 'Absolute metrics',
-        kicker: 'Environmental footprint',
-        accent: 'emerald',
-        context: null,
+        key: 'production', title: 'Intensity by production', kicker: 'Environmental performance', accent: 'emerald',
+        periodLabel: this.monthLabel(),
+        context: month.production_mnah === null ? null : `${this.formatValue(month.production_mnah)} Mn Ah produced this month`,
         metrics: [
-          { key: 'absolute-energy', label: 'Energy consumption', unit: 'GJ', current: ov.energy_gj, priorYear: ov.prior_year_energy_gj, ...target(ov.energy_absolute_target), goodDown: true },
-          { key: 'absolute-ghg', label: 'GHG emissions', unit: 'tCO2e', current: ov.ghg_tco2e, priorYear: ov.prior_year_ghg_tco2e, ...target(ov.ghg_absolute_target), goodDown: true },
-          { key: 'absolute-water', label: 'Water withdrawal', unit: 'KL', current: ov.water_kl, priorYear: ov.prior_year_water_kl, ...target(ov.water_absolute_target), goodDown: true },
-          { key: 'absolute-waste', label: 'Waste generated', unit: 'MT', current: ov.waste_mt, priorYear: ov.prior_year_waste_mt, ...target(ov.waste_absolute_target), goodDown: true },
-          { key: 'absolute-production', label: 'Battery production', unit: 'Mn Ah', current: ov.production_mnah, priorYear: ov.prior_year_production_mnah, ...target(ov.production_absolute_target), goodDown: false }
+          this.metric('production-energy', 'Specific energy per battery production', 'GJ/Mn Ah', ytd.prior_year_energy_per_production, targetValue(ytd.energy_per_production_target), ytd.energy_per_production, month.energy_per_production, true),
+          this.metric('production-ghg', 'Specific GHG emissions per battery production', 'tCO2e/Mn Ah', ytd.prior_year_ghg_per_production, targetValue(ytd.ghg_per_production_target), ytd.ghg_per_production, month.ghg_per_production, true),
+          this.metric('production-water', 'Specific water per battery production', 'KL/Mn Ah', ytd.prior_year_water_per_production, targetValue(ytd.water_per_production_target), ytd.water_per_production, month.water_per_production, true),
+          this.metric('production-waste', 'Specific waste per battery production', 'MT/Mn Ah', ytd.prior_year_waste_per_production, targetValue(ytd.waste_per_production_target), ytd.waste_per_production, month.waste_per_production, true)
         ]
       },
       {
-        key: 'production',
-        title: 'Intensity by production',
-        kicker: 'Efficiency per output',
-        accent: 'blue',
-        context: ov.production_mnah === null ? null : `${this.formatValue(ov.production_mnah)} Mn Ah produced`,
+        key: 'safety', title: 'Safety', kicker: 'People and operations', accent: 'blue', periodLabel: this.monthLabel(),
+        context: 'Monthly operational safety scorecard',
+        metrics: this.ytdSafety().map((metric) => {
+          const monthly = monthSafety.get(metric.name);
+          return this.metric(`safety-${metric.name.toLowerCase().replaceAll(' ', '-')}`, metric.name, metric.unit, metric.prior_year_value, targetValue(metric.target), metric.value, monthly?.value ?? null, SAFETY_GOOD_DOWN.has(metric.name));
+        })
+      },
+      {
+        key: 'revenue', title: 'Intensity by revenue', kicker: 'Environmental performance', accent: 'violet',
+        periodLabel: this.quarterLabel(),
+        context: quarter.revenue_inr_cr === null ? null : `${this.formatValue(quarter.revenue_inr_cr)} INR Cr revenue this quarter`,
         metrics: [
-          { key: 'production-energy', label: 'Energy intensity', unit: 'GJ/Mn Ah', current: ov.energy_per_production, priorYear: ov.prior_year_energy_per_production, ...target(ov.energy_per_production_target), goodDown: true },
-          { key: 'production-ghg', label: 'GHG intensity', unit: 'tCO2e/Mn Ah', current: ov.ghg_per_production, priorYear: ov.prior_year_ghg_per_production, ...target(ov.ghg_per_production_target), goodDown: true },
-          { key: 'production-water', label: 'Water intensity', unit: 'KL/Mn Ah', current: ov.water_per_production, priorYear: ov.prior_year_water_per_production, ...target(ov.water_per_production_target), goodDown: true },
-          { key: 'production-waste', label: 'Waste intensity', unit: 'MT/Mn Ah', current: ov.waste_per_production, priorYear: ov.prior_year_waste_per_production, ...target(ov.waste_per_production_target), goodDown: true }
+          this.metric('revenue-energy', 'Specific energy per revenue', 'GJ/INR Cr', ytd.prior_year_energy_per_revenue, targetValue(ytd.energy_per_revenue_target), ytd.energy_per_revenue, quarter.energy_per_revenue, true),
+          this.metric('revenue-ghg', 'Specific GHG emissions per revenue', 'tCO2e/INR Cr', ytd.prior_year_ghg_per_revenue, targetValue(ytd.ghg_per_revenue_target), ytd.ghg_per_revenue, quarter.ghg_per_revenue, true),
+          this.metric('revenue-water', 'Specific water per revenue', 'KL/INR Cr', ytd.prior_year_water_per_revenue, targetValue(ytd.water_per_revenue_target), ytd.water_per_revenue, quarter.water_per_revenue, true),
+          this.metric('revenue-waste', 'Specific waste per revenue', 'MT/INR Cr', ytd.prior_year_waste_per_revenue, targetValue(ytd.waste_per_revenue_target), ytd.waste_per_revenue, quarter.waste_per_revenue, true)
         ]
       },
       {
-        key: 'revenue',
-        title: 'Intensity by revenue',
-        kicker: 'Efficiency per revenue',
-        accent: 'violet',
-        context: ov.revenue_inr_cr === null ? null : `${this.formatValue(ov.revenue_inr_cr)} INR Cr revenue`,
+        key: 'absolute', title: 'Absolute environmental performance', kicker: 'Environmental performance', accent: 'coral',
+        periodLabel: this.monthLabel(), context: 'Consumption and footprint totals',
         metrics: [
-          { key: 'revenue-energy', label: 'Energy intensity', unit: 'GJ/INR Cr', current: ov.energy_per_revenue, priorYear: ov.prior_year_energy_per_revenue, ...target(ov.energy_per_revenue_target), goodDown: true },
-          { key: 'revenue-ghg', label: 'GHG intensity', unit: 'tCO2e/INR Cr', current: ov.ghg_per_revenue, priorYear: ov.prior_year_ghg_per_revenue, ...target(ov.ghg_per_revenue_target), goodDown: true },
-          { key: 'revenue-water', label: 'Water intensity', unit: 'KL/INR Cr', current: ov.water_per_revenue, priorYear: ov.prior_year_water_per_revenue, ...target(ov.water_per_revenue_target), goodDown: true },
-          { key: 'revenue-waste', label: 'Waste intensity', unit: 'MT/INR Cr', current: ov.waste_per_revenue, priorYear: ov.prior_year_waste_per_revenue, ...target(ov.waste_per_revenue_target), goodDown: true }
+          this.metric('absolute-energy', 'Total energy consumption', 'GJ', ytd.prior_year_energy_gj, targetValue(ytd.energy_absolute_target), ytd.energy_gj, month.energy_gj, true),
+          this.metric('absolute-ghg', 'Total GHG emissions', 'tCO2e', ytd.prior_year_ghg_tco2e, targetValue(ytd.ghg_absolute_target), ytd.ghg_tco2e, month.ghg_tco2e, true),
+          this.metric('absolute-water', 'Total water withdrawal', 'KL', ytd.prior_year_water_kl, targetValue(ytd.water_absolute_target), ytd.water_kl, month.water_kl, true),
+          this.metric('absolute-waste', 'Total waste generated', 'MT', ytd.prior_year_waste_mt, targetValue(ytd.waste_absolute_target), ytd.waste_mt, month.waste_mt, true),
+          this.metric('absolute-production', 'Battery production', 'Mn Ah', ytd.prior_year_production_mnah, targetValue(ytd.production_absolute_target), ytd.production_mnah, month.production_mnah, false)
         ]
-      },
-      {
-        key: 'safety',
-        title: 'Safety & trends',
-        kicker: 'People and operations',
-        accent: 'amber',
-        context: null,
-        metrics: this.safetyMetrics().map((metric) => ({
-          key: `safety-${metric.name.toLowerCase().replaceAll(' ', '-')}`,
-          label: metric.name,
-          unit: metric.unit,
-          current: metric.value,
-          priorYear: metric.prior_year_value,
-          target: metric.target?.target_value ?? null,
-          targetStatus: metric.target?.status ?? null,
-          goodDown: SAFETY_GOOD_DOWN.has(metric.name)
-        }))
       }
     ];
   }
 
-  toggleGroup(key: GroupKey): void {
-    this.focusedGroup.set(this.focusedGroup() === key ? null : key);
+  private metric(key: string, label: string, unit: string, priorYear: number | null, target: number | null, ytd: number | null, currentPeriod: number | null, goodDown: boolean): MatrixMetric {
+    return { key, label, unit, priorYear, target, ytd, currentPeriod, goodDown };
   }
 
-  toggleMetric(key: string): void {
-    this.selectedMetric.set(this.selectedMetric() === key ? null : key);
+  allMetrics(): MatrixMetric[] { return this.groups().flatMap((group) => group.metrics); }
+  targetCoverage(): number { return this.allMetrics().filter((metric) => metric.target !== null).length; }
+  needsAttention(): number { return this.allMetrics().filter((metric) => ['amber', 'red'].includes(this.metricState(metric))).length; }
+  withinTarget(): number { return this.allMetrics().filter((metric) => metric.target !== null && this.metricState(metric) === 'green').length; }
+
+  priorityMetric(): MatrixMetric | null {
+    const metrics = this.allMetrics().filter((metric) => metric.ytd !== null);
+    return metrics.find((metric) => this.metricState(metric) === 'red') ?? metrics.find((metric) => this.metricState(metric) === 'amber') ?? null;
   }
 
-  metricState(metric: OverallMetric): MetricState {
-    if (metric.current === null) return 'neutral';
-    if (metric.target !== null) {
-      const within = metric.goodDown ? metric.current <= metric.target : metric.current >= metric.target;
-      if (within) return 'green';
-      const variance = Math.abs(metric.current - metric.target) / Math.abs(metric.target || 1);
-      return variance <= 0.05 ? 'amber' : 'red';
-    }
-    return 'neutral';
+  metricState(metric: MatrixMetric): MetricState {
+    if (metric.ytd === null || metric.target === null) return 'neutral';
+    const within = metric.goodDown ? metric.ytd <= metric.target : metric.ytd >= metric.target;
+    if (within) return 'green';
+    const variance = Math.abs(metric.ytd - metric.target) / Math.abs(metric.target || 1);
+    return variance <= 0.05 ? 'amber' : 'red';
   }
 
-  stateLabel(metric: OverallMetric): string {
+  stateLabel(metric: MatrixMetric): string {
     switch (this.metricState(metric)) {
-      case 'green': return 'Within target';
+      case 'green': return 'On target';
       case 'amber': return 'Near target';
-      case 'red': return metric.goodDown ? 'Above target' : 'Below target';
-      default: return metric.current === null ? 'Awaiting data' : 'Target not set';
+      case 'red': return 'Needs attention';
+      default: return metric.ytd === null ? 'Awaiting data' : 'Target not set';
     }
   }
 
-  groupAttentionCount(group: OverallGroup): number {
-    return group.metrics.filter((metric) => ['amber', 'red'].includes(this.metricState(metric))).length;
+  trendState(metric: MatrixMetric, value: number | null): MetricState {
+    if (value === null || metric.priorYear === null) return 'neutral';
+    return (metric.goodDown ? value <= metric.priorYear : value >= metric.priorYear) ? 'green' : 'red';
   }
 
-  groupMissingTargets(group: OverallGroup): number {
-    return group.metrics.filter((metric) => metric.target === null).length;
+  trendArrow(metric: MatrixMetric, value: number | null): string {
+    if (value === null || metric.priorYear === null || value === metric.priorYear) return '→';
+    return value > metric.priorYear ? '↑' : '↓';
   }
 
-  allMetrics(): OverallMetric[] {
-    return this.groups().flatMap((group) => group.metrics);
+  variancePercent(metric: MatrixMetric): number | null {
+    if (metric.ytd === null || metric.target === null || metric.target === 0) return null;
+    return ((metric.ytd - metric.target) / Math.abs(metric.target)) * 100;
   }
 
-  targetCoverage(): number {
-    return this.allMetrics().filter((metric) => metric.target !== null).length;
+  varianceLabel(metric: MatrixMetric): string {
+    const variance = this.variancePercent(metric);
+    if (variance === null) return 'No target comparison';
+    if (Math.abs(variance) < 0.05) return 'Exactly on target';
+    return `${Math.abs(variance).toFixed(1)}% ${variance > 0 ? 'above' : 'below'} target`;
   }
 
-  needsAttention(): number {
-    return this.allMetrics().filter((metric) => ['amber', 'red'].includes(this.metricState(metric))).length;
-  }
-
-  withinTarget(): number {
-    return this.allMetrics().filter((metric) => metric.target !== null && this.metricState(metric) === 'green').length;
-  }
-
-  priorityMetric(): OverallMetric | null {
-    const ranked = this.allMetrics().filter((metric) => metric.current !== null);
-    return ranked.find((metric) => this.metricState(metric) === 'red')
-      ?? ranked.find((metric) => this.metricState(metric) === 'amber')
-      ?? null;
-  }
-
-  barWidth(metric: OverallMetric): number {
-    if (metric.current === null) return 0;
-    const maximum = Math.max(metric.current, metric.target ?? 0, 0.0001) * 1.12;
-    return Math.min((metric.current / maximum) * 100, 100);
-  }
-
-  private markerPosition(metric: OverallMetric, marker: number | null): number {
-    if (marker === null) return 0;
-    const maximum = Math.max(metric.current ?? 0, metric.target ?? 0, 0.0001) * 1.12;
-    return Math.min((marker / maximum) * 100, 100);
-  }
-
-  targetMarkerPosition(metric: OverallMetric): number {
-    return this.markerPosition(metric, metric.target);
-  }
-
-  yearDelta(metric: OverallMetric): number | null {
-    if (metric.current === null || metric.priorYear === null) return null;
-    return Math.abs(metric.current - metric.priorYear);
-  }
-
-  yearArrow(metric: OverallMetric): string {
-    if (metric.current === null || metric.priorYear === null || metric.current === metric.priorYear) return '→';
-    return metric.current > metric.priorYear ? '↑' : '↓';
-  }
-
-  yearComparisonState(metric: OverallMetric): MetricState {
-    if (metric.current === null || metric.priorYear === null) return 'neutral';
-    const favourable = metric.goodDown ? metric.current <= metric.priorYear : metric.current >= metric.priorYear;
-    return favourable ? 'green' : 'red';
-  }
-
-  yearComparisonLabel(metric: OverallMetric): string {
-    const delta = this.yearDelta(metric);
-    if (delta === null) return 'No last-year comparison';
-    if (delta === 0) return `No change from last year`;
-    return `${this.yearArrow(metric)} ${this.formatValue(delta)} ${metric.unit} ${metric.current! > metric.priorYear! ? 'higher' : 'lower'} than last year`;
-  }
-
-  businessInsight(metric: OverallMetric): string {
-    if (metric.current === null) return 'Current-period data is not available yet.';
+  businessInsight(metric: MatrixMetric): string {
+    if (metric.ytd === null) return 'Current FY-to-date data is not available yet.';
     if (metric.target !== null) {
-      const gap = Math.abs(metric.current - metric.target);
-      const within = metric.goodDown ? metric.current <= metric.target : metric.current >= metric.target;
-      if (within) {
-        return `Performance is within the target by ${this.formatValue(gap)} ${metric.unit}.`;
-      }
-      return metric.goodDown
-        ? `The target is exceeded by ${this.formatValue(gap)} ${metric.unit}; this needs attention.`
-        : `Performance is ${this.formatValue(gap)} ${metric.unit} below target; this needs attention.`;
+      const gap = Math.abs(metric.ytd - metric.target);
+      const within = metric.goodDown ? metric.ytd <= metric.target : metric.ytd >= metric.target;
+      return within
+        ? `FY-to-date performance is inside target by ${this.formatValue(gap)} ${metric.unit}.`
+        : `FY-to-date performance misses target by ${this.formatValue(gap)} ${metric.unit}. Review the source entries and operating drivers.`;
     }
-    if (metric.priorYear === null) return 'A target is not set and a prior-year comparison is not available yet.';
-    const change = Math.abs(metric.current - metric.priorYear);
-    const favourable = metric.goodDown ? metric.current <= metric.priorYear : metric.current >= metric.priorYear;
-    return favourable
-      ? `Performance improved by ${this.formatValue(change)} ${metric.unit} compared with the same time previous year.`
-      : `Performance moved away from the preferred direction by ${this.formatValue(change)} ${metric.unit} compared with the same time previous year.`;
+    return 'The value is reported, but no approved target has been configured for this measure.';
   }
+
+  monthLabel(): string { return new Date(`${this.period}-01T00:00:00`).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }); }
+  quarterLabel(): string { const date = new Date(`${this.period}-01T00:00:00`); return `Q${Math.floor(date.getMonth() / 3) + 1} ${String(date.getFullYear()).slice(2)}`; }
+  currentYear(): number { return Number(this.period.slice(0, 4)); }
+  previousYear(): number { return this.currentYear() - 1; }
+  toggleMetric(key: string): void { this.selectedMetric.set(this.selectedMetric() === key ? null : key); }
+  groupExceptionCount(group: MatrixGroup): number { return group.metrics.filter((metric) => this.metricState(metric) === 'red').length; }
 
   formatValue(value: number | null): string {
     if (value === null) return '—';
-    return value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 3 });
+    return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
   }
 }

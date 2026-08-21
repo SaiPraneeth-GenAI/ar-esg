@@ -50,13 +50,6 @@ export const routes: Routes = [
         loadComponent: () => import('./features/charts/charts.component').then((m) => m.ChartsComponent)
       },
       {
-        path: 'energy-assurance',
-        loadComponent: () =>
-          import('./features/energy-assurance/energy-assurance.component').then(
-            (m) => m.EnergyAssuranceComponent
-          )
-      },
-      {
         path: 'settings/users',
         canActivate: [adminOnlyGuard],
         loadComponent: () =>
