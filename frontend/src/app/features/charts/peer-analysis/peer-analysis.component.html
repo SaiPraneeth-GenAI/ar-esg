@@ -10,7 +10,7 @@
     <p class="muted">Loading…</p>
   } @else {
     <div class="intro">
-      <p class="intro-text">Amara Raja vs up to {{ 4 }} peers, one reporting year at a time. Pick a peer, upload their BRSR report, and the figures come out as comparison charts.</p>
+      <p class="intro-text">Demo Company vs up to {{ 4 }} peers, one reporting year at a time. Pick a peer, upload their BRSR report, and the figures come out as comparison charts.</p>
     </div>
 
     <div class="peer-picker">
@@ -68,7 +68,7 @@
         <div class="step-badge">1</div>
         <div class="step-body">
           <h2>Upload {{ company()?.name }}'s {{ year() }} BRSR report</h2>
-          <p class="step-desc">Upload the PDF and AI will pull out the figures that line up with what Amara Raja already tracks — Scope 1/2, intensity, and safety metrics. You'll review them before anything is saved.</p>
+          <p class="step-desc">Upload the PDF and AI will pull out the figures that line up with what the demo company already tracks — Scope 1/2, intensity, and safety metrics. You'll review them before anything is saved.</p>
 
           @if (peerApi.extractError()) {
             <div class="banner error">{{ peerApi.extractError() }}</div>
@@ -121,7 +121,7 @@
         <div class="step-badge">2</div>
         <div class="step-body">
           <h2>Review {{ company()?.name }}'s {{ year() }} figures</h2>
-          <p class="step-desc">Amara Raja's own {{ year() }} figure is shown for reference. Check the extracted peer values against the report and fix anything that looks off before saving.</p>
+          <p class="step-desc">The demo company's own {{ year() }} figure is shown for reference. Check the extracted peer values against the report and fix anything that looks off before saving.</p>
           @if (peerApi.extractResult()?.elapsed_seconds !== null && peerApi.extractResult()?.elapsed_seconds !== undefined) {
             <p class="extract-timing">Extracted in {{ peerApi.extractResult()!.elapsed_seconds }}s</p>
           }
@@ -133,7 +133,7 @@
                 <thead>
                   <tr>
                     <th>Metric</th>
-                    <th>Amara Raja</th>
+                    <th>Demo Company</th>
                     <th>{{ company()?.name }}</th>
                   </tr>
                 </thead>
@@ -174,7 +174,7 @@
         <div class="step-badge">✓</div>
         <div class="step-body">
           <div class="compare-header">
-            <h2>Amara Raja vs {{ compareResult()?.peer_company_name || company()?.name }} — {{ year() }}</h2>
+            <h2>Demo Company vs {{ compareResult()?.peer_company_name || company()?.name }} — {{ year() }}</h2>
             <div class="compare-header-actions">
               @if (companies().length > 1) {
                 <button type="button" class="text-btn" (click)="toggleCompareAll()">
@@ -200,7 +200,7 @@
                         <thead>
                           <tr>
                             <th>Metric</th>
-                            <th>Amara Raja</th>
+                            <th>Demo Company</th>
                             @for (c of compareAllCompanies(); track c.id) {
                               <th>{{ c.name }}</th>
                             }
@@ -227,7 +227,7 @@
             <p class="muted">Loading comparison…</p>
           } @else if (compareResult()) {
             <div class="legend">
-              <span class="legend-item"><span class="legend-swatch swatch-self"></span>Amara Raja</span>
+              <span class="legend-item"><span class="legend-swatch swatch-self"></span>Demo Company</span>
               <span class="legend-item"><span class="legend-swatch swatch-peer"></span>{{ compareResult()!.peer_company_name }}</span>
             </div>
 

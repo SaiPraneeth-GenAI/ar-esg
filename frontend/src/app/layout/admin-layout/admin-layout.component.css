@@ -54,11 +54,25 @@
   white-space: nowrap;
 }
 
-.sidebar-logo img {
+.sidebar-logo img,
+.demo-logo-mark {
   width: 30px;
   height: 30px;
-  object-fit: contain;
   flex-shrink: 0;
+}
+
+.demo-logo-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(110, 231, 168, 0.72);
+  border-radius: 9px;
+  background: linear-gradient(145deg, #1e513c, #122d24);
+  color: #79efb5;
+  font-size: 0.92rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 0 12px rgba(79, 209, 165, 0.24), inset 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .sidebar-logo span {
@@ -240,10 +254,36 @@
 }
 
 .topbar-logo {
-  height: 42px;
-  width: auto;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.62rem;
   flex-shrink: 0;
+}
+
+.topbar-logo .demo-logo-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
+.demo-lockup-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+
+.demo-lockup-copy strong {
+  color: #173f31;
+  font-size: 1rem;
+  letter-spacing: 0.13em;
+}
+
+.demo-lockup-copy small {
+  margin-top: 0.25rem;
+  color: #748078;
+  font-size: 0.58rem;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
 }
 
 /* The current section, named with the same icon its sidebar item uses --
