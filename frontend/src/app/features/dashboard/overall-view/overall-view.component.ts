@@ -209,6 +209,14 @@ export class OverallViewComponent implements OnChanges {
   quarterLabel(): string { const date = new Date(`${this.currentPeriod()}-01T00:00:00`); return `Q${Math.floor(date.getMonth() / 3) + 1} ${String(date.getFullYear()).slice(2)}`; }
   currentYear(): number { return new Date().getFullYear(); }
   previousYear(): number { return this.currentYear() - 1; }
+  currentFiscalYearShort(): string {
+    const now = new Date();
+    const fiscalYearEnd = now.getMonth() >= 3 ? now.getFullYear() + 1 : now.getFullYear();
+    return String(fiscalYearEnd).slice(-2);
+  }
+  previousFiscalYearShort(): string {
+    return String(Number(this.currentFiscalYearShort()) - 1).padStart(2, '0');
+  }
   toggleMetric(key: string): void { this.selectedMetric.set(this.selectedMetric() === key ? null : key); }
   groupExceptionCount(group: MatrixGroup): number { return group.metrics.filter((metric) => this.metricState(metric) === 'red').length; }
 
