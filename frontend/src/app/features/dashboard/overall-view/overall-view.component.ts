@@ -150,10 +150,14 @@ export class OverallViewComponent implements OnChanges {
   }
 
   metricState(metric: MatrixMetric): MetricState {
-    if (metric.ytd === null || metric.target === null) return 'neutral';
-    const within = metric.goodDown ? metric.ytd <= metric.target : metric.ytd >= metric.target;
+    return this.metricStateForValue(metric, metric.ytd);
+  }
+
+  metricStateForValue(metric: MatrixMetric, value: number | null): MetricState {
+    if (value === null || metric.target === null) return 'neutral';
+    const within = metric.goodDown ? value <= metric.target : value >= metric.target;
     if (within) return 'green';
-    const variance = Math.abs(metric.ytd - metric.target) / Math.abs(metric.target || 1);
+    const variance = Math.abs(value - metric.target) / Math.abs(metric.target || 1);
     return variance <= 0.05 ? 'amber' : 'red';
   }
 
@@ -166,14 +170,9 @@ export class OverallViewComponent implements OnChanges {
     }
   }
 
-  trendState(metric: MatrixMetric, value: number | null): MetricState {
-    if (value === null || metric.priorYear === null) return 'neutral';
-    return (metric.goodDown ? value <= metric.priorYear : value >= metric.priorYear) ? 'green' : 'red';
-  }
-
-  trendArrow(metric: MatrixMetric, value: number | null): string {
-    if (value === null || metric.priorYear === null || value === metric.priorYear) return '→';
-    return value > metric.priorYear ? '↑' : '↓';
+  targetArrow(metric: MatrixMetric, value: number | null): string {
+    if (value === null || metric.target === null || value === metric.target) return '→';
+    return value > metric.target ? '↑' : '↓';
   }
 
   variancePercent(metric: MatrixMetric): number | null {
@@ -218,7 +217,11 @@ export class OverallViewComponent implements OnChanges {
     return String(Number(this.currentFiscalYearShort()) - 1).padStart(2, '0');
   }
   toggleMetric(key: string): void { this.selectedMetric.set(this.selectedMetric() === key ? null : key); }
-  groupExceptionCount(group: MatrixGroup): number { return group.metrics.filter((metric) => this.metricState(metric) === 'red').length; }
+  groupExceedanceCount(group: MatrixGroup): number { return group.metrics.filter((metric) => this.metricState(metric) === 'red').length; }
+  exceedanceLabel(group: MatrixGroup): string {
+    const count = this.groupExceedanceCount(group);
+    return count === 0 ? 'No exceedances' : `${count} ${count === 1 ? 'exceedance' : 'exceedances'}`;
+  }
 
   formatValue(value: number | null): string {
     if (value === null) return '—';

@@ -48,8 +48,8 @@
               }
             </span>
             <span class="panel-title"><small>{{ group.kicker }}</small><strong>{{ group.title }}</strong><span>{{ group.context }}</span></span>
-            <span class="panel-health" [class.has-attention]="groupExceptionCount(group) > 0">
-              <span class="health-dot"></span>{{ groupExceptionCount(group) || 'No' }} exceptions
+            <span class="panel-health" [class.has-attention]="groupExceedanceCount(group) > 0">
+              <span class="health-dot"></span>{{ exceedanceLabel(group) }}
             </span>
           </header>
 
@@ -71,10 +71,10 @@
                   <span class="value-cell muted" role="cell">{{ formatValue(metric.priorYear) }}</span>
                   <span class="value-cell target-cell" role="cell">{{ formatValue(metric.target) }}</span>
                   <span class="value-cell actual-cell" [class]="'state-' + metricState(metric)" role="cell">
-                    <b>{{ trendArrow(metric, metric.ytd) }}</b><strong>{{ formatValue(metric.ytd) }}</strong><small>{{ varianceLabel(metric) }}</small>
+                    <b>{{ targetArrow(metric, metric.ytd) }}</b><strong>{{ formatValue(metric.ytd) }}</strong><small>{{ varianceLabel(metric) }}</small>
                   </span>
-                  <span class="value-cell current-cell" [class]="'state-' + trendState(metric, metric.currentPeriod)" role="cell">
-                    <b>{{ trendArrow(metric, metric.currentPeriod) }}</b><strong>{{ formatValue(metric.currentPeriod) }}</strong>
+                  <span class="value-cell current-cell" [class]="'state-' + metricStateForValue(metric, metric.currentPeriod)" role="cell">
+                    <b>{{ targetArrow(metric, metric.currentPeriod) }}</b><strong>{{ formatValue(metric.currentPeriod) }}</strong>
                   </span>
                 </button>
                 @if (selectedMetric() === metric.key) {

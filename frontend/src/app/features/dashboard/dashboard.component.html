@@ -3,34 +3,36 @@
     <div class="header-top">
       <div class="title-block">
         <h1>Demo Environmental Dashboard</h1>
-        <p class="subtitle">Showing {{ formatPeriodLabel() }}</p>
+        <p class="subtitle">{{ activeTab() === 'overall' ? 'Executive performance scorecard' : 'Showing ' + formatPeriodLabel() }}</p>
       </div>
 
       <div class="header-controls">
-        <div class="mode-toggle" role="group" aria-label="Period mode">
-          <button type="button" class="mode-btn" [class.active]="periodMode() === 'month'" (click)="setPeriodMode('month')">Monthly</button>
-          <button type="button" class="mode-btn" [class.active]="periodMode() === 'quarter'" (click)="setPeriodMode('quarter')">Quarterly</button>
-          <button type="button" class="mode-btn" [class.active]="periodMode() === 'ytd'" (click)="setPeriodMode('ytd')">YTD</button>
-        </div>
+        @if (activeTab() !== 'overall') {
+          <div class="mode-toggle" role="group" aria-label="Period mode">
+            <button type="button" class="mode-btn" [class.active]="periodMode() === 'month'" (click)="setPeriodMode('month')">Monthly</button>
+            <button type="button" class="mode-btn" [class.active]="periodMode() === 'quarter'" (click)="setPeriodMode('quarter')">Quarterly</button>
+            <button type="button" class="mode-btn" [class.active]="periodMode() === 'ytd'" (click)="setPeriodMode('ytd')">YTD</button>
+          </div>
 
-        <label class="control">
-          <span class="control-label">{{ periodMode() === 'month' ? 'Period' : periodMode() === 'quarter' ? 'Quarter' : 'Year' }}</span>
-          @if (periodMode() === 'month') {
-            <input type="month" [ngModel]="period()" (ngModelChange)="period.set($event)" />
-          } @else if (periodMode() === 'quarter') {
-            <select [ngModel]="period()" (ngModelChange)="period.set($event)">
-              @for (opt of quarterOptions(); track opt.value) {
-                <option [value]="opt.value">{{ opt.label }}</option>
-              }
-            </select>
-          } @else {
-            <select [ngModel]="period()" (ngModelChange)="period.set($event)">
-              @for (opt of yearOptions(); track opt.value) {
-                <option [value]="opt.value">{{ opt.label }}</option>
-              }
-            </select>
-          }
-        </label>
+          <label class="control">
+            <span class="control-label">{{ periodMode() === 'month' ? 'Period' : periodMode() === 'quarter' ? 'Quarter' : 'Year' }}</span>
+            @if (periodMode() === 'month') {
+              <input type="month" [ngModel]="period()" (ngModelChange)="period.set($event)" />
+            } @else if (periodMode() === 'quarter') {
+              <select [ngModel]="period()" (ngModelChange)="period.set($event)">
+                @for (opt of quarterOptions(); track opt.value) {
+                  <option [value]="opt.value">{{ opt.label }}</option>
+                }
+              </select>
+            } @else {
+              <select [ngModel]="period()" (ngModelChange)="period.set($event)">
+                @for (opt of yearOptions(); track opt.value) {
+                  <option [value]="opt.value">{{ opt.label }}</option>
+                }
+              </select>
+            }
+          </label>
+        }
 
         <label class="control">
           <span class="control-label">Site</span>
@@ -42,12 +44,13 @@
           </select>
         </label>
 
-        <button type="button" class="status-badge" [class.has-issues]="unresolvedCount() > 0" (click)="focusUnresolved()">
-          <span class="status-dot"></span>
-          {{ unresolvedCount() }} unresolved {{ unresolvedCount() === 1 ? 'entry' : 'entries' }}
-        </button>
+        @if (activeTab() !== 'overall') {
+          <button type="button" class="status-badge" [class.has-issues]="unresolvedCount() > 0" (click)="focusUnresolved()">
+            <span class="status-dot"></span>
+            {{ unresolvedCount() }} unresolved {{ unresolvedCount() === 1 ? 'entry' : 'entries' }}
+          </button>
 
-        <div class="download-group">
+          <div class="download-group">
           <button
             type="button"
             class="download-btn"
@@ -70,7 +73,8 @@
           >
             {{ downloadingFormat() === 'pptx' ? 'Preparing…' : 'PPTX' }}
           </button>
-        </div>
+          </div>
+        }
       </div>
     </div>
 
