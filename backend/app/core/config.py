@@ -10,6 +10,13 @@ class Settings(BaseSettings):
 
     database_url: str = ""
 
+    auth_provider: str = "supabase"
+    cognito_user_pool_id: str = ""
+    cognito_app_client_id: str = ""
+    cognito_region: str = "eu-central-1"
+    attachment_bucket: str = ""
+    attachment_url_ttl_seconds: int = 3600
+
     supabase_url: str = ""
     supabase_anon_key: str = ""
     supabase_service_role_key: str = ""
@@ -28,7 +35,7 @@ class Settings(BaseSettings):
     # Transactional email (Resend). Sends from Resend's shared sandbox domain
     # until a real sending domain is verified -- see app/services/mailing.py.
     email_provider_api_key: str = ""
-    email_from: str = "Enviqo <onboarding@resend.dev>"
+    email_from: str = "OCEANS by Thevenity <onboarding@resend.dev>"
 
     frontend_url: str = "http://localhost:4200"
 

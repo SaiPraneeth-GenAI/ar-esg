@@ -32,7 +32,7 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
-app = FastAPI(title="Envigo API", version="0.1.0")
+app = FastAPI(title="OCEANS Carbon Data Intelligence API", version="0.1.0")
 
 
 app.add_middleware(

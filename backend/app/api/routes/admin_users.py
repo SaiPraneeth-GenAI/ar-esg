@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.auth import CurrentUser, require_roles
-from app.core.supabase_admin import SupabaseAdminError, create_auth_user, delete_auth_user, update_auth_user_app_metadata
+from app.core.cognito_admin import CognitoAdminError, create_auth_user, delete_auth_user, update_auth_user_app_metadata
 from app.db.models import Location, User
 from app.db.session import get_db
 from app.schemas.users import UserCreateRequest, UserResponse, UserUpdateRequest
@@ -46,7 +46,7 @@ def create_user(
             password=payload.password,
             app_metadata={"roles": payload.roles, "tenant_id": str(current.tenant_id)},
         )
-    except SupabaseAdminError as exc:
+    except CognitoAdminError as exc:
         raise HTTPException(status_code=502, detail=f"Could not create auth user: {exc.detail}") from exc
 
     user = User(
@@ -84,8 +84,12 @@ def update_user(
     if payload.roles is not None:
         user.roles = payload.roles
         try:
-            update_auth_user_app_metadata(str(user.id), {"roles": payload.roles, "tenant_id": str(current.tenant_id)})
-        except SupabaseAdminError as exc:
+            update_auth_user_app_metadata(
+                user.email,
+                {"roles": payload.roles, "tenant_id": str(current.tenant_id)},
+                str(user.id),
+            )
+        except CognitoAdminError as exc:
             raise HTTPException(status_code=502, detail=f"Could not update auth user: {exc.detail}") from exc
 
     db.commit()
@@ -107,8 +111,8 @@ def remove_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     try:
-        delete_auth_user(str(user.id))
-    except SupabaseAdminError as exc:
+        delete_auth_user(user.email)
+    except CognitoAdminError as exc:
         raise HTTPException(status_code=502, detail=f"Could not remove auth user: {exc.detail}") from exc
 
     db.delete(user)

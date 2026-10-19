@@ -1,0 +1,30 @@
+name: Build AWS backend image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/aws-migration]
+    paths:
+      - backend/**
+      - .github/workflows/aws-backend.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::679965617804:role/envigo-github-ecr-push
+          aws-region: eu-central-1
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push Lambda image
+        working-directory: backend
+        run: |
+          IMAGE=679965617804.dkr.ecr.eu-central-1.amazonaws.com/envigo-demo-backend:migration
+          docker build --platform linux/amd64 -f Dockerfile.lambda -t "$IMAGE" .
+          docker push "$IMAGE"

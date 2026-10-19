@@ -1,0 +1,189 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Envigo ESG replaceable API layer
+
+Parameters:
+  EnvironmentName: {Type: String, Default: demo}
+  ImageUri: {Type: String}
+  VpcId: {Type: AWS::EC2::VPC::Id}
+  PrivateSubnetA: {Type: AWS::EC2::Subnet::Id}
+  PrivateSubnetB: {Type: AWS::EC2::Subnet::Id}
+  LambdaSecurityGroupId: {Type: AWS::EC2::SecurityGroup::Id}
+  DatabaseEndpoint: {Type: String}
+  DatabasePassword: {Type: String, NoEcho: true}
+  AttachmentsBucketName: {Type: String}
+  UserPoolId: {Type: String}
+  UserPoolClientId: {Type: String}
+  AllowedOrigins: {Type: CommaDelimitedList, Default: 'http://localhost:4200'}
+  FrontendUrl: {Type: String, Default: 'http://localhost:4200'}
+  OpenAiApiKey: {Type: String, NoEcho: true, Default: ''}
+  EmailProviderApiKey: {Type: String, NoEcho: true, Default: ''}
+  MigrationEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+  LegacyDatabaseUrl: {Type: String, NoEcho: true, Default: ''}
+
+Conditions:
+  RunMigration: !Equals [!Ref MigrationEnabled, 'true']
+
+Resources:
+  BackendRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: EnvigoRuntime
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${AttachmentsBucketName}/*'
+              - Effect: Allow
+                Action:
+                  - cognito-idp:AdminCreateUser
+                  - cognito-idp:AdminDeleteUser
+                  - cognito-idp:AdminSetUserPassword
+                  - cognito-idp:AdminUpdateUserAttributes
+                  - cognito-idp:AdminGetUser
+                Resource: !Sub 'arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPoolId}'
+
+  BackendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/envigo-${EnvironmentName}-backend'
+      RetentionInDays: 7
+
+  BackendFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: BackendLogGroup
+    Properties:
+      FunctionName: !Sub 'envigo-${EnvironmentName}-backend'
+      PackageType: Image
+      Code: {ImageUri: !Ref ImageUri}
+      Role: !GetAtt BackendRole.Arn
+      Architectures: [x86_64]
+      MemorySize: 2048
+      Timeout: 90
+      ReservedConcurrentExecutions: 2
+      EphemeralStorage: {Size: 2048}
+      VpcConfig:
+        SecurityGroupIds: [!Ref LambdaSecurityGroupId]
+        SubnetIds: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+      Environment:
+        Variables:
+          ENVIRONMENT: production
+          AUTH_PROVIDER: cognito
+          COGNITO_USER_POOL_ID: !Ref UserPoolId
+          COGNITO_APP_CLIENT_ID: !Ref UserPoolClientId
+          COGNITO_REGION: !Ref AWS::Region
+          DATABASE_URL: !Sub 'postgresql+psycopg://envigo_admin:${DatabasePassword}@${DatabaseEndpoint}:5432/envigo?sslmode=require'
+          ATTACHMENT_BUCKET: !Ref AttachmentsBucketName
+          FRONTEND_URL: !Ref FrontendUrl
+          CORS_ALLOWED_ORIGINS: !Join [',', !Ref AllowedOrigins]
+          OPENAI_API_KEY: !Ref OpenAiApiKey
+          EMAIL_PROVIDER_API_KEY: !Ref EmailProviderApiKey
+          EMAIL_FROM: 'OCEANS by Thevenity <onboarding@resend.dev>'
+
+  MigrationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: RunMigration
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/envigo-${EnvironmentName}-migration'
+      RetentionInDays: 1
+  MigrationFunction:
+    Type: AWS::Lambda::Function
+    Condition: RunMigration
+    DependsOn: MigrationLogGroup
+    Properties:
+      FunctionName: !Sub 'envigo-${EnvironmentName}-migration'
+      PackageType: Image
+      Code: {ImageUri: !Ref ImageUri}
+      ImageConfig:
+        Command: ['app.migration_handler.handler']
+      Role: !GetAtt BackendRole.Arn
+      Architectures: [x86_64]
+      MemorySize: 1024
+      Timeout: 900
+      VpcConfig:
+        SecurityGroupIds: [!Ref LambdaSecurityGroupId]
+        SubnetIds: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+      Environment:
+        Variables:
+          SOURCE_DATABASE_URL: !Ref LegacyDatabaseUrl
+          TARGET_DATABASE_URL: !Sub 'postgresql+psycopg://envigo_admin:${DatabasePassword}@${DatabaseEndpoint}:5432/envigo?sslmode=require'
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub 'envigo-${EnvironmentName}'
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowCredentials: false
+        AllowHeaders: [Authorization, Content-Type]
+        AllowMethods: ['*']
+        AllowOrigins: !Ref AllowedOrigins
+        MaxAge: 86400
+  JwtAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref HttpApi
+      AuthorizerType: JWT
+      IdentitySource: ['$request.header.Authorization']
+      Name: cognito
+      JwtConfiguration:
+        Audience: [!Ref UserPoolClientId]
+        Issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}'
+  BackendIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt BackendFunction.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 30000
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: '$default'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
+      Target: !Sub 'integrations/${BackendIntegration}'
+  HealthRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'GET /health'
+      AuthorizationType: NONE
+      Target: !Sub 'integrations/${BackendIntegration}'
+  DefaultStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: '$default'
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
+  InvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref BackendFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
+
+Outputs:
+  ApiEndpoint: {Value: !GetAtt HttpApi.ApiEndpoint}
+  BackendFunctionName: {Value: !Ref BackendFunction}
+  MigrationFunctionName:
+    Condition: RunMigration
+    Value: !Ref MigrationFunction

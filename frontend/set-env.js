@@ -1,14 +1,14 @@
 const fs = require('fs');
 const path = require('path');
 
-const supabaseUrl = process.env['SUPABASE_URL'] || '';
-const supabaseAnonKey = process.env['SUPABASE_ANON_KEY'] || '';
+const cognitoUserPoolId = process.env['COGNITO_USER_POOL_ID'] || '';
+const cognitoAppClientId = process.env['COGNITO_APP_CLIENT_ID'] || '';
 const apiBaseUrl = process.env['API_BASE_URL'] || '';
 
 const content = `export const environment = {
   production: true,
-  supabaseUrl: '${supabaseUrl}',
-  supabaseAnonKey: '${supabaseAnonKey}',
+  cognitoUserPoolId: '${cognitoUserPoolId}',
+  cognitoAppClientId: '${cognitoAppClientId}',
   apiBaseUrl: '${apiBaseUrl}',
 };
 `;

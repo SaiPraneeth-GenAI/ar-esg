@@ -1,6 +1,6 @@
 export const environment = {
   production: true,
-  supabaseUrl: '',
-  supabaseAnonKey: '',
+  cognitoUserPoolId: '',
+  cognitoAppClientId: '',
   apiBaseUrl: '',
 };

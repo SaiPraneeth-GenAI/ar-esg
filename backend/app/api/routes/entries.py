@@ -11,7 +11,7 @@ from sqlalchemy.orm.attributes import set_committed_value
 
 from app.core.auth import CurrentUser, require_roles
 from app.core.config import get_settings
-from app.core.supabase_storage import upload_file
+from app.core.s3_storage import resolve_file_url, upload_file
 from app.core.unit_conversion import convert_unit, units_equivalent
 from app.db.models import (
     Approval,
@@ -1014,10 +1014,10 @@ async def _notify_approvers_of_queue(db: Session, current: CurrentUser) -> None:
     settings = get_settings()
     relative_link = "/admin/data-entry?tab=queue"
     link = f"{settings.frontend_url}{relative_link}"
-    subject = "Enviqo: new entries awaiting your approval"
+    subject = "OCEANS: new entries awaiting your approval"
     html_body = (
         f"<p><strong>{current.email}</strong> submitted entries that are now waiting on your approval.</p>"
-        f'<p><a href="{link}">Open the approval queue in Enviqo</a>.</p>'
+        f'<p><a href="{link}">Open the approval queue in OCEANS</a>.</p>'
     )
     text_body = f"{current.email} submitted entries that are now waiting on your approval.\n\nOpen the approval queue: {link}"
     for approver in approvers:
@@ -1253,12 +1253,12 @@ async def _send_bulk_approval_email(db: Session, entries: list[Entry], tenant_id
         if submitter is None:
             continue
         count = len(submitter_entries)
-        subject = f"Enviqo: {count} entr{'y' if count == 1 else 'ies'} approved"
+        subject = f"OCEANS: {count} entr{'y' if count == 1 else 'ies'} approved"
         html_body = (
             f"<p><strong>{approver_email}</strong> approved {count} of your submitted entr{'y' if count == 1 else 'ies'}.</p>"
-            f'<p><a href="{link}">Open Enviqo</a> to see them.</p>'
+            f'<p><a href="{link}">Open OCEANS</a> to see them.</p>'
         )
-        text_body = f"{approver_email} approved {count} of your submitted entries.\n\nOpen Enviqo: {link}"
+        text_body = f"{approver_email} approved {count} of your submitted entries.\n\nOpen OCEANS: {link}"
         status = "sent"
         try:
             await send_email(submitter.email, subject, html_body, text_body)
@@ -1302,16 +1302,16 @@ async def _send_bulk_rejection_email(db: Session, entries: list[Entry], tenant_i
                 dp_cache[entry.data_point_id] = dp
             lines.append(f"{dp.name} ({entry.period.strftime('%B %Y')})")
         count = len(submitter_entries)
-        subject = f"Enviqo: {count} entr{'y' if count == 1 else 'ies'} rejected"
+        subject = f"OCEANS: {count} entr{'y' if count == 1 else 'ies'} rejected"
         html_items = "".join(f"<li>{line}</li>" for line in lines)
         html_body = (
             f"<p>{count} of your submitted entr{'y' if count == 1 else 'ies'} were rejected: "
             f"<ul>{html_items}</ul></p>"
             f"<p><strong>Reason:</strong> {reject_note}</p>"
-            f'<p><a href="{link}">Open Enviqo</a> to fix and resubmit.</p>'
+            f'<p><a href="{link}">Open OCEANS</a> to fix and resubmit.</p>'
         )
         text_body = (
-            f"{count} of your submitted entries were rejected:\n" + "\n".join(lines) + f"\n\nReason: {reject_note}\n\nOpen Enviqo: {link}"
+            f"{count} of your submitted entries were rejected:\n" + "\n".join(lines) + f"\n\nReason: {reject_note}\n\nOpen OCEANS: {link}"
         )
         status = "sent"
         try:
@@ -1344,12 +1344,12 @@ async def _send_rejection_email(db: Session, entry: Entry, reject_note: str) -> 
     settings = get_settings()
     relative_link = f"/admin/data-entry?category={category.name}&period={entry.period.isoformat()[:7]}"
     link = f"{settings.frontend_url}{relative_link}"
-    subject = f"Enviqo: {category.name} entry for {entry.period.strftime('%B %Y')} was rejected"
+    subject = f"OCEANS: {category.name} entry for {entry.period.strftime('%B %Y')} was rejected"
     html_body = (
         f"<p>Your submission for <strong>{dp.name}</strong> ({category.name}, {entry.period.strftime('%B %Y')}) "
         f"was rejected.</p>"
         f"<p><strong>Reason:</strong> {reject_note}</p>"
-        f'<p><a href="{link}">Open this entry in Enviqo</a> to fix and resubmit it.</p>'
+        f'<p><a href="{link}">Open this entry in OCEANS</a> to fix and resubmit it.</p>'
     )
     text_body = (
         f"Your submission for {dp.name} ({category.name}, {entry.period.strftime('%B %Y')}) was rejected.\n\n"
@@ -1396,7 +1396,13 @@ def list_attachments(
 ):
     rows = db.query(Attachment).filter(Attachment.entry_id == entry_id).order_by(Attachment.uploaded_at).all()
     return [
-        AttachmentOut(id=r.id, file_url=r.file_url, file_type=r.file_type, uploaded_by=r.uploaded_by, uploaded_at=r.uploaded_at)
+        AttachmentOut(
+            id=r.id,
+            file_url=resolve_file_url(r.file_url),
+            file_type=r.file_type,
+            uploaded_by=r.uploaded_by,
+            uploaded_at=r.uploaded_at,
+        )
         for r in rows
     ]
 
@@ -1429,7 +1435,7 @@ async def upload_attachment(
 
     return AttachmentOut(
         id=attachment.id,
-        file_url=attachment.file_url,
+        file_url=resolve_file_url(attachment.file_url),
         file_type=attachment.file_type,
         uploaded_by=attachment.uploaded_by,
         uploaded_at=attachment.uploaded_at,

@@ -1,6 +1,6 @@
 export const environment = {
   production: false,
-  supabaseUrl: '',
-  supabaseAnonKey: '',
+  cognitoUserPoolId: '',
+  cognitoAppClientId: '',
   apiBaseUrl: 'http://localhost:8000',
 };
