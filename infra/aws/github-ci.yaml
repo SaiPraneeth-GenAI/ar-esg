@@ -31,9 +31,7 @@ Resources:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
               StringLike:
-                token.actions.githubusercontent.com:sub:
-                  - !Sub 'repo:${GitHubRepository}:*'
-                  - 'repo:saipraneeth-genai/ar-esg:*'
+                token.actions.githubusercontent.com:sub: 'repo:SaiPraneeth-GenAI@204461945/ar-esg@1334865533:*'
       Policies:
         - PolicyName: PushBackendImage
           PolicyDocument:
