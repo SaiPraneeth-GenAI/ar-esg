@@ -163,6 +163,15 @@ Resources:
       RouteKey: 'GET /health'
       AuthorizationType: NONE
       Target: !Sub 'integrations/${BackendIntegration}'
+  # Browsers send CORS preflights without the Authorization header, so they
+  # must not fall through to the JWT-protected $default route.
+  PreflightRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'OPTIONS /{proxy+}'
+      AuthorizationType: NONE
+      Target: !Sub 'integrations/${BackendIntegration}'
   DefaultStage:
     Type: AWS::ApiGatewayV2::Stage
     Properties:
