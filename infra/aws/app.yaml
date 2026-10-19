@@ -72,7 +72,6 @@ Resources:
       Architectures: [x86_64]
       MemorySize: 2048
       Timeout: 90
-      ReservedConcurrentExecutions: 2
       EphemeralStorage: {Size: 2048}
       VpcConfig:
         SecurityGroupIds: [!Ref LambdaSecurityGroupId]
