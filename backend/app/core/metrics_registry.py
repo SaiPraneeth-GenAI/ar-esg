@@ -42,6 +42,11 @@ CHARTABLE_METRICS: dict[str, dict] = {
         "source": "carbon", "field": "scope1_2_location_based_tco2e", "prior_field": "prior_year_scope1_2_location_based_tco2e",
         "target_field": "target_scope1_2_location_based_tco2e",
     },
+    "scope3_tco2e": {
+        "label": "Scope 3 (value chain)", "unit": "tCO2e", "group": "GHG",
+        "source": "carbon", "field": "scope3_tco2e", "prior_field": "prior_year_scope3_tco2e",
+        "target_field": "target_scope3_tco2e",
+    },
     "ghg_intensity_production": {
         "label": "GHG intensity", "unit": "tCO2e/MnAh", "group": "Intensity by production",
         "source": "carbon", "field": "intensity_tco2e_per_mnah", "prior_field": "prior_year_intensity_tco2e_per_mnah",

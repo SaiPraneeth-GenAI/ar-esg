@@ -356,12 +356,13 @@ def carbon_trend(
                 scope1_tco2e=totals["scope1_tco2e"],
                 scope2_location_based_tco2e=totals["scope2_loc_tco2e"],
                 scope1_2_location_based_tco2e=totals["scope1_2_loc_tco2e"],
-                scope3_tco2e=None,
+                scope3_tco2e=totals["scope3_tco2e"],
                 intensity_tco2e_per_mnah=totals["intensity"],
                 prior_year_scope1_tco2e=py_totals["scope1_tco2e"],
                 prior_year_scope2_location_based_tco2e=py_totals["scope2_loc_tco2e"],
                 prior_year_scope1_2_location_based_tco2e=py_totals["scope1_2_loc_tco2e"],
                 prior_year_intensity_tco2e_per_mnah=py_totals["intensity"],
+                prior_year_scope3_tco2e=py_totals["scope3_tco2e"],
                 target_scope1_tco2e=target_value_for_bucket(targets_by_metric.get("scope1_tco2e"), "scope1_tco2e", bucket_months),
                 target_scope2_location_based_tco2e=target_value_for_bucket(targets_by_metric.get("scope2_tco2e"), "scope2_tco2e", bucket_months),
                 target_scope1_2_location_based_tco2e=target_value_for_bucket(
@@ -370,6 +371,7 @@ def carbon_trend(
                 target_intensity_tco2e_per_mnah=target_value_for_bucket(
                     targets_by_metric.get("ghg_intensity_production"), "ghg_intensity_production", bucket_months
                 ),
+                target_scope3_tco2e=target_value_for_bucket(targets_by_metric.get("scope3_tco2e"), "scope3_tco2e", bucket_months),
             )
         )
     return points
@@ -438,6 +440,9 @@ def carbon_overview(
     scope2_target = active_target_comparison(
         db, current.tenant_id, location_id, "scope2_tco2e", current_months, current_totals["scope2_loc_tco2e"]
     )
+    scope3_target = active_target_comparison(
+        db, current.tenant_id, location_id, "scope3_tco2e", current_months, current_totals["scope3_tco2e"]
+    )
     all_targets = [
         TargetStatusOut(
             target_id=t.target_id, metric_key=t.metric_key, label=t.label, unit=t.unit,
@@ -463,6 +468,10 @@ def carbon_overview(
         prior_year_scope1_tco2e=prior_year_totals["scope1_tco2e"],
         prior_scope2_location_based_tco2e=prior_totals["scope2_loc_tco2e"],
         prior_year_scope2_location_based_tco2e=prior_year_totals["scope2_loc_tco2e"],
+        scope3_tco2e=current_totals["scope3_tco2e"],
+        prior_scope3_tco2e=prior_totals["scope3_tco2e"],
+        prior_year_scope3_tco2e=prior_year_totals["scope3_tco2e"],
+        total_scope1_2_3_tco2e=_total_footprint(current_totals),
         production_value=current_totals["production_value"],
         production_unit=current_totals["production_unit"],
         intensity_tco2e_per_mnah=current_totals["intensity"],
@@ -475,6 +484,7 @@ def carbon_overview(
         intensity_target=intensity_target,
         scope1_target=scope1_target,
         scope2_target=scope2_target,
+        scope3_target=scope3_target,
         all_targets=all_targets,
     )
 
@@ -532,6 +542,8 @@ def carbon_ai_insight(
         "scope2_location_based_tco2e": current_totals["scope2_loc_tco2e"],
         "scope1_2_location_based_tco2e": current_totals["scope1_2_loc_tco2e"],
         "prior_scope1_2_location_based_tco2e": prior_totals["scope1_2_loc_tco2e"],
+        "scope3_tco2e": current_totals["scope3_tco2e"],
+        "prior_scope3_tco2e": prior_totals["scope3_tco2e"],
         "ghg_intensity_tco2e_per_mnah": current_totals["intensity"],
         "prior_ghg_intensity_tco2e_per_mnah": prior_totals["intensity"],
         "unresolved_count": current_totals["unresolved_count"],
@@ -564,7 +576,15 @@ def carbon_ai_insight(
     return AiInsightOut(insight=insight)
 
 
-_TREND_TARGET_METRICS = ["scope1_tco2e", "scope2_tco2e", "scope1_2_tco2e", "ghg_intensity_production"]
+def _total_footprint(totals: dict) -> float | None:
+    """Scope 1 + Scope 2 (location-based) + Scope 3 -- the whole inventory.
+    None only when none of the three has any calculated data."""
+    parts = [totals["scope1_2_loc_tco2e"], totals["scope3_tco2e"]]
+    present = [p for p in parts if p is not None]
+    return sum(present) if present else None
+
+
+_TREND_TARGET_METRICS = ["scope1_tco2e", "scope2_tco2e", "scope1_2_tco2e", "scope3_tco2e", "ghg_intensity_production"]
 
 
 def _build_insight(sources: list[CarbonOverviewSource], current_total: float | None, prior_total: float | None, unresolved_count: int) -> str | None:
@@ -572,8 +592,9 @@ def _build_insight(sources: list[CarbonOverviewSource], current_total: float | N
     source and period-over-period variance. No causal claims (rule in
     Prompt 4's dashboard section)."""
     parts = []
-    if sources:
-        largest = max(sources, key=lambda s: s.emissions_tco2e)
+    scope1_2_sources = [s for s in sources if s.scope in (1, 2) and s.calculation_method != "market_based"]
+    if scope1_2_sources:
+        largest = max(scope1_2_sources, key=lambda s: s.emissions_tco2e)
         if current_total and current_total > 0:
             share = largest.emissions_tco2e / current_total * 100
             parts.append(f"{largest.data_point_name} is the largest source this period, at {share:.0f}% of Scope 1+2 location-based emissions.")

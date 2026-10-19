@@ -5,9 +5,11 @@ from decimal import Decimal
 
 from app.services.carbon_calculation import (
     UnresolvedResult,
+    compute_activity_emissions,
     compute_fuel_emissions,
     compute_grid_emissions,
     compute_gwp_emissions,
+    normalize_activity_factor,
     normalize_fuel_activity,
     normalize_grid_activity,
     normalize_gwp_activity,
@@ -111,3 +113,24 @@ def test_emissions_are_decimal_not_float():
     kgco2e, _ = compute_fuel_emissions(Decimal("100"), Decimal("2.697"), "litre")
     assert isinstance(kgco2e, Decimal)
     assert not isinstance(kgco2e, float)
+
+
+def test_normalize_activity_factor_kg_basis_matches_unit_alias():
+    # "tonnes" on the entry and "/t" on the factor are the same basis.
+    assert normalize_activity_factor(Decimal("12"), "tonnes", "kgCO2e/t") == (Decimal("12"), Decimal("1"))
+
+
+def test_normalize_activity_factor_tco2e_basis_scales_to_kg():
+    assert normalize_activity_factor(Decimal("5"), "tkm", "tCO2e/tonne-km") == (Decimal("5"), Decimal("1000"))
+
+
+def test_normalize_activity_factor_unit_mismatch_is_unresolved():
+    result = normalize_activity_factor(Decimal("5"), "km", "kgCO2e/pkm")
+    assert isinstance(result, UnresolvedResult)
+    assert result.reason_code == "unit_mismatch"
+
+
+def test_compute_activity_emissions_formula():
+    kg, formula = compute_activity_emissions(Decimal("10"), "t", Decimal("610"), "kgCO2e/t", Decimal("1"))
+    assert kg == Decimal("6100")
+    assert formula == "10 t x 610 kgCO2e/t = 6100 kgCO2e"

@@ -68,10 +68,8 @@ class CarbonTrendPoint(BaseModel):
     scope1_tco2e: float | None
     scope2_location_based_tco2e: float | None
     scope1_2_location_based_tco2e: float | None
-    # Always None -- no Scope 3 calculation exists in this platform yet.
-    # Exposed as an explicit, honestly-empty field (not omitted) so the
-    # dashboard can offer it as a real, clearly-labeled "not tracked yet"
-    # option instead of silently pretending it doesn't exist.
+    # Activity-based Scope 3 (value chain) -- None when no Scope 3 source
+    # was calculated in this bucket, never a fabricated zero.
     scope3_tco2e: float | None
     intensity_tco2e_per_mnah: float | None
     # The same bucket, one year back -- lets the chart draw a same-bucket
@@ -80,6 +78,7 @@ class CarbonTrendPoint(BaseModel):
     prior_year_scope2_location_based_tco2e: float | None = None
     prior_year_scope1_2_location_based_tco2e: float | None = None
     prior_year_intensity_tco2e_per_mnah: float | None = None
+    prior_year_scope3_tco2e: float | None = None
     # This bucket's active target, if one is set and its period covers this
     # bucket -- None (not zero) when no target applies here, so the chart
     # can draw a reference line only where a real commitment exists.
@@ -87,6 +86,7 @@ class CarbonTrendPoint(BaseModel):
     target_scope2_location_based_tco2e: float | None = None
     target_scope1_2_location_based_tco2e: float | None = None
     target_intensity_tco2e_per_mnah: float | None = None
+    target_scope3_tco2e: float | None = None
 
 
 class RecalculateResponse(BaseModel):
@@ -140,6 +140,10 @@ class CarbonOverview(BaseModel):
     prior_year_scope1_tco2e: float | None = None
     prior_scope2_location_based_tco2e: float | None = None
     prior_year_scope2_location_based_tco2e: float | None = None
+    scope3_tco2e: float | None = None
+    prior_scope3_tco2e: float | None = None
+    prior_year_scope3_tco2e: float | None = None
+    total_scope1_2_3_tco2e: float | None = None
     production_value: float | None
     production_unit: str | None
     intensity_tco2e_per_mnah: float | None
@@ -152,6 +156,7 @@ class CarbonOverview(BaseModel):
     intensity_target: TargetComparison | None = None
     scope1_target: TargetComparison | None = None
     scope2_target: TargetComparison | None = None
+    scope3_target: TargetComparison | None = None
     all_targets: list[TargetStatusOut] = []
 
 

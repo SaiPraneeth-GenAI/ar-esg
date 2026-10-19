@@ -58,6 +58,7 @@ from app.schemas.mapping import (
     SheetDetectionResult,
 )
 from app.services.audit import write_audit
+from app.core.carbon_mapping import SCOPE3_CATEGORY_LABELS, get_carbon_mapping
 from app.services.carbon_calculation import calculate_entries_batch
 from app.services.mailing import MailingError, send_email
 from app.services.mapping import header_fingerprint, infer_period, match_category, match_data_point, match_metadata_field, normalize
@@ -189,6 +190,12 @@ def list_categories(current: CurrentUser = Depends(require_roles("Admin", "Manag
             )
             for dp in points_by_category.get(category.id, [])
         ]
+        # Which GHG scope this category feeds (if any), derived from the
+        # same carbon mapping the calculation engine uses -- lets Data Entry
+        # group value-chain (Scope 3) categories without a hard-coded list.
+        mappings = [m for m in (get_carbon_mapping(dp.name) for dp in points_by_category.get(category.id, [])) if m]
+        ghg_scope = max((m.scope for m in mappings), default=None)
+        scope3_codes = sorted({m.scope3_category for m in mappings if m.scope3_category}, key=int)
         out.append(
             CategoryOut(
                 id=category.id,
@@ -196,6 +203,8 @@ def list_categories(current: CurrentUser = Depends(require_roles("Admin", "Manag
                 display_order=category.display_order,
                 is_provisional=any(d.is_provisional for d in dp_out),
                 data_points=dp_out,
+                ghg_scope=ghg_scope,
+                scope3_category=SCOPE3_CATEGORY_LABELS.get(scope3_codes[0]) if scope3_codes else None,
             )
         )
     return out

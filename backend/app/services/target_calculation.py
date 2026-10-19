@@ -33,14 +33,19 @@ BASELINE_READY_COMPLETENESS_PCT = 95.0
 
 TARGETABLE_METRIC_KEYS = [
     "energy_absolute", "water_absolute", "waste_absolute", "production_absolute",
-    "scope1_tco2e", "scope2_tco2e", "scope1_2_tco2e",
+    "scope1_tco2e", "scope2_tco2e", "scope1_2_tco2e", "scope3_tco2e",
     "ghg_intensity_production", "energy_per_production", "water_per_production", "waste_per_production",
     "ghg_per_revenue", "energy_per_revenue", "water_per_revenue", "waste_per_revenue",
     "safety_fatality", "safety_ltifr", "safety_training", "safety_unsafe", "safety_near_miss",
 ]
 
 # metric_key -> field name on a compute_range_totals()/compute_period_totals() dict
-_GHG_ABSOLUTE_FIELD = {"scope1_tco2e": "scope1_tco2e", "scope2_tco2e": "scope2_loc_tco2e", "scope1_2_tco2e": "scope1_2_loc_tco2e"}
+_GHG_ABSOLUTE_FIELD = {
+    "scope1_tco2e": "scope1_tco2e",
+    "scope2_tco2e": "scope2_loc_tco2e",
+    "scope1_2_tco2e": "scope1_2_loc_tco2e",
+    "scope3_tco2e": "scope3_tco2e",
+}
 _GHG_RATE_FIELD = {"ghg_intensity_production": "intensity", "ghg_per_revenue": "intensity_revenue"}
 # metric_key -> attribute name on an IntensityOverview
 _OTHER_RATE_FIELD = {

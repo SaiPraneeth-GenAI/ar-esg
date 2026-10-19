@@ -20,6 +20,8 @@ class CategoryOut(BaseModel):
     display_order: int | None
     is_provisional: bool
     data_points: list[DataPointOut]
+    ghg_scope: int | None = None
+    scope3_category: str | None = None
 
 
 class EntryUpsertRequest(BaseModel):

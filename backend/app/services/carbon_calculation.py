@@ -123,6 +123,40 @@ def normalize_gwp_activity(activity_value: Decimal, activity_unit: str) -> tuple
     return UnresolvedResult("unit_mismatch", f"Refrigerant leakage activity unit '{activity_unit}' is not kg.")
 
 
+_ACTIVITY_UNIT_ALIASES = {
+    "t": "t", "tonne": "t", "tonnes": "t", "mt": "t", "ton": "t", "tons": "t",
+    "tkm": "tkm", "tonne-km": "tkm", "t-km": "tkm", "tonne.km": "tkm",
+    "pkm": "pkm", "passenger-km": "pkm", "p-km": "pkm",
+    "l": "litres", "litre": "litres", "litres": "litres", "liter": "litres", "liters": "litres",
+    "room-night": "room-nights", "room-nights": "room-nights",
+}
+
+
+def _canonical_activity_unit(unit: str) -> str:
+    u = unit.strip().lower().replace(" ", "")
+    return _ACTIVITY_UNIT_ALIASES.get(u, u)
+
+
+def normalize_activity_factor(activity_value: Decimal, activity_unit: str, factor_unit: str) -> tuple[Decimal, Decimal] | UnresolvedResult:
+    """Scope 3 activity factors are "kgCO2e/<unit>" or "tCO2e/<unit>" where
+    <unit> must be the activity's own unit (after spelling aliases) -- no
+    cross-unit guessing. Returns (activity_value, kg-per-factor-unit
+    multiplier: 1 for kgCO2e, 1000 for tCO2e)."""
+    raw = factor_unit.strip().lower().replace(" ", "")
+    if "/" not in raw:
+        return UnresolvedResult("unit_mismatch", f"Activity factor unit '{factor_unit}' has no per-unit basis.")
+    numerator, basis = raw.split("/", 1)
+    if numerator.startswith("kgco2e"):
+        multiplier = Decimal("1")
+    elif numerator.startswith("tco2e"):
+        multiplier = Decimal("1000")
+    else:
+        return UnresolvedResult("unit_mismatch", f"Activity factor unit '{factor_unit}' is not kgCO2e or tCO2e based.")
+    if _canonical_activity_unit(basis) != _canonical_activity_unit(activity_unit):
+        return UnresolvedResult("unit_mismatch", f"Activity is recorded in '{activity_unit}' but the factor is per '{basis}'.")
+    return activity_value, multiplier
+
+
 # ---- Formula execution (pure) ----------------------------------------------
 
 
@@ -140,6 +174,11 @@ def compute_grid_emissions(normalized_mwh: Decimal, factor_t_per_mwh: Decimal) -
     tco2e = normalized_mwh * factor_t_per_mwh
     kgco2e = tco2e * Decimal("1000")
     return kgco2e, f"{normalized_mwh} MWh x {factor_t_per_mwh} tCO2e/MWh = {tco2e} tCO2e = {kgco2e} kgCO2e"
+
+
+def compute_activity_emissions(activity_value: Decimal, activity_unit: str, factor_value: Decimal, factor_unit: str, multiplier: Decimal) -> tuple[Decimal, str]:
+    kgco2e = activity_value * factor_value * multiplier
+    return kgco2e, f"{activity_value} {activity_unit} x {factor_value} {factor_unit} = {kgco2e} kgCO2e"
 
 
 # ---- Factor resolution (DB read, deterministic precedence) ----------------
@@ -276,6 +315,21 @@ def run_calculation(
         norm = normalize_gwp_activity(activity_value, activity_unit)
     elif mapping.source_type == "grid_electricity":
         norm = normalize_grid_activity(activity_value, activity_unit)
+    elif mapping.source_type == "activity":
+        activity_norm = normalize_activity_factor(activity_value, activity_unit, resolved.unit)
+        if isinstance(activity_norm, UnresolvedResult):
+            return CalculationOutcome(status="unresolved", scope=mapping.scope, resolution_reason=activity_norm.as_reason())
+        _, multiplier = activity_norm
+        kgco2e, formula = compute_activity_emissions(activity_value, activity_unit, resolved.value, resolved.unit, multiplier)
+        return CalculationOutcome(
+            status="calculated",
+            scope=mapping.scope,
+            normalized_activity_value=activity_value,
+            normalized_activity_unit=activity_unit,
+            resolved=resolved,
+            emissions_kgco2e=kgco2e,
+            formula=formula,
+        )
     else:
         return CalculationOutcome(status="unresolved", scope=mapping.scope, resolution_reason=UNRESOLVED_REASONS["unknown_source_type"])
 
@@ -641,15 +695,18 @@ def compute_period_totals_batch(
         )
         has_scope2_mkt = any(r.scope == 2 and r.calculation_method == "market_based" for r in rows)
         scope1_2_loc = scope1 + scope2_loc
+        has_scope1_2 = any(r.scope in (1, 2) for r in rows)
+        scope3 = sum((r.emissions_kgco2e for r in rows if r.scope == 3), Decimal("0"))
+        has_scope3 = any(r.scope == 3 for r in rows)
 
         production_value = production_by_period.get(period)
         intensity = None
-        if production_value and production_value > 0 and has_any_data:
+        if production_value and production_value > 0 and has_scope1_2:
             intensity = float(scope1_2_loc / 1000) / production_value
 
         revenue_value = revenue_by_period.get(period)
         intensity_revenue = None
-        if revenue_value and revenue_value > 0 and has_any_data:
+        if revenue_value and revenue_value > 0 and has_scope1_2:
             intensity_revenue = float(scope1_2_loc / 1000) / revenue_value
 
         unresolved_count = unresolved_counts.get(period, 0)
@@ -659,10 +716,11 @@ def compute_period_totals_batch(
 
         result[period] = {
             "rows": rows,
-            "scope1_tco2e": (float(scope1 / 1000) if has_any_data else None),
-            "scope2_loc_tco2e": (float(scope2_loc / 1000) if has_any_data else None),
+            "scope1_tco2e": (float(scope1 / 1000) if has_scope1_2 else None),
+            "scope2_loc_tco2e": (float(scope2_loc / 1000) if has_scope1_2 else None),
             "scope2_mkt_tco2e": (float(scope2_mkt / 1000) if has_scope2_mkt else None),
-            "scope1_2_loc_tco2e": (float(scope1_2_loc / 1000) if has_any_data else None),
+            "scope1_2_loc_tco2e": (float(scope1_2_loc / 1000) if has_scope1_2 else None),
+            "scope3_tco2e": (float(scope3 / 1000) if has_scope3 else None),
             "production_value": production_value,
             "production_unit": prod_mapping.canonical_unit if prod_mapping else None,
             "intensity": intensity,
@@ -705,6 +763,7 @@ def compute_range_totals(
     scope2_loc = _sum_optional([by_month[m]["scope2_loc_tco2e"] for m in months])
     scope2_mkt = _sum_optional([by_month[m]["scope2_mkt_tco2e"] for m in months])
     scope1_2 = None if (scope1 is None and scope2_loc is None) else (scope1 or 0.0) + (scope2_loc or 0.0)
+    scope3 = _sum_optional([by_month[m]["scope3_tco2e"] for m in months])
 
     production_value = _sum_optional([by_month[m]["production_value"] for m in months])
     revenue_value = _sum_optional([by_month[m]["revenue_value"] for m in months])
@@ -729,6 +788,7 @@ def compute_range_totals(
         "scope2_loc_tco2e": scope2_loc,
         "scope2_mkt_tco2e": scope2_mkt,
         "scope1_2_loc_tco2e": scope1_2,
+        "scope3_tco2e": scope3,
         "production_value": production_value,
         "production_unit": anchor["production_unit"],
         "intensity": intensity,
