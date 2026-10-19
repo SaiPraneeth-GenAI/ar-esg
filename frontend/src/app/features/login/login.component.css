@@ -57,10 +57,13 @@
   font-size: 1.15rem;
 }
 
-.brand-mark svg {
-  width: 24px;
-  height: 24px;
-  color: #6ee7a8;
+.brand-mark img {
+  width: 174px;
+  height: 58px;
+  object-fit: contain;
+  padding: 0.38rem 0.6rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
 }
 
 .brand-name {

@@ -1,0 +1,12 @@
+name = "oceans-carbon-offset"
+main = "cloudflare/worker.js"
+compatibility_date = "2026-10-19"
+
+routes = [
+  { pattern = "offsetcarbon.oceansplatform.com", custom_domain = true }
+]
+
+[assets]
+directory = "./frontend/dist/frontend/browser"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
