@@ -22,6 +22,38 @@
       <div class="skeleton-card"></div>
     </div>
   } @else if (overview()) {
+    @if (overview()!.total_scope1_2_3_tco2e !== null) {
+      <div class="footprint-band">
+        <div class="footprint-total">
+          <span class="footprint-eyebrow">Total footprint · Scope 1 + 2 + 3</span>
+          <div class="footprint-value">
+            {{ overview()!.total_scope1_2_3_tco2e | number: '1.0-1' }}<span class="footprint-unit">tCO2e</span>
+          </div>
+          @if (footprintDeltaPct() !== null) {
+            <span class="footprint-delta" [class.up]="footprintDeltaPct()! > 0" [class.down]="footprintDeltaPct()! <= 0">
+              {{ footprintDeltaPct()! > 0 ? '▲' : '▼' }} {{ absPct(footprintDeltaPct()!) | number: '1.1-1' }}% vs {{ priorLabel() }}
+            </span>
+          }
+        </div>
+        <div class="footprint-split">
+          <div class="split-bar" role="img" aria-label="Share of emissions by scope">
+            @for (seg of footprintSegments(); track seg.key) {
+              <span class="split-seg" [class]="'seg-' + seg.key" [style.width.%]="seg.pct" [title]="seg.label + ': ' + (seg.pct | number: '1.0-1') + '%'"></span>
+            }
+          </div>
+          <div class="split-legend">
+            @for (seg of footprintSegments(); track seg.key) {
+              <div class="legend-item">
+                <span class="legend-dot" [class]="'seg-' + seg.key"></span>
+                <span class="legend-label">{{ seg.label }}</span>
+                <span class="legend-value">{{ seg.value | number: '1.0-1' }} t · {{ seg.pct | number: '1.0-0' }}%</span>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    }
+
     <div class="carbon-cards">
       <div
         class="carbon-card flow-clickable"
@@ -178,6 +210,36 @@
         <span class="flow-hint">See calculation →</span>
       </div>
 
+      <div class="carbon-card scope3-card" [class]="cardTargetClass(overview()!.scope3_target)">
+        <div class="card-top">
+          <span class="card-label">Scope 3 (value chain)</span>
+          @if (scope3SourceCount() > 0) { <span class="scope-badge">{{ scope3SourceCount() }} sources</span> }
+        </div>
+        @if (overview()!.scope3_tco2e !== null) {
+          <div class="card-value">{{ overview()!.scope3_tco2e | number: '1.1-2' }}<span class="card-unit">tCO2e</span></div>
+          @if (showPrior()) {
+            <div class="card-comparison" [class]="'comparison-' + comparisonStatus(overview()!.scope3_tco2e, overview()!.prior_scope3_tco2e)">
+              {{ comparisonLabel(overview()!.scope3_tco2e, overview()!.prior_scope3_tco2e, priorLabel()) }}
+            </div>
+          }
+          <div class="card-comparison year-comparison" [class]="'comparison-' + comparisonStatus(overview()!.scope3_tco2e, overview()!.prior_year_scope3_tco2e)">
+            {{ comparisonLabel(overview()!.scope3_tco2e, overview()!.prior_year_scope3_tco2e, priorYearLabelText()) }}
+          </div>
+          @if (overview()!.scope3_target) {
+            <div class="target-comparison">
+              <span class="status-pill" [class]="targetStatusClass(overview()!.scope3_target!.status)">{{ overview()!.scope3_target!.status }}</span>
+              @if (overview()!.scope3_target!.target_value !== null) {
+                vs target {{ overview()!.scope3_target!.target_value | number: '1.1-2' }} tCO2e
+              }
+            </div>
+          } @else {
+            <a class="target-link" routerLink="/admin/targets">No target set</a>
+          }
+        } @else {
+          <div class="card-empty">No approved Scope 3 activity yet</div>
+        }
+      </div>
+
       <div class="carbon-card">
         <div class="card-top">
           <span class="card-label">Data completeness</span>
@@ -202,19 +264,73 @@
     }
 
     @if (overview()!.all_targets.length > 0) {
-      <div class="targets-strip">
-        <span class="targets-strip-label">Targets tracked</span>
-        @for (t of overview()!.all_targets; track t.target_id) {
-          <span class="target-chip" [title]="targetTooltip(t)">
-            <span class="status-pill" [class]="targetStatusClass(t.status)">{{ t.status }}</span>
-            <span class="target-chip-label">{{ t.label }}</span>
-            <span class="target-chip-values">{{ targetValueSummary(t) }}</span>
-            <span class="target-bar">
-              <span class="target-bar-fill" [class]="targetStatusClass(t.status)" [style.width.%]="targetFillPct(t)"></span>
-              <span class="target-bar-goal" [style.left.%]="targetGoalPct(t)"></span>
-            </span>
-          </span>
-        }
+      <div class="tracker">
+        <div class="tracker-head">
+          <div class="tracker-score">
+            <svg viewBox="0 0 64 64" class="score-ring" aria-hidden="true">
+              <circle cx="32" cy="32" r="26" class="ring-track" />
+              <circle cx="32" cy="32" r="26" class="ring-fill" [attr.stroke-dasharray]="scoreDash()" transform="rotate(-90 32 32)" />
+            </svg>
+            <div class="score-text">
+              <span class="score-value">{{ targetScore() !== null ? targetScore() + '%' : '—' }}</span>
+              <span class="score-caption">on track</span>
+            </div>
+          </div>
+          <div class="tracker-title">
+            <h3>Target tracker</h3>
+            <p>{{ overview()!.all_targets.length }} commitments, checked against {{ formatRangeLabel(overview()!) }}. Furthest from goal shown first.</p>
+          </div>
+          <div class="tracker-filters" role="group" aria-label="Filter targets">
+            <button type="button" class="filter-pill pill-off" [class.active]="targetFilter() === 'off'" (click)="setTargetFilter('off')">
+              <span class="pill-dot"></span>{{ targetCounts().off }} off track
+            </button>
+            <button type="button" class="filter-pill pill-on" [class.active]="targetFilter() === 'on'" (click)="setTargetFilter('on')">
+              <span class="pill-dot"></span>{{ targetCounts().on }} on track
+            </button>
+            @if (targetCounts().pending > 0) {
+              <button type="button" class="filter-pill pill-pending" [class.active]="targetFilter() === 'pending'" (click)="setTargetFilter('pending')">
+                <span class="pill-dot"></span>{{ targetCounts().pending }} awaiting data
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="tracker-groups">
+          @for (group of trackedGroups(); track group.id) {
+            <section class="tracker-group">
+              <header class="group-head">
+                <span class="group-title">{{ group.title }}</span>
+                <span class="group-count">{{ group.onTrack }}/{{ group.total }} on track</span>
+              </header>
+              <div class="target-tiles">
+                @for (item of group.items; track item.target.target_id) {
+                  <article class="target-tile" [class]="'health-' + item.health">
+                    <div class="tile-top">
+                      <div class="tile-name">
+                        <span class="tile-label">{{ item.target.label }}</span>
+                        @if (item.sublabel) {
+                          <span class="tile-sublabel">{{ item.sublabel }}</span>
+                        }
+                      </div>
+                      <span class="tile-status">{{ item.health === 'on' ? 'On track' : item.health === 'off' ? 'Off track' : 'Awaiting' }}</span>
+                    </div>
+                    <div class="tile-figures">
+                      <span class="tile-actual">{{ formatTargetValue(item.target.actual, item.target.unit) }}</span>
+                      <span class="tile-goal">/ {{ formatTargetValue(item.target.target_value, item.target.unit) }} {{ item.target.unit }}</span>
+                    </div>
+                    <div class="tile-bar" [title]="'Goal: ' + formatTargetValue(item.target.target_value, item.target.unit) + ' ' + item.target.unit">
+                      <span class="tile-bar-fill" [style.width.%]="item.fillPct"></span>
+                      <span class="tile-bar-goal" [style.left.%]="item.goalPct"></span>
+                    </div>
+                    <span class="tile-headroom">{{ item.headroomText }}</span>
+                  </article>
+                }
+              </div>
+            </section>
+          } @empty {
+            <p class="muted">No targets match this filter.</p>
+          }
+        </div>
       </div>
     }
 

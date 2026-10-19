@@ -46,6 +46,10 @@ export interface CarbonOverview {
   prior_year_scope1_tco2e: number | null;
   prior_scope2_location_based_tco2e: number | null;
   prior_year_scope2_location_based_tco2e: number | null;
+  scope3_tco2e: number | null;
+  prior_scope3_tco2e: number | null;
+  prior_year_scope3_tco2e: number | null;
+  total_scope1_2_3_tco2e: number | null;
   production_value: number | null;
   production_unit: string | null;
   intensity_tco2e_per_mnah: number | null;
@@ -58,6 +62,7 @@ export interface CarbonOverview {
   intensity_target: TargetComparison | null;
   scope1_target: TargetComparison | null;
   scope2_target: TargetComparison | null;
+  scope3_target: TargetComparison | null;
   all_targets: TargetStatusOut[];
 }
 
@@ -74,10 +79,12 @@ export interface CarbonTrendPoint {
   prior_year_scope2_location_based_tco2e: number | null;
   prior_year_scope1_2_location_based_tco2e: number | null;
   prior_year_intensity_tco2e_per_mnah: number | null;
+  prior_year_scope3_tco2e: number | null;
   target_scope1_tco2e: number | null;
   target_scope2_location_based_tco2e: number | null;
   target_scope1_2_location_based_tco2e: number | null;
   target_intensity_tco2e_per_mnah: number | null;
+  target_scope3_tco2e: number | null;
 }
 
 export interface EmissionCalculationOut {

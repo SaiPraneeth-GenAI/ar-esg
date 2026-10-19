@@ -82,3 +82,80 @@
   height: 18px;
   color: #d0d5dd;
 }
+
+.picker-section + .picker-section {
+  margin-top: 2rem;
+}
+
+.section-head {
+  margin-bottom: 0.85rem;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475467;
+}
+
+.section-count {
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #667085;
+  font-size: 0.7rem;
+  letter-spacing: 0;
+}
+
+.section-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.83rem;
+  color: #667085;
+}
+
+.value-chain .section-title {
+  color: #05603a;
+}
+
+.value-chain .section-count {
+  background: #d1fadf;
+  color: #05603a;
+}
+
+.value-chain .picker-icon {
+  background: #0e2c21;
+  color: #6ce9a6;
+}
+
+.picker-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.scope3-badge,
+.ghg-badge {
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.scope3-badge {
+  background: #ecfdf3;
+  color: #027a48;
+  border: 1px solid #a6f4c5;
+}
+
+.ghg-badge {
+  background: #eff8ff;
+  color: #175cd3;
+  border: 1px solid #b2ddff;
+}

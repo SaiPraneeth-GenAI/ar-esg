@@ -13,11 +13,67 @@ function sourceKey(s: CarbonOverviewSource): string {
 
 const TREND_MONTHS = 6;
 
+export type TargetHealth = 'on' | 'off' | 'pending';
+export type TargetFilter = 'all' | TargetHealth;
+
+interface TargetGroupDef {
+  id: string;
+  title: string;
+  keys: string[];
+}
+
+/** How the tracker groups targets -- by what a sustainability lead manages,
+ * not by the order the API happens to return them in. */
+const TARGET_GROUPS: TargetGroupDef[] = [
+  { id: 'ghg', title: 'GHG emissions', keys: ['scope1_2_tco2e', 'scope1_tco2e', 'scope2_tco2e', 'scope3_tco2e'] },
+  {
+    id: 'intensity',
+    title: 'Efficiency & intensity',
+    keys: [
+      'ghg_intensity_production', 'energy_per_production', 'water_per_production', 'waste_per_production',
+      'ghg_per_revenue', 'energy_per_revenue', 'water_per_revenue', 'waste_per_revenue'
+    ]
+  },
+  { id: 'resources', title: 'Energy, water & waste', keys: ['energy_absolute', 'water_absolute', 'waste_absolute', 'production_absolute'] },
+  { id: 'safety', title: 'Safety', keys: ['safety_fatality', 'safety_ltifr', 'safety_near_miss', 'safety_unsafe', 'safety_training'] }
+];
+
+/** Metrics where beating the goal means going ABOVE it (mirrors the
+ * backend's HIGHER_IS_BETTER_KEYS). */
+const HIGHER_IS_BETTER = new Set(['production_absolute', 'safety_training']);
+
+export interface TrackedTarget {
+  target: TargetStatusOut;
+  health: TargetHealth;
+  sublabel: string | null;
+  /** Signed headroom as a % of the goal: positive = better than goal. */
+  headroomPct: number | null;
+  headroomText: string;
+  /** Bullet-bar geometry: actual fill and goal tick, as % of a shared scale. */
+  fillPct: number;
+  goalPct: number;
+}
+
+export interface TrackedGroup {
+  id: string;
+  title: string;
+  items: TrackedTarget[];
+  onTrack: number;
+  total: number;
+}
+
+export interface FootprintSegment {
+  key: 'scope1' | 'scope2' | 'scope3';
+  label: string;
+  value: number;
+  pct: number;
+}
+
 const GHG_SERIES: ChartSeriesDef[] = [
   { key: 'scope1_2', label: 'Scope 1+2 (location-based)', unit: 'tCO2e', tracked: true },
   { key: 'scope1', label: 'Scope 1', unit: 'tCO2e', tracked: true },
   { key: 'scope2', label: 'Scope 2 (location-based)', unit: 'tCO2e', tracked: true },
-  { key: 'scope3', label: 'Scope 3', unit: 'tCO2e', tracked: false },
+  { key: 'scope3', label: 'Scope 3 (value chain)', unit: 'tCO2e', tracked: true },
   { key: 'intensity', label: 'Specific GHG emissions', unit: 'tCO2e/MnAh', tracked: true }
 ];
 
@@ -66,6 +122,7 @@ export class CarbonOverviewComponent implements OnChanges {
   ghgSeries = GHG_SERIES;
 
   scopeFilter = signal<number>(1);
+  targetFilter = signal<TargetFilter>('all');
 
   sourceKey = sourceKey;
 
@@ -182,14 +239,14 @@ export class CarbonOverviewComponent implements OnChanges {
             scope1_2: p.prior_year_scope1_2_location_based_tco2e,
             scope1: p.prior_year_scope1_tco2e,
             scope2: p.prior_year_scope2_location_based_tco2e,
-            scope3: null,
+            scope3: p.prior_year_scope3_tco2e,
             intensity: p.prior_year_intensity_tco2e_per_mnah
           },
           targetValuesBySeries: {
             scope1_2: p.target_scope1_2_location_based_tco2e,
             scope1: p.target_scope1_tco2e,
             scope2: p.target_scope2_location_based_tco2e,
-            scope3: null,
+            scope3: p.target_scope3_tco2e,
             intensity: p.target_intensity_tco2e_per_mnah
           }
         }))
@@ -370,33 +427,6 @@ export class CarbonOverviewComponent implements OnChanges {
     }
   }
 
-  /** Position of the actual and the goal on a shared bar, scaled to whichever
-   * of the two is larger plus headroom -- lets the chip show "how close" at a
-   * glance instead of spelling out two numbers side by side. */
-  private targetBarScale(t: TargetStatusOut): number {
-    return Math.max(t.target_value, t.actual ?? 0, 0.0001) * 1.15;
-  }
-
-  targetFillPct(t: TargetStatusOut): number {
-    if (t.actual === null) return 0;
-    return Math.min((t.actual / this.targetBarScale(t)) * 100, 100);
-  }
-
-  targetGoalPct(t: TargetStatusOut): number {
-    return Math.min((t.target_value / this.targetBarScale(t)) * 100, 100);
-  }
-
-  targetTooltip(t: TargetStatusOut): string {
-    const actualStr = t.actual !== null ? t.actual.toFixed(2) : 'no data yet';
-    return `${t.label}: ${actualStr} vs goal ${t.target_value.toFixed(2)} ${t.unit} — ${t.status}`;
-  }
-
-  targetValueSummary(t: TargetStatusOut): string {
-    const fractionDigits = t.unit.includes('/') ? 3 : 2;
-    const actual = t.actual === null ? 'No data' : t.actual.toFixed(fractionDigits);
-    return `${actual} vs ${t.target_value.toFixed(fractionDigits)} ${t.unit}`;
-  }
-
   /** The whole card is colored by target status, not a small dot. A target
    * is either within its limit or exceeded; unavailable target states stay
    * neutral because there is nothing to judge yet. */
@@ -405,6 +435,139 @@ export class CarbonOverviewComponent implements OnChanges {
     if (target.status === 'Within safe limits') return 'card-target-met';
     if (target.status === 'Exceeded') return 'card-target-exceeded';
     return '';
+  }
+
+  // -- Total footprint band ------------------------------------------------
+
+  footprintSegments(): FootprintSegment[] {
+    const ov = this.overview();
+    if (!ov) return [];
+    const parts = [
+      { key: 'scope1' as const, label: 'Scope 1 · Direct', value: ov.scope1_tco2e ?? 0 },
+      { key: 'scope2' as const, label: 'Scope 2 · Purchased energy', value: ov.scope2_location_based_tco2e ?? 0 },
+      { key: 'scope3' as const, label: 'Scope 3 · Value chain', value: ov.scope3_tco2e ?? 0 }
+    ];
+    const total = parts.reduce((sum, p) => sum + p.value, 0);
+    if (total <= 0) return [];
+    return parts.map((p) => ({ ...p, pct: (p.value / total) * 100 }));
+  }
+
+  private priorFootprint(): number | null {
+    const ov = this.overview();
+    if (!ov) return null;
+    const parts = [ov.prior_scope1_2_location_based_tco2e, ov.prior_scope3_tco2e].filter((v): v is number => v !== null);
+    return parts.length ? parts.reduce((a, b) => a + b, 0) : null;
+  }
+
+  footprintDeltaPct(): number | null {
+    const current = this.overview()?.total_scope1_2_3_tco2e ?? null;
+    const prior = this.priorFootprint();
+    if (current === null || prior === null || prior === 0) return null;
+    return ((current - prior) / prior) * 100;
+  }
+
+  scope3SourceCount(): number {
+    return (this.overview()?.sources ?? []).filter((src) => src.scope === 3).length;
+  }
+
+  absPct(value: number): number {
+    return Math.abs(value);
+  }
+
+  // -- Target tracker ---------------------------------------------------------
+
+  private targetHealth(t: TargetStatusOut): TargetHealth {
+    if (t.status === 'Within safe limits') return 'on';
+    if (t.status === 'Exceeded') return 'off';
+    return 'pending';
+  }
+
+  private trackTarget(t: TargetStatusOut): TrackedTarget {
+    const health = this.targetHealth(t);
+    const higherIsBetter = HIGHER_IS_BETTER.has(t.metric_key);
+    let headroomPct: number | null = null;
+    let headroomText = "Awaiting this period's data";
+    if (t.actual !== null) {
+      if (t.target_value === 0) {
+        headroomPct = t.actual === 0 ? 0 : -100;
+        headroomText = t.actual === 0 ? 'Held at zero' : `${t.actual} recorded vs a zero goal`;
+      } else {
+        const raw = ((t.target_value - t.actual) / Math.abs(t.target_value)) * 100;
+        headroomPct = higherIsBetter ? -raw : raw;
+        const size = Math.abs(headroomPct);
+        const magnitude = size.toFixed(size < 10 ? 1 : 0);
+        if (higherIsBetter) {
+          headroomText = headroomPct >= 0 ? `${magnitude}% ahead of goal` : `${magnitude}% short of goal`;
+        } else {
+          headroomText = headroomPct >= 0 ? `${magnitude}% under target` : `${magnitude}% over target`;
+        }
+      }
+    }
+    let sublabel: string | null = null;
+    if (t.unit.endsWith('/MnAh')) sublabel = 'per Mn Ah produced';
+    else if (t.unit.endsWith('/Cr')) sublabel = 'per ₹ crore revenue';
+    // Shared scale with headroom so neither the fill nor the goal tick sits
+    // flush against the end of the track.
+    const scale = Math.max(t.target_value, t.actual ?? 0, 0.0001) * 1.2;
+    const fillPct = t.actual === null ? 0 : Math.min((t.actual / scale) * 100, 100);
+    const goalPct = Math.min((t.target_value / scale) * 100, 100);
+    return { target: t, health, sublabel, headroomPct, headroomText, fillPct, goalPct };
+  }
+
+  private trackedTargets(): TrackedTarget[] {
+    return (this.overview()?.all_targets ?? []).map((t) => this.trackTarget(t));
+  }
+
+  targetCounts(): Record<TargetHealth, number> {
+    const counts: Record<TargetHealth, number> = { on: 0, off: 0, pending: 0 };
+    for (const t of this.trackedTargets()) counts[t.health] += 1;
+    return counts;
+  }
+
+  /** Share of targets with data this period that are on track. */
+  targetScore(): number | null {
+    const c = this.targetCounts();
+    const judged = c.on + c.off;
+    return judged > 0 ? Math.round((c.on / judged) * 100) : null;
+  }
+
+  /** stroke-dasharray for the score ring (r = 26). */
+  scoreDash(): string {
+    const circumference = 2 * Math.PI * 26;
+    return `${((this.targetScore() ?? 0) / 100) * circumference} ${circumference}`;
+  }
+
+  setTargetFilter(filter: TargetFilter): void {
+    this.targetFilter.set(this.targetFilter() === filter ? 'all' : filter);
+  }
+
+  trackedGroups(): TrackedGroup[] {
+    const filter = this.targetFilter();
+    const all = this.trackedTargets();
+    const placed = new Set<string>();
+    const groups: TrackedGroup[] = [];
+    const build = (id: string, title: string, items: TrackedTarget[]) => {
+      const visible = items
+        .filter((i) => filter === 'all' || i.health === filter)
+        // Furthest from goal first, so what needs attention leads each group.
+        .sort((a, b) => (a.headroomPct ?? Infinity) - (b.headroomPct ?? Infinity));
+      if (visible.length) {
+        groups.push({ id, title, items: visible, onTrack: items.filter((i) => i.health === 'on').length, total: items.length });
+      }
+    };
+    for (const def of TARGET_GROUPS) {
+      const items = all.filter((i) => def.keys.includes(i.target.metric_key));
+      items.forEach((i) => placed.add(i.target.target_id));
+      build(def.id, def.title, items);
+    }
+    build('other', 'Other', all.filter((i) => !placed.has(i.target.target_id)));
+    return groups;
+  }
+
+  formatTargetValue(value: number | null, unit: string): string {
+    if (value === null) return '—';
+    const digits = unit.includes('/') ? 3 : Math.abs(value) >= 100 ? 0 : 2;
+    return value.toLocaleString('en-IN', { minimumFractionDigits: digits, maximumFractionDigits: digits });
   }
 
   completenessStatus(pct: number | null): 'green' | 'amber' | 'red' | 'neutral' {

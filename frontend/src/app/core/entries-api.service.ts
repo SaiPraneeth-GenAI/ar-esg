@@ -20,6 +20,10 @@ export interface EntryCategory {
   display_order: number | null;
   is_provisional: boolean;
   data_points: DataPoint[];
+  /** Highest GHG scope this category's fields feed (null = not a GHG source). */
+  ghg_scope?: number | null;
+  /** GHG Protocol Scope 3 category label, e.g. "Cat 4 · Upstream transportation". */
+  scope3_category?: string | null;
 }
 
 export interface EntryRecord {

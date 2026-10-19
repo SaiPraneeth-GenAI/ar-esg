@@ -3,36 +3,34 @@
     <div class="header-top">
       <div class="title-block">
         <h1>OCEANS - Carbon Offset by Thevenity</h1>
-        <p class="subtitle">{{ activeTab() === 'overall' ? 'Executive performance scorecard' : 'Showing ' + formatPeriodLabel() }}</p>
+        <p class="subtitle">Showing {{ formatPeriodLabel() }}</p>
       </div>
 
       <div class="header-controls">
-        @if (activeTab() !== 'overall') {
-          <div class="mode-toggle" role="group" aria-label="Period mode">
-            <button type="button" class="mode-btn" [class.active]="periodMode() === 'month'" (click)="setPeriodMode('month')">Monthly</button>
-            <button type="button" class="mode-btn" [class.active]="periodMode() === 'quarter'" (click)="setPeriodMode('quarter')">Quarterly</button>
-            <button type="button" class="mode-btn" [class.active]="periodMode() === 'ytd'" (click)="setPeriodMode('ytd')">YTD</button>
-          </div>
+        <div class="mode-toggle" role="group" aria-label="Period mode">
+          <button type="button" class="mode-btn" [class.active]="periodMode() === 'month'" (click)="setPeriodMode('month')">Monthly</button>
+          <button type="button" class="mode-btn" [class.active]="periodMode() === 'quarter'" (click)="setPeriodMode('quarter')">Quarterly</button>
+          <button type="button" class="mode-btn" [class.active]="periodMode() === 'ytd'" (click)="setPeriodMode('ytd')">YTD</button>
+        </div>
 
-          <label class="control">
-            <span class="control-label">{{ periodMode() === 'month' ? 'Period' : periodMode() === 'quarter' ? 'Quarter' : 'Year' }}</span>
-            @if (periodMode() === 'month') {
-              <input type="month" [ngModel]="period()" (ngModelChange)="period.set($event)" />
-            } @else if (periodMode() === 'quarter') {
-              <select [ngModel]="period()" (ngModelChange)="period.set($event)">
-                @for (opt of quarterOptions(); track opt.value) {
-                  <option [value]="opt.value">{{ opt.label }}</option>
-                }
-              </select>
-            } @else {
-              <select [ngModel]="period()" (ngModelChange)="period.set($event)">
-                @for (opt of yearOptions(); track opt.value) {
-                  <option [value]="opt.value">{{ opt.label }}</option>
-                }
-              </select>
-            }
-          </label>
-        }
+        <label class="control">
+          <span class="control-label">{{ periodMode() === 'month' ? 'Period' : periodMode() === 'quarter' ? 'Quarter' : 'Year' }}</span>
+          @if (periodMode() === 'month') {
+            <input type="month" [ngModel]="period()" (ngModelChange)="period.set($event)" />
+          } @else if (periodMode() === 'quarter') {
+            <select [ngModel]="period()" (ngModelChange)="period.set($event)">
+              @for (opt of quarterOptions(); track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          } @else {
+            <select [ngModel]="period()" (ngModelChange)="period.set($event)">
+              @for (opt of yearOptions(); track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          }
+        </label>
 
         <label class="control">
           <span class="control-label">Site</span>
@@ -44,37 +42,35 @@
           </select>
         </label>
 
-        @if (activeTab() !== 'overall') {
-          <button type="button" class="status-badge" [class.has-issues]="unresolvedCount() > 0" (click)="focusUnresolved()">
-            <span class="status-dot"></span>
-            {{ unresolvedCount() }} unresolved {{ unresolvedCount() === 1 ? 'entry' : 'entries' }}
-          </button>
+        <button type="button" class="status-badge" [class.has-issues]="unresolvedCount() > 0" (click)="focusUnresolved()">
+          <span class="status-dot"></span>
+          {{ unresolvedCount() }} unresolved {{ unresolvedCount() === 1 ? 'entry' : 'entries' }}
+        </button>
 
-          <div class="download-group">
-          <button
-            type="button"
-            class="download-btn"
-            [disabled]="downloadingFormat() !== null"
-            (click)="downloadReport('pdf')"
-            title="Download the full dashboard (all tabs) as a PDF"
-          >
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M10 3v10m0 0-3.5-3.5M10 13l3.5-3.5" />
-              <path d="M4 15v1a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1" />
-            </svg>
-            {{ downloadingFormat() === 'pdf' ? 'Preparing…' : 'Download PDF' }}
-          </button>
-          <button
-            type="button"
-            class="download-btn secondary"
-            [disabled]="downloadingFormat() !== null"
-            (click)="downloadReport('pptx')"
-            title="Download the full dashboard (all tabs) as a PowerPoint"
-          >
-            {{ downloadingFormat() === 'pptx' ? 'Preparing…' : 'PPTX' }}
-          </button>
-          </div>
-        }
+        <div class="download-group">
+        <button
+          type="button"
+          class="download-btn"
+          [disabled]="downloadingFormat() !== null"
+          (click)="downloadReport('pdf')"
+          title="Download the full dashboard (all tabs) as a PDF"
+        >
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 3v10m0 0-3.5-3.5M10 13l3.5-3.5" />
+            <path d="M4 15v1a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1" />
+          </svg>
+          {{ downloadingFormat() === 'pdf' ? 'Preparing…' : 'Download PDF' }}
+        </button>
+        <button
+          type="button"
+          class="download-btn secondary"
+          [disabled]="downloadingFormat() !== null"
+          (click)="downloadReport('pptx')"
+          title="Download the full dashboard (all tabs) as a PowerPoint"
+        >
+          {{ downloadingFormat() === 'pptx' ? 'Preparing…' : 'PPTX' }}
+        </button>
+        </div>
       </div>
     </div>
 
@@ -83,7 +79,6 @@
     }
 
     <nav class="tabs">
-      <button type="button" class="tab" [class.active]="activeTab() === 'overall'" (click)="setTab('overall')">Overall</button>
       <button type="button" class="tab" [class.active]="activeTab() === 'absolute'" (click)="setTab('absolute')">Absolute Metrics</button>
       <button type="button" class="tab" [class.active]="activeTab() === 'production'" (click)="setTab('production')">Intensity by Production</button>
       <button type="button" class="tab" [class.active]="activeTab() === 'revenue'" (click)="setTab('revenue')">Intensity by Revenue</button>
@@ -93,9 +88,6 @@
 
   <div class="tab-content">
     @switch (activeTab()) {
-      @case ('overall') {
-        <app-overall-view [period]="period()" [locationId]="effectiveLocationId()" [periodMode]="periodMode()"></app-overall-view>
-      }
       @case ('absolute') {
         <app-absolute-metrics-view
           [period]="period()"
