@@ -9,9 +9,22 @@ Parameters:
     Type: String
     Default: 'false'
     AllowedValues: ['true', 'false']
+  # 'instance' = a t4g.nano NAT instance (~$8/month incl. its public IPv4);
+  # 'gateway' = a managed NAT Gateway (~$42/month idle, highly available).
+  # The demo only needs low-volume egress (OpenAI, SMTP, Cognito), so the
+  # instance is the default.
+  EgressMode:
+    Type: String
+    Default: instance
+    AllowedValues: [instance, gateway]
+  NatInstanceAmi:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
 
 Conditions:
   DemoEgressEnabled: !Equals [!Ref EnableDemoEgress, 'true']
+  UseNatGateway: !And [!Condition DemoEgressEnabled, !Equals [!Ref EgressMode, gateway]]
+  UseNatInstance: !And [!Condition DemoEgressEnabled, !Equals [!Ref EgressMode, instance]]
 
 Resources:
   Vpc:
@@ -76,23 +89,76 @@ Resources:
 
   NatEip:
     Type: AWS::EC2::EIP
-    Condition: DemoEgressEnabled
+    Condition: UseNatGateway
     DependsOn: InternetGatewayAttachment
     Properties: {Domain: vpc}
   NatGateway:
     Type: AWS::EC2::NatGateway
-    Condition: DemoEgressEnabled
+    Condition: UseNatGateway
     Properties:
       AllocationId: !GetAtt NatEip.AllocationId
       SubnetId: !Ref PublicSubnetA
       Tags: [{Key: Name, Value: !Sub 'envigo-${EnvironmentName}-demo-only'}]
+
+  NatInstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: UseNatInstance
+    Properties:
+      GroupDescription: NAT instance - forwards outbound traffic from the private subnets
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - {IpProtocol: '-1', CidrIp: 10.42.0.0/16}
+  NatInstanceV2:
+    Type: AWS::EC2::Instance
+    Condition: UseNatInstance
+    DependsOn: PublicDefaultRoute
+    Properties:
+      ImageId: !Ref NatInstanceAmi
+      InstanceType: t4g.nano
+      # Standard credits: a runaway burst can never bill beyond the hourly rate.
+      CreditSpecification: {CPUCredits: standard}
+      SourceDestCheck: false
+      MetadataOptions: {HttpTokens: required}
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          SubnetId: !Ref PublicSubnetA
+          AssociatePublicIpAddress: true
+          GroupSet: [!Ref NatInstanceSecurityGroup]
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: {VolumeSize: 8, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true}
+      Tags: [{Key: Name, Value: !Sub 'envigo-${EnvironmentName}-nat'}]
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -euxo pipefail
+          # 512 MB of RAM is too little for dnf's metadata load -- give it swap.
+          if [ ! -f /swapfile ]; then
+            dd if=/dev/zero of=/swapfile bs=1M count=1024
+            chmod 600 /swapfile
+            mkswap /swapfile
+            echo '/swapfile none swap sw 0 0' >> /etc/fstab
+          fi
+          swapon -a
+          dnf install -y --setopt=install_weak_deps=False iptables-services
+          echo 'net.ipv4.ip_forward = 1' > /etc/sysctl.d/90-nat.conf
+          sysctl --system
+          systemctl enable --now iptables
+          # The stock ruleset rejects forwarded packets -- clear it, then
+          # masquerade everything leaving the public interface.
+          IFACE=$(ip route show default | awk '{print $5; exit}')
+          iptables -F FORWARD
+          iptables -t nat -A POSTROUTING -o "$IFACE" -j MASQUERADE
+          service iptables save
+
   PrivateDefaultRoute:
     Type: AWS::EC2::Route
     Condition: DemoEgressEnabled
     Properties:
       RouteTableId: !Ref PrivateRouteTable
       DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGateway
+      NatGatewayId: !If [UseNatGateway, !Ref NatGateway, !Ref 'AWS::NoValue']
+      InstanceId: !If [UseNatInstance, !Ref NatInstanceV2, !Ref 'AWS::NoValue']
 
   S3GatewayEndpoint:
     Type: AWS::EC2::VPCEndpoint
